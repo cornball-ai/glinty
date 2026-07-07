@@ -22,5 +22,6 @@ Imports:
     jsonlite,
     tools
 Suggests:
+    flitR,
     tinytest
 Encoding: UTF-8
