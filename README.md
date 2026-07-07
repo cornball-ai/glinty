@@ -71,6 +71,7 @@ calling them (`input$x()` instead of `input$x`).
 | `textInput("x", "Label")` | `text_input("x", "Label")` |
 | `actionButton("go", "Go")` | `button("go", "Go")` |
 | `selectInput` / `sliderInput` / `checkboxInput` / `numericInput` | `select_input` / `slider_input` / `checkbox_input` / `number_input` |
+| `radioButtons` / `dateInput` / `fileInput` | `radio_buttons` / `date_input` / `file_input` |
 | `updateTextInput(session, ...)` | `update_text_input(session, ...)` |
 | `fluidPage(...)` | `page(...)` |
 | `shinyApp(ui, server)` | `app(ui, server)` |
@@ -94,16 +95,36 @@ Custom widgets need no JavaScript: any element with an `id`, a
 `data-g-event`, and a `data-g-target` is an input, so a widget is
 just an R function returning `tag()` trees. See `?tag`.
 
-## Limits (v0.1, by design)
+## Native windows (flitR backend)
+
+With the flitR package installed (plus its engine via
+`flitR::install_engine()`), `run_app_native(app_obj)` renders the
+same app in a native window through the Flutter Engine. The native
+window is just another client of glinty's wire protocol: reactive
+core, sessions, and renderers are identical, and `render_plot()`
+draws natively through flitR's image op.
+
+The supported widget subset is text, headings, `text_input`,
+`button`, `checkbox_input`, `slider_input`, `text_output`, and
+`plot_output`; anything else fails fast with a named list. Don't
+`library(flitR)` alongside glinty (both export `app`, `text`, and
+friends); `run_app_native()` only needs it installed.
+
+## Resilience
+
+A dropped connection detaches its session instead of killing it:
+observers and timers stay warm for `getOption("glinty.resume_grace",
+60)` seconds while the client retries with backoff, then resumes
+with state intact. Expired sessions get an honest reload.
+
+## Limits (by design)
 
 - Single-threaded: one slow computation stalls all sessions (same
   process model as one Shiny worker, minus the async escape hatches).
-- A dropped connection is a fresh session; the client shows a reload
-  overlay instead of pretending to resume.
-- `render_plot()` is fixed-size, no client-side resizing.
-- No file upload, no bookmarking, no modules yet.
+- No bookmarking, no modules yet.
 - `serverSocket()` binds all interfaces; treat the port as reachable
-  from your local network.
+  from your local network, and the session id as a weak resume
+  credential within the grace window.
 
 ## Provenance
 
