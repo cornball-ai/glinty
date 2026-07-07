@@ -1,5 +1,7 @@
 # glinty (development version)
 
+- Shared layout: row() and column() map to flexbox in the browser
+  and flitR layouts natively.
 - Tables travel as structure (header + rows) instead of HTML;
   frontends render them natively.
 
