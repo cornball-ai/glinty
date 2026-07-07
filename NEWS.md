@@ -1,5 +1,10 @@
 # glinty (development version)
 
+- File uploads: `file_input()` posts multipart bodies to a per-session
+  upload dir; the input value is a data.frame(name, size, type,
+  datapath).
+- Fixed session id collisions that could route a new connection into
+  a detached session (also affected 3+ simultaneous tabs in 0.1.0).
 - Reconnect-with-resume: dropped connections keep their session alive
   for a grace window and the client resumes with state intact
   (protocol 2).
