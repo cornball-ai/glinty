@@ -116,18 +116,24 @@ transport_rebind <- function(from_sid, to_sid) {
 
 #' Generate a session id
 #'
-#' 32 hex characters. Restores .Random.seed so server traffic does
-#' not perturb user RNG streams. The id is a routing label, never an
-#' authenticator: a fresh WebSocket always gets a fresh session.
+#' 32 hex characters from digest over pid, wall clock, a monotonic
+#' counter, and a tempfile name. Deliberately NOT the R RNG: an
+#' earlier save/restore-.Random.seed approach replayed the same draw
+#' on every call after the first, so consecutive ids collided and
+#' sessions swallowed each other's connections. The counter
+#' guarantees in-process uniqueness. Within the resume grace window
+#' the id acts as a weak credential; see ?run_app for scope.
 #'
 #' @return character session id
 #' @keywords internal
 new_session_id <- function() {
-    had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-    if (had_seed) {
-        old_seed <- get(".Random.seed", envir = globalenv())
-        on.exit(assign(".Random.seed", old_seed, envir = globalenv()))
+    if (is.null(REG$sid_counter)) {
+        REG$sid_counter <- 0L
     }
-    paste(sprintf("%02x", sample.int(256L, 16L, replace = TRUE) - 1L),
-          collapse = "")
+    REG$sid_counter <- REG$sid_counter + 1L
+    material <- paste(Sys.getpid(),
+        sprintf("%.9f", as.numeric(Sys.time())),
+        REG$sid_counter, tempfile(), sep = "|")
+    substr(digest::digest(material, algo = "sha1", serialize = FALSE),
+        1L, 32L)
 }
