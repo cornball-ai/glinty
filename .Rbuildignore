@@ -1,0 +1,7 @@
+^\.github$
+^\.gitignore$
+^CLAUDE\.md$
+^\.claude$
+^tasks$
+^.*\.Rproj$
+^\.Rproj\.user$
