@@ -1,4 +1,4 @@
-# glinty (development version)
+# glinty 0.2.0
 
 - flitR native backend: run_app_native() renders apps in a native
   window (Flutter Engine) from the same reactive core and protocol;

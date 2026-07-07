@@ -1,7 +1,7 @@
 Package: glinty
 Type: Package
 Title: Tiny Reactive Web Application Framework
-Version: 0.1.0.5
+Version: 0.2.0
 Authors@R: c(
     person("Troy", "Hernandez", email = "troy@cornball.ai",
            role = c("aut", "cre"),
@@ -20,7 +20,8 @@ Imports:
     digest,
     grDevices,
     jsonlite,
-    tools
+    tools,
+    utils
 Suggests:
     flitR,
     tinytest
