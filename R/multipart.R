@@ -113,8 +113,8 @@ parse_query <- function(q) {
     vals <- ifelse(grepl("=", pairs, fixed = TRUE), sub("^[^=]*=", "", pairs),
                    "")
     vals <- vapply(vals, function(v) {
-        URLdecode(chartr("+", " ", v))
+        utils::URLdecode(chartr("+", " ", v))
     }, character(1L), USE.NAMES = FALSE)
-    names(vals) <- vapply(keys, URLdecode, character(1L), USE.NAMES = FALSE)
+    names(vals) <- vapply(keys, utils::URLdecode, character(1L), USE.NAMES = FALSE)
     vals
 }
