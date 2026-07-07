@@ -18,7 +18,9 @@ BugReports: https://github.com/cornball-ai/glinty/issues
 Depends: R (>= 4.1)
 Imports:
     digest,
-    jsonlite
+    grDevices,
+    jsonlite,
+    tools
 Suggests:
     tinytest
 Encoding: UTF-8

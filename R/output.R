@@ -24,8 +24,19 @@ make_output_proxy <- function(session) {
         renderer <- as_renderer(value, default_prop)
         obs <- with_session(session, observe(
             fn = function() {
-                val <- renderer$fn()
-                session$send(update_msg(id, renderer$property, val))
+                # Render errors become error messages for this output;
+                # glinty_silent (req) passes through to the observer
+                # runner and suppresses the update entirely.
+                result <- tryCatch(
+                    list(ok = renderer$fn()),
+                    error = function(e) list(err = conditionMessage(e))
+                )
+                if (is.null(result$err)) {
+                    session$send(update_msg(id, renderer$property,
+                        result$ok))
+                } else {
+                    session$send(error_msg(id, result$err))
+                }
             },
             label = paste0("output:", id)
         ))
