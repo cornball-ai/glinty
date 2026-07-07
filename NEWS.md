@@ -1,5 +1,8 @@
 # glinty (development version)
 
+- flitR native backend: run_app_native() renders apps in a native
+  window (Flutter Engine) from the same reactive core and protocol;
+  plots ride flitR's new image op.
 - File uploads: `file_input()` posts multipart bodies to a per-session
   upload dir; the input value is a data.frame(name, size, type,
   datapath).
