@@ -111,11 +111,8 @@ resume_session <- function(session) {
     replay <- lapply(ls(session$last_sent), function(id) {
         session$last_sent[[id]]
     })
-    session$outgoing <- c(
-        list(config_msg(session$id, resumed = TRUE)),
-        replay,
-        session$outgoing
-    )
+    session$outgoing <- c(list(config_msg(session$id, resumed = TRUE)),
+                          replay, session$outgoing)
     invisible(NULL)
 }
 

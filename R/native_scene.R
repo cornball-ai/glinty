@@ -21,12 +21,12 @@ build_native_ops <- function(ui, session, values) {
 
     if (length(unsupported$tags) > 0L) {
         stop("the flitR native backend does not support: ",
-            paste(sort(unique(unsupported$tags)), collapse = ", "),
-            call. = FALSE)
+             paste(sort(unique(unsupported$tags)), collapse = ", "),
+             call. = FALSE)
     }
     list(
-        flitR::clear("#FFFFFF"),
-        do.call(flitR::column, c(items, list(x = 16, y = 16, gap = 10)))
+         flitR::clear("#FFFFFF"),
+         do.call(flitR::column, c(items, list(x = 16, y = 16, gap = 10)))
     )
 }
 
@@ -69,12 +69,12 @@ translate_tag <- function(tg, session, values, unsupported) {
 
     if (name %in% names(NATIVE_HEADING_SIZES)) {
         return(flitR::text(0, 0, tag_text(tg),
-            size = NATIVE_HEADING_SIZES[[name]]))
+                           size = NATIVE_HEADING_SIZES[[name]]))
     }
     if (name %in% c("p", "span")) {
         if (identical(cls, "g-output")) {
             return(flitR::text(0, 0, native_value(values, tg$attrs$id),
-                size = 14))
+                               size = 14))
         }
         if (identical(cls, "g-slider-val")) {
             return(NULL)
@@ -82,8 +82,7 @@ translate_tag <- function(tg, session, values, unsupported) {
         return(flitR::text(0, 0, tag_text(tg), size = 14))
     }
     if (name == "a") {
-        return(flitR::text(0, 0, tag_text(tg), size = 14,
-            color = "#2456D6"))
+        return(flitR::text(0, 0, tag_text(tg), size = 14, color = "#2456D6"))
     }
     if (name == "label") {
         txt <- tag_text(tg)
@@ -96,10 +95,10 @@ translate_tag <- function(tg, session, values, unsupported) {
         id <- tg$bind$target
         label <- tag_text(tg)
         return(flitR::button(id, 0, 0,
-            w = 24 + 9 * nchar(label), h = 34, label = label,
-            on_click = function() {
-                handle_click(session, id)
-            }))
+                             w = 24 + 9 * nchar(label), h = 34, label = label,
+                             on_click = function() {
+            handle_click(session, id)
+        }))
     }
     if (name == "input") {
         return(translate_input(tg, session, unsupported))
@@ -121,8 +120,7 @@ translate_tag <- function(tg, session, values, unsupported) {
             return(NULL)
         }
         # generic containers (including input groups): stack children
-        items <- translate_tags(tg$children, session, values,
-            unsupported)
+        items <- translate_tags(tg$children, session, values, unsupported)
         if (length(items) == 0L) {
             return(NULL)
         }
@@ -153,7 +151,11 @@ translate_tag <- function(tg, session, values, unsupported) {
 #' @keywords internal
 translate_input <- function(tg, session, unsupported) {
     type <- tg$attrs$type
-    id <- if (!is.null(tg$bind)) tg$bind$target else tg$attrs$id
+    if (!is.null(tg$bind)) {
+        id <- tg$bind$target
+    } else {
+        id <- tg$attrs$id
+    }
 
     if (identical(type, "text")) {
         cur <- isolate(session$input[[id]]())
@@ -164,10 +166,10 @@ translate_input <- function(tg, session, unsupported) {
             cur <- ""
         }
         return(flitR::input(id, 0, 0, w = 260, h = 32,
-            value = as.character(cur),
-            on_change = function(v) {
-                handle_input(session, id, v)
-            }))
+                            value = as.character(cur),
+                            on_change = function(v) {
+            handle_input(session, id, v)
+        }))
     }
     if (identical(type, "checkbox")) {
         cur <- isolate(session$input[[id]]())
@@ -177,9 +179,9 @@ translate_input <- function(tg, session, unsupported) {
             isTRUE(cur)
         }
         return(flitR::checkbox(id, 0, 0, size = 22, value = checked,
-            on_change = function(v) {
-                handle_input(session, id, v)
-            }))
+                               on_change = function(v) {
+            handle_input(session, id, v)
+        }))
     }
     if (identical(type, "range")) {
         cur <- isolate(session$input[[id]]())
@@ -189,20 +191,16 @@ translate_input <- function(tg, session, unsupported) {
             as.numeric(cur)
         }
         return(flitR::slider(id, 0, 0, w = 260, h = 24,
-            value = val,
-            min = as.numeric(tg$attrs$min),
-            max = as.numeric(tg$attrs$max),
-            on_change = function(v) {
-                handle_input(session, id, v)
-            }))
+                             value = val,
+                             min = as.numeric(tg$attrs$min),
+                             max = as.numeric(tg$attrs$max),
+                             on_change = function(v) {
+            handle_input(session, id, v)
+        }))
     }
-    kind <- switch(type,
-        "number" = "number_input",
-        "date" = "date_input",
-        "file" = "file_input",
-        "radio" = "radio_buttons",
-        paste0("input[type=", type, "]")
-    )
+    kind <- switch(type, "number" = "number_input", "date" = "date_input",
+                   "file" = "file_input", "radio" = "radio_buttons",
+                   paste0("input[type=", type, "]"))
     unsupported$tags <- c(unsupported$tags, kind)
     NULL
 }
@@ -229,7 +227,7 @@ translate_plot <- function(tg, values) {
     uri <- native_value(values, tg$attrs$id)
     if (startsWith(uri, "data:image/png;base64,")) {
         return(flitR::image(0, 0, w, h,
-            sub("^data:image/png;base64,", "", uri)))
+                            sub("^data:image/png;base64,", "", uri)))
     }
     flitR::rect(0, 0, w, h, color = "#EEEEEE")
 }
@@ -245,7 +243,11 @@ native_value <- function(values, id) {
         return("")
     }
     v <- values[[id]]
-    if (is.null(v)) "" else as.character(v)
+    if (is.null(v)) {
+        ""
+    } else {
+        as.character(v)
+    }
 }
 
 #' Concatenate a tag's text content

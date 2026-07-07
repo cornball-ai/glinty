@@ -138,13 +138,11 @@ render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
             grDevices::png(tmp, width = w, height = h, res = res)
             tryCatch(fn(), finally = grDevices::dev.off())
             bytes <- readBin(tmp, "raw", file.info(tmp)$size)
-            uri <- paste0("data:image/png;base64,",
-                jsonlite::base64_enc(bytes))
+            uri <- paste0("data:image/png;base64,", jsonlite::base64_enc(bytes))
             gsub("[\r\n]", "", uri)
         }
     }
-    structure(list(bind = make_fn, property = "src"),
-        class = "glinty_renderer")
+    structure(list(bind = make_fn, property = "src"), class = "glinty_renderer")
 }
 
 #' Read a client-reported output dimension

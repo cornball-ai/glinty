@@ -131,9 +131,7 @@ new_session_id <- function() {
         REG$sid_counter <- 0L
     }
     REG$sid_counter <- REG$sid_counter + 1L
-    material <- paste(Sys.getpid(),
-        sprintf("%.9f", as.numeric(Sys.time())),
-        REG$sid_counter, tempfile(), sep = "|")
-    substr(digest::digest(material, algo = "sha1", serialize = FALSE),
-        1L, 32L)
+    material <- paste(Sys.getpid(), sprintf("%.9f", as.numeric(Sys.time())),
+                      REG$sid_counter, tempfile(), sep = "|")
+    substr(digest::digest(material, algo = "sha1", serialize = FALSE), 1L, 32L)
 }
