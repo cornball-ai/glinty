@@ -1,6 +1,7 @@
 # tinyrox says don't edit this manually, but it can't stop you!
 
 export(a)
+export(app)
 export(audio_output)
 export(button)
 export(checkbox_input)
@@ -29,6 +30,8 @@ export(render_plot)
 export(render_table)
 export(render_text)
 export(req)
+export(run_app)
+export(run_example)
 export(select_input)
 export(slider_input)
 export(span)
