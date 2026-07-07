@@ -158,10 +158,41 @@
         el.removeAttribute("title");
     }
 
+    function buildTable(el, data) {
+        el.textContent = "";
+        var tbl = document.createElement("table");
+        tbl.className = "g-table";
+        var thead = document.createElement("thead");
+        var hr = document.createElement("tr");
+        (data.header || []).forEach(function (h) {
+            var th = document.createElement("th");
+            th.textContent = h;
+            hr.appendChild(th);
+        });
+        thead.appendChild(hr);
+        tbl.appendChild(thead);
+        var tbody = document.createElement("tbody");
+        (data.rows || []).forEach(function (r) {
+            var tr = document.createElement("tr");
+            r.forEach(function (c) {
+                var td = document.createElement("td");
+                td.textContent = c; /* structural escaping */
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        el.appendChild(tbl);
+    }
+
     function applyUpdate(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
         clearError(el);
+        if (msg.property === "table") {
+            buildTable(el, msg.value || {});
+            return;
+        }
         el[msg.property] = msg.value;
     }
 
