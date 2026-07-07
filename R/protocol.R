@@ -52,11 +52,12 @@ error_msg <- function(id, message) {
 #' @param session_id character session ID
 #' @return character JSON string
 #' @keywords internal
-config_msg <- function(session_id) {
-    as.character(jsonlite::toJSON(
-                                  list(type = "config", session_id = session_id, protocol = 1L),
-                                  auto_unbox = TRUE
-        ))
+config_msg <- function(session_id, resumed = NULL) {
+    msg <- list(type = "config", session_id = session_id, protocol = 2L)
+    if (!is.null(resumed)) {
+        msg$resumed <- resumed
+    }
+    as.character(jsonlite::toJSON(msg, auto_unbox = TRUE))
 }
 
 #' Dispatch one client message to a session

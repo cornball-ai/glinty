@@ -18,10 +18,37 @@ new_session <- function(id, send_fn = NULL) {
     s$observers <- list()
     s$on_ended_cbs <- list()
     s$ended <- FALSE
+    s$detached <- FALSE
+    s$grace_timer <- NULL
+    s$last_sent <- new.env(parent = emptyenv())
     s$send_fn <- send_fn
 
     s$send <- function(msg) {
-        if (!s$ended) {
+        if (s$ended) {
+            return(invisible(NULL))
+        }
+        if (isTRUE(s$detached)) {
+            # Buffer non-output messages for a possible resume,
+            # capped drop-oldest. Output state is covered by
+            # last_sent, so unbounded queues buy nothing.
+            cap <- getOption("glinty.detach_buffer", 200L)
+            if (length(s$outgoing) >= cap) {
+                s$outgoing <- s$outgoing[-1L]
+            }
+        }
+        s$outgoing <- c(s$outgoing, list(msg))
+        invisible(NULL)
+    }
+
+    # Output-scoped messages: always recorded as the output's latest
+    # state (for resume replay); queued only while attached since a
+    # resume replays last_sent instead.
+    s$send_output <- function(id, msg) {
+        if (s$ended) {
+            return(invisible(NULL))
+        }
+        s$last_sent[[id]] <- msg
+        if (!isTRUE(s$detached)) {
             s$outgoing <- c(s$outgoing, list(msg))
         }
         invisible(NULL)
@@ -38,6 +65,58 @@ new_session <- function(id, send_fn = NULL) {
     class(s) <- "glinty_session"
     .globals$sessions[[id]] <- s
     s
+}
+
+#' Detach a session from its transport
+#'
+#' Called when the WebSocket drops. Observers and timers stay alive;
+#' outgoing messages buffer (capped); a grace timer ends the session
+#' for real if nobody resumes in time. Idempotent.
+#'
+#' @param session a glinty_session
+#' @return invisible(NULL)
+#' @keywords internal
+detach_session <- function(session) {
+    if (session$ended || isTRUE(session$detached)) {
+        return(invisible(NULL))
+    }
+    session$detached <- TRUE
+    grace <- getOption("glinty.resume_grace", 60)
+    session$grace_timer <- schedule_timer(grace, function() {
+        if (isTRUE(session$detached) && !session$ended) {
+            session_end(session)
+        }
+    })
+    invisible(NULL)
+}
+
+#' Re-attach a detached session after a resume handshake
+#'
+#' Cancels the grace timer and queues, in order: the resumed config,
+#' the last message of every output (current state, no re-render),
+#' then whatever non-output messages buffered while detached.
+#'
+#' @param session a glinty_session
+#' @return invisible(NULL)
+#' @keywords internal
+resume_session <- function(session) {
+    if (session$ended || !isTRUE(session$detached)) {
+        return(invisible(NULL))
+    }
+    if (!is.null(session$grace_timer)) {
+        cancel_timer(session$grace_timer)
+        session$grace_timer <- NULL
+    }
+    session$detached <- FALSE
+    replay <- lapply(ls(session$last_sent), function(id) {
+        session$last_sent[[id]]
+    })
+    session$outgoing <- c(
+        list(config_msg(session$id, resumed = TRUE)),
+        replay,
+        session$outgoing
+    )
+    invisible(NULL)
 }
 
 #' End a session
@@ -94,6 +173,9 @@ with_session <- function(session, expr) {
 #' @return list of character JSON messages, invisibly
 #' @keywords internal
 drain_session <- function(session) {
+    if (isTRUE(session$detached)) {
+        return(invisible(list()))
+    }
     msgs <- session$outgoing
     session$outgoing <- list()
     if (!is.null(session$send_fn)) {

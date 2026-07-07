@@ -39,9 +39,10 @@ make_output_proxy <- function(session) {
                                error = function(e) list(err = conditionMessage(e))
             )
             if (is.null(result$err)) {
-                session$send(update_msg(id, renderer$property, result$ok))
+                session$send_output(id,
+                    update_msg(id, renderer$property, result$ok))
             } else {
-                session$send(error_msg(id, result$err))
+                session$send_output(id, error_msg(id, result$err))
             }
         },
                 label = paste0("output:", id)

@@ -182,6 +182,21 @@ h1, h2, h3, h4 {
     color: var(--g-error);
 }
 
+/* ---------- reconnect banner ---------- */
+
+.g-reconnect-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 0.35rem;
+    text-align: center;
+    font-size: 0.875rem;
+    background: var(--g-accent);
+    color: var(--g-accent-fg);
+    z-index: 999;
+}
+
 /* ---------- disconnect overlay ---------- */
 
 .g-disconnected-root {

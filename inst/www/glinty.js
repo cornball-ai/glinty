@@ -241,7 +241,14 @@
         }
         switch (msg.type) {
         case "config":
+            if (msg.resumed === false) {
+                /* session expired server-side; our DOM is stale */
+                location.reload();
+                return;
+            }
             sessionId = msg.session_id;
+            retries = 0;
+            hideBanner();
             break;
         case "update":
             applyUpdate(msg);
@@ -287,17 +294,56 @@
         document.body.appendChild(overlay);
     }
 
+    /* ---------- reconnect with resume ---------- */
+
+    var retries = 0;
+    var MAX_RETRIES = 12;
+
+    function showBanner() {
+        if (document.getElementById("g-reconnect")) return;
+        var banner = document.createElement("div");
+        banner.id = "g-reconnect";
+        banner.className = "g-reconnect-banner";
+        banner.textContent = "Reconnecting…";
+        document.body.appendChild(banner);
+    }
+
+    function hideBanner() {
+        var banner = document.getElementById("g-reconnect");
+        if (banner) banner.remove();
+    }
+
+    function handleClose() {
+        if (!sessionId) {
+            /* never had a session: nothing to resume */
+            showDisconnected();
+            return;
+        }
+        if (retries >= MAX_RETRIES) {
+            hideBanner();
+            showDisconnected();
+            return;
+        }
+        showBanner();
+        var delay = Math.min(500 * Math.pow(2, retries), 5000);
+        retries += 1;
+        setTimeout(connect, delay);
+    }
+
     /* ---------- boot ---------- */
 
     function connect() {
         var proto = location.protocol === "https:" ? "wss://" : "ws://";
         ws = new WebSocket(proto + location.host + "/ws");
         ws.addEventListener("open", function () {
-            send({ type: "init", inputs: harvestInputs() });
+            if (sessionId) {
+                send({ type: "resume", session_id: sessionId });
+            } else {
+                send({ type: "init", inputs: harvestInputs() });
+            }
         });
         ws.addEventListener("message", onMessage);
-        ws.addEventListener("close", showDisconnected);
-        ws.addEventListener("error", showDisconnected);
+        ws.addEventListener("close", handleClose);
     }
 
     document.addEventListener("DOMContentLoaded", function () {

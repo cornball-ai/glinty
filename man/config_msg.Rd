@@ -3,7 +3,7 @@
 \alias{config_msg}
 \title{Create the session config message}
 \usage{
-config_msg(session_id)
+config_msg(session_id, resumed = NULL)
 }
 \arguments{
 \item{session_id}{character session ID}

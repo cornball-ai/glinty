@@ -28,7 +28,7 @@ expect_equal(
 )
 expect_equal(
     config_msg("abc123"),
-    '{"type":"config","session_id":"abc123","protocol":1}'
+    '{"type":"config","session_id":"abc123","protocol":2}'
 )
 expect_equal(
     update_input_msg("name", list(value = "x")),

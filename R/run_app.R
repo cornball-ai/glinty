@@ -33,6 +33,14 @@ app <- function(ui, server) {
 #' interrupted (Ctrl-C). Note base R's serverSocket() listens on all
 #' interfaces; treat the port as reachable from the local network.
 #'
+#' Dropped connections detach their session rather than ending it:
+#' observers and timers stay alive for
+#' getOption("glinty.resume_grace", 60) seconds, and a client that
+#' reconnects with the session id resumes where it left off (current
+#' output state is replayed, no renderers re-run). Within that grace
+#' window the session id acts as the resume credential -- acceptable
+#' for the localhost/LAN tool scope, but treat it accordingly.
+#'
 #' @param app_obj a glinty_app object
 #' @param port integer HTTP port (default 8080)
 #' @param static_dir character directory served under /static/
@@ -67,15 +75,11 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
 
     n_formals <- length(formals(app_obj$server))
 
-    handlers <- list(
-                     on_request = function(req) {
-        route_http(req, page_html, pkg_www, static_dir)
-    },
-                     on_open = function(sid) {
+    start_session <- function(sid, resumed = NULL) {
         s <- new_session(sid, send_fn = function(msg) {
             send_to_session(sid, msg)
         })
-        s$send(config_msg(sid))
+        s$send(config_msg(sid, resumed = resumed))
         with_session(s, {
             if (n_formals >= 3L) {
                 app_obj$server(s$input, s$output, s)
@@ -84,17 +88,52 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
             }
         })
         flush_reactions()
+        s
+    }
+
+    handlers <- list(
+                     on_request = function(req) {
+        route_http(req, page_html, pkg_www, static_dir)
     },
+                     # Sessions start on the FIRST client message, not at
+                     # upgrade: the first frame decides between a fresh
+                     # init and a resume of a detached session.
+                     on_open = function(sid) invisible(NULL),
                      on_message = function(sid, txt) {
         s <- .globals$sessions[[sid]]
         if (!is.null(s)) {
             dispatch_client_message(s, txt)
+            return(invisible(NULL))
         }
+        first <- tryCatch(
+            jsonlite::fromJSON(txt, simplifyVector = FALSE),
+            error = function(e) NULL
+        )
+        if (!is.null(first) && identical(first$type, "resume")) {
+            old_id <- first$session_id
+            old <- if (is.character(old_id) && nzchar(old_id)) {
+                .globals$sessions[[old_id]]
+            } else {
+                NULL
+            }
+            if (!is.null(old) && isTRUE(old$detached) &&
+                transport_rebind(sid, old_id)) {
+                resume_session(old)
+            } else {
+                # unknown or expired: honest fresh session; the
+                # client reloads since its DOM may be stale
+                start_session(sid, resumed = FALSE)
+            }
+            return(invisible(NULL))
+        }
+        s <- start_session(sid)
+        dispatch_client_message(s, txt)
+        flush_reactions()
     },
                      on_close = function(sid) {
         s <- .globals$sessions[[sid]]
         if (!is.null(s)) {
-            session_end(s)
+            detach_session(s)
         }
     }
     )

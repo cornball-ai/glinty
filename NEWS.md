@@ -1,5 +1,8 @@
 # glinty (development version)
 
+- Reconnect-with-resume: dropped connections keep their session alive
+  for a grace window and the client resumes with state intact
+  (protocol 2).
 - Client-sized plots: `plot_output()`/`render_plot()` default to
   responsive sizing driven by the browser's reported dimensions,
   re-rendering on window resize.
