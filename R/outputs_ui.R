@@ -37,19 +37,32 @@ table_output <- function(id) {
 #' Create a plot output placeholder
 #'
 #' An img element whose src is set to a PNG data URI by
-#' render_plot(). Width and height should match the renderer.
+#' render_plot(). With NULL width/height (the default) the element
+#' fills its container at a 4:3 aspect ratio and the client reports
+#' its rendered size, so render_plot(NULL, NULL) draws at the true
+#' on-screen dimensions. Explicit dimensions give a fixed-size box;
+#' match them to the renderer's.
 #'
 #' @param id character output ID
-#' @param width integer pixel width
-#' @param height integer pixel height
+#' @param width integer pixel width, or NULL for responsive
+#' @param height integer pixel height, or NULL for responsive
 #' @return A UI element
 #' @examples
-#' plot_output("scatter", width = 480L, height = 360L)
+#' plot_output("scatter")
 #' @export
-plot_output <- function(id, width = 480L, height = 360L) {
-    tag("img", attrs = list(id = id, class = "g-plot-output",
-                            width = as.character(width),
-                            height = as.character(height), alt = ""))
+plot_output <- function(id, width = NULL, height = NULL) {
+    attrs <- list(id = id, class = "g-plot-output", alt = "")
+    if (is.null(width) && is.null(height)) {
+        attrs$style <- "width:100%;aspect-ratio:4 / 3;"
+    } else {
+        if (!is.null(width)) {
+            attrs$width <- as.character(width)
+        }
+        if (!is.null(height)) {
+            attrs$height <- as.character(height)
+        }
+    }
+    tag("img", attrs = attrs)
 }
 
 #' Create an audio output element

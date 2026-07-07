@@ -36,8 +36,43 @@
             if (el.type === "radio" && !el.checked) return;
             inputs[el.dataset.gTarget] = extractValue(el);
         });
+        measurePlots(function (id, dim, value) {
+            inputs["..clientdata_output_" + id + "_" + dim] = value;
+        });
         return inputs;
     }
+
+    /* ---------- client-sized plots ---------- */
+
+    var plotDims = {};
+
+    function measurePlots(report) {
+        document.querySelectorAll("img.g-plot-output").forEach(function (el) {
+            if (!el.id) return;
+            var w = Math.round(el.clientWidth);
+            var h = Math.round(el.clientHeight);
+            if (w < 1 || h < 1) return;
+            var key = el.id + ":" + w + "x" + h;
+            if (plotDims[el.id] === key) return;
+            plotDims[el.id] = key;
+            report(el.id, "width", w);
+            report(el.id, "height", h);
+        });
+    }
+
+    var resizeTimer = null;
+    window.addEventListener("resize", function () {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+            measurePlots(function (id, dim, value) {
+                send({
+                    type: "input",
+                    id: "..clientdata_output_" + id + "_" + dim,
+                    value: value
+                });
+            });
+        }, 250);
+    });
 
     /* ---------- outgoing ---------- */
 

@@ -100,12 +100,15 @@ df_to_html <- function(df) {
 #' Render a base graphics plot
 #'
 #' Runs the plotting function against a PNG device and patches the
-#' output img's src with a data URI. Size is fixed at render time;
-#' match it to plot_output()'s width and height.
+#' output img's src with a data URI. With NULL width/height (the
+#' default) the plot sizes itself to the client: the browser reports
+#' the rendered img box as reserved inputs and re-reports on window
+#' resize, so the plot re-renders reactively at the new size.
+#' Explicit numeric dimensions give fixed-size rendering.
 #'
 #' @param fn zero-arg function that draws a plot
-#' @param width integer pixel width
-#' @param height integer pixel height
+#' @param width integer pixel width, or NULL for client-driven
+#' @param height integer pixel height, or NULL for client-driven
 #' @param res numeric PNG resolution (dpi)
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
@@ -113,23 +116,58 @@ df_to_html <- function(df) {
 #' output$scatter <- render_plot(function() plot(rnorm(100)))
 #' }
 #' @export
-render_plot <- function(fn, width = 480, height = 360, res = 72) {
+render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
     if (!capabilities("png")) {
         stop("render_plot() requires PNG support in this R build",
              call. = FALSE)
     }
-    new_renderer(
-                 function() {
-        tmp <- tempfile(fileext = ".png")
-        on.exit(unlink(tmp), add = TRUE)
-        grDevices::png(tmp, width = width, height = height, res = res)
-        tryCatch(fn(), finally = grDevices::dev.off())
-        bytes <- readBin(tmp, "raw", file.info(tmp)$size)
-        uri <- paste0("data:image/png;base64,", jsonlite::base64_enc(bytes))
-        gsub("[\r\n]", "", uri)
-    },
-                 "src"
-    )
+    make_fn <- function(id, session) {
+        function() {
+            w <- if (is.null(width)) {
+                client_dim(session, id, "width", fallback = 480)
+            } else {
+                width
+            }
+            h <- if (is.null(height)) {
+                client_dim(session, id, "height", fallback = 360)
+            } else {
+                height
+            }
+            tmp <- tempfile(fileext = ".png")
+            on.exit(unlink(tmp), add = TRUE)
+            grDevices::png(tmp, width = w, height = h, res = res)
+            tryCatch(fn(), finally = grDevices::dev.off())
+            bytes <- readBin(tmp, "raw", file.info(tmp)$size)
+            uri <- paste0("data:image/png;base64,",
+                jsonlite::base64_enc(bytes))
+            gsub("[\r\n]", "", uri)
+        }
+    }
+    structure(list(bind = make_fn, property = "src"),
+        class = "glinty_renderer")
+}
+
+#' Read a client-reported output dimension
+#'
+#' The JS client reports each plot output's rendered box as reserved
+#' inputs ..clientdata_output_<id>_width/_height (at init and on
+#' window resize). Reading them here is a tracked reactive read, so
+#' a resize re-renders the plot.
+#'
+#' @param session a glinty_session
+#' @param id character output ID
+#' @param dim character "width" or "height"
+#' @param fallback numeric size before the client has reported
+#' @return numeric pixel dimension
+#' @keywords internal
+client_dim <- function(session, id, dim, fallback) {
+    key <- paste0("..clientdata_output_", id, "_", dim)
+    val <- session$input[[key]]()
+    val <- suppressWarnings(as.numeric(val))
+    if (length(val) != 1L || !is.finite(val) || val < 1) {
+        return(fallback)
+    }
+    val
 }
 
 #' Render an audio source
