@@ -155,6 +155,9 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
 #' @return raw HTTP response
 #' @keywords internal
 route_http <- function(req, page_html, pkg_www, static_dir) {
+    if (identical(req$method, "POST") && identical(req$path, "/upload")) {
+        return(handle_upload(req))
+    }
     if (!identical(req$method, "GET")) {
         return(http_response_raw(404L, "text/plain", "Not found"))
     }

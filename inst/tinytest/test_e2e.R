@@ -205,6 +205,44 @@ writeBin(text_frame(
 msg <- next_json()
 expect_equal(msg$type, "config")
 expect_false(msg$resumed)
+bogus_sid <- msg$session_id
+close(con)
+
+# --- 10. multipart upload over a raw POST reaches the session ---
+# fresh WS session for the upload test
+con <- ws_handshake()
+writeBin(text_frame('{"type":"init","inputs":{}}', mask = TRUE), con)
+msg <- next_json()
+up_sid <- msg$session_id
+next_json() # initial count update, ignore
+
+payload <- as.raw(c(137, 80, 78, 71, 13, 10, 26, 10, 0:63))
+bnd <- "glintyE2Eboundary"
+mp_body <- c(
+    charToRaw(paste0(
+        "--", bnd, "\r\n",
+        "Content-Disposition: form-data; name=\"file\"; ",
+        "filename=\"blob.bin\"\r\n\r\n"
+    )),
+    payload,
+    charToRaw(paste0("\r\n--", bnd, "--\r\n"))
+)
+post_con <- connect()
+writeBin(c(charToRaw(paste0(
+    "POST /upload?session=", up_sid, "&id=f HTTP/1.1\r\n",
+    "Host: localhost\r\n",
+    "Content-Type: multipart/form-data; boundary=", bnd, "\r\n",
+    "Content-Length: ", length(mp_body), "\r\n\r\n"
+)), mp_body), post_con)
+up_resp <- raw(0L)
+repeat {
+    chunk <- readBin(post_con, "raw", 65536L)
+    if (length(chunk) == 0L) break
+    up_resp <- c(up_resp, chunk)
+}
+close(post_con)
+expect_true(grepl("200 OK", rawToChar(up_resp)))
+expect_true(grepl('"ok":true', rawToChar(up_resp)))
 close(con)
 
 kill_child()

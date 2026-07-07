@@ -94,6 +94,8 @@ loop_tick <- function(srv, handlers, max_tick) {
                                code = 1009L)
                 } else if (identical(entry$state, "http_pending")) {
                     handle_http_bytes(key, handlers)
+                } else if (identical(entry$state, "http_body")) {
+                    handle_http_body(key, handlers)
                 } else {
                     handle_ws_bytes(key, handlers)
                 }
@@ -152,7 +154,12 @@ handle_http_bytes <- function(key, handlers) {
     } else {
         head_raw <- raw(0L)
     }
-    entry$buf <- raw(0L)
+    # keep any bytes past the head: a request body may ride along
+    entry$buf <- if (length(entry$buf) > pos + 3L) {
+        entry$buf[(pos + 4L):length(entry$buf)]
+    } else {
+        raw(0L)
+    }
     req <- parse_http_head(head_raw)
     if (is.null(req)) {
         tryCatch(suppressWarnings(writeBin(
@@ -184,6 +191,61 @@ handle_http_bytes <- function(key, handlers) {
         return(invisible(NULL))
     }
 
+    # Requests with a body (uploads): buffer until Content-Length
+    # bytes have arrived, then route with the raw body attached.
+    clen <- suppressWarnings(as.integer(get_header(req, "content-length")))
+    if (!identical(req$method, "GET") && length(clen) == 1L &&
+        !is.na(clen) && clen > 0L) {
+        if (clen > getOption("glinty.max_upload", 10485760L)) {
+            tryCatch(suppressWarnings(writeBin(
+                        http_response_raw(413L, "text/plain",
+                            "Payload Too Large"),
+                        entry$con
+                    )), error = function(e) NULL)
+            conn_close(key, notify = FALSE, handlers = handlers)
+            return(invisible(NULL))
+        }
+        entry$state <- "http_body"
+        entry$pending_req <- req
+        entry$body_needed <- clen
+        handle_http_body(key, handlers)
+        return(invisible(NULL))
+    }
+
+    respond_and_close(key, req, handlers)
+}
+
+#' Advance an http_body connection
+#'
+#' Waits until the buffered bytes cover the declared Content-Length,
+#' then routes the request with its raw body (never coerced to
+#' character -- uploads are binary).
+#'
+#' @param key character connection key
+#' @param handlers the handler list
+#' @return invisible(NULL)
+#' @keywords internal
+handle_http_body <- function(key, handlers) {
+    entry <- REG$conns[[key]]
+    if (length(entry$buf) < entry$body_needed) {
+        return(invisible(NULL))
+    }
+    req <- entry$pending_req
+    req$body <- entry$buf[seq_len(entry$body_needed)]
+    entry$buf <- raw(0L)
+    entry$pending_req <- NULL
+    respond_and_close(key, req, handlers)
+}
+
+#' Route a complete request and close the connection
+#'
+#' @param key character connection key
+#' @param req parsed request (with body when present)
+#' @param handlers the handler list
+#' @return invisible(NULL)
+#' @keywords internal
+respond_and_close <- function(key, req, handlers) {
+    entry <- REG$conns[[key]]
     resp <- NULL
     if (!is.null(handlers$on_request)) {
         resp <- tryCatch(handlers$on_request(req), error = function(e) {
