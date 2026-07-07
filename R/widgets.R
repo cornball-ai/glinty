@@ -1,0 +1,192 @@
+#' Create a text input
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value character initial value
+#' @param placeholder character placeholder text
+#' @return A UI element
+#' @examples
+#' text_input("name", "Name:")
+#' @export
+text_input <- function(id, label = "", value = "", placeholder = "") {
+    attrs <- list(id = id, type = "text", class = "g-input", value = value)
+    if (nzchar(placeholder)) attrs$placeholder <- placeholder
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+            tag("label", text = label, attrs = list("for" = id)),
+            tag("input", attrs = attrs,
+                bind = list(event = "input", target = id))
+        )
+    )
+}
+
+#' Create a multi-line text input
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value character initial value
+#' @param rows integer number of visible rows
+#' @param placeholder character placeholder text
+#' @return A UI element
+#' @examples
+#' textarea_input("notes", "Notes:", rows = 6L)
+#' @export
+textarea_input <- function(id, label = "", value = "", rows = 4L,
+                           placeholder = "") {
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+            tag("label", text = label, attrs = list("for" = id)),
+            tag("textarea",
+                text = value,
+                attrs = list(id = id, class = "g-textarea",
+                             rows = as.character(rows),
+                             placeholder = placeholder),
+                bind = list(event = "input", target = id))
+        )
+    )
+}
+
+#' Create a checkbox input
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value logical initial checked state
+#' @return A UI element
+#' @examples
+#' checkbox_input("save", "Save results", value = TRUE)
+#' @export
+checkbox_input <- function(id, label = "", value = FALSE) {
+    attrs <- list(id = id, type = "checkbox", class = "g-checkbox")
+    if (isTRUE(value)) attrs$checked <- "checked"
+    tag(
+        "div",
+        attrs = list(class = "g-checkbox-group"),
+        children = list(
+            tag("input", attrs = attrs,
+                bind = list(event = "change", target = id)),
+            tag("label", text = label, attrs = list("for" = id))
+        )
+    )
+}
+
+#' Create a select dropdown
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param choices character vector of choices; names are display labels
+#' @param selected character value to select initially
+#' @return A UI element
+#' @examples
+#' select_input("engine", "Engine:", c(Fast = "fast", Slow = "slow"))
+#' @export
+select_input <- function(id, label = "", choices = character(0),
+                         selected = NULL) {
+    if (is.null(names(choices))) names(choices) <- choices
+    if (is.null(selected) && length(choices) > 0L) {
+        selected <- choices[[1L]]
+    }
+    options <- lapply(seq_along(choices), function(i) {
+        attrs <- list(value = choices[[i]])
+        if (identical(choices[[i]], selected)) attrs$selected <- "selected"
+        tag("option", text = names(choices)[[i]], attrs = attrs)
+    })
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+            tag("label", text = label, attrs = list("for" = id)),
+            tag("select",
+                attrs = list(id = id, class = "g-select"),
+                children = options,
+                bind = list(event = "change", target = id))
+        )
+    )
+}
+
+#' Create a range slider input
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param min numeric minimum value
+#' @param max numeric maximum value
+#' @param value numeric initial value
+#' @param step numeric step size
+#' @return A UI element
+#' @examples
+#' slider_input("n", "Points:", min = 10, max = 500, value = 100, step = 10)
+#' @export
+slider_input <- function(id, label = "", min = 0, max = 1, value = 0.5,
+                         step = 0.1) {
+    tag(
+        "div",
+        attrs = list(class = "g-slider-group"),
+        children = list(
+            tag("label", text = label, attrs = list("for" = id)),
+            tag("input",
+                attrs = list(id = id, type = "range", class = "g-slider",
+                             min = as.character(min),
+                             max = as.character(max),
+                             value = as.character(value),
+                             step = as.character(step)),
+                bind = list(event = "input", target = id)),
+            tag("span",
+                text = as.character(value),
+                attrs = list(id = paste0(id, "_val"),
+                             class = "g-slider-val"))
+        )
+    )
+}
+
+#' Create a numeric input
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value numeric initial value
+#' @param min numeric minimum (optional)
+#' @param max numeric maximum (optional)
+#' @param step numeric step size (optional)
+#' @return A UI element
+#' @examples
+#' number_input("k", "Clusters:", value = 3, min = 1, max = 10)
+#' @export
+number_input <- function(id, label = "", value = NULL, min = NULL,
+                         max = NULL, step = NULL) {
+    attrs <- list(id = id, type = "number", class = "g-number")
+    if (!is.null(value)) attrs$value <- as.character(value)
+    if (!is.null(min)) attrs$min <- as.character(min)
+    if (!is.null(max)) attrs$max <- as.character(max)
+    if (!is.null(step)) attrs$step <- as.character(step)
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+            tag("label", text = label, attrs = list("for" = id)),
+            tag("input", attrs = attrs,
+                bind = list(event = "input", target = id))
+        )
+    )
+}
+
+#' Create a button
+#'
+#' Clicks increment the input value (action-button semantics), so
+#' observe_event(input$id, ...) fires once per click.
+#'
+#' @param id character button ID
+#' @param label character button label
+#' @return A UI element
+#' @examples
+#' button("go", "Run")
+#' @export
+button <- function(id, label) {
+    tag(
+        "button",
+        text = label,
+        attrs = list(id = id, class = "g-btn"),
+        bind = list(event = "click", target = id)
+    )
+}
