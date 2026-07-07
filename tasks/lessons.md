@@ -29,3 +29,16 @@
   flitR spike captured the FIRST presented frame; image ops decode
   async and only appear on a follow-up frame. Capture the LAST frame
   after a settle period when verifying async pipelines.
+- **Headless Chrome --virtual-time-budget cannot verify WebSocket
+  apps post-resume.** Virtual time burns the budget before the real
+  network round trip (upgrade -> client init -> session -> updates)
+  completes, so dump-dom shows a pre-update DOM and looks like a
+  regression. It cost an hour of false debugging against healthy
+  code. Verify browser behavior with headed Chrome under Xvfb +
+  xwd screenshot after real seconds instead.
+- **Never kill background helpers with pgrep/pkill -f patterns that
+  appear in your own command line** (third strike). Split spawn and
+  cleanup into separate tool calls and kill by PID file.
+- **`cd X && cmd & rest` backgrounds the whole `cd X && cmd`**, and
+  `rest` runs in the original directory. Files land where you were,
+  not where you meant.

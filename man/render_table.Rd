@@ -1,7 +1,7 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{render_table}
 \alias{render_table}
-\title{Render a data frame as an HTML table}
+\title{Render a data frame as a table}
 \usage{
 render_table(fn)
 }
@@ -12,7 +12,10 @@ render_table(fn)
 a glinty_renderer for assignment to output$id
 }
 \description{
-Cell contents are escaped.
+The wire carries structure (header + rows of strings), not markup:
+the browser client builds the table via DOM (textContent per cell,
+so escaping is structurally unnecessary) and the native frontend
+draws a grid from the same data.
 }
 \examples{
 \dontrun{

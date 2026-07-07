@@ -52,9 +52,12 @@ render_html <- function(fn) {
     )
 }
 
-#' Render a data frame as an HTML table
+#' Render a data frame as a table
 #'
-#' Cell contents are escaped.
+#' The wire carries structure (header + rows of strings), not markup:
+#' the browser client builds the table via DOM (textContent per cell,
+#' so escaping is structurally unnecessary) and the native frontend
+#' draws a grid from the same data.
 #'
 #' @param fn zero-arg function returning a data.frame
 #' @return a glinty_renderer for assignment to output$id
@@ -70,31 +73,29 @@ render_table <- function(fn) {
         if (!is.data.frame(df)) {
             stop("render_table() expects a data.frame", call. = FALSE)
         }
-        df_to_html(df)
+        df_to_table(df)
     },
-                 "innerHTML"
+                 "table"
     )
 }
 
-#' Serialize a data.frame to an escaped HTML table
+#' Convert a data.frame to the wire table structure
+#'
+#' I() wrappers keep length-1 headers and single-cell rows as JSON
+#' arrays under auto_unbox.
 #'
 #' @param df a data.frame
-#' @return character HTML
+#' @return list(header, rows) of character vectors
 #' @keywords internal
-df_to_html <- function(df) {
+df_to_table <- function(df) {
     cols <- lapply(df, function(col) {
         if (is.numeric(col)) format(col, trim = TRUE) else as.character(col)
     })
-    head_cells <- paste0("<th>", html_escape(names(df)), "</th>", collapse = "")
-    rows <- vapply(seq_len(nrow(df)), function(i) {
-        cells <- vapply(cols, function(col) {
-            paste0("<td>", html_escape(col[[i]]), "</td>")
-        }, character(1L))
-        paste0("<tr>", paste(cells, collapse = ""), "</tr>")
-    }, character(1L))
-    paste0('<table class="g-table"><thead><tr>', head_cells,
-           "</tr></thead><tbody>", paste(rows, collapse = ""),
-           "</tbody></table>")
+    rows <- lapply(seq_len(nrow(df)), function(i) {
+        I(vapply(cols, function(col) col[[i]], character(1L),
+            USE.NAMES = FALSE))
+    })
+    list(header = I(names(df)), rows = rows)
 }
 
 #' Render a base graphics plot

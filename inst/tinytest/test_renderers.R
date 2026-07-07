@@ -39,18 +39,32 @@ m <- last_msg(s)
 expect_equal(m$property, "innerHTML")
 expect_equal(m$value, "<div><h3>Hi</h3></div>")
 
-# --- render_table: escaped cells, header row ---
+# --- render_table: structured header/rows on the wire ---
 with_session(s, {
     s$output$tbl <- render_table(function() {
         data.frame(name = c("a<b", "c"), n = c(1.5, 2), stringsAsFactors = FALSE)
     })
 })
 flush_reactions()
-m <- last_msg(s)
-expect_equal(m$property, "innerHTML")
-expect_true(grepl("<th>name</th><th>n</th>", m$value))
-expect_true(grepl("<td>a&lt;b</td>", m$value))
-expect_true(grepl("<td>1.5</td>", m$value))
+raw_json <- s$outgoing[[length(s$outgoing)]]
+m <- jsonlite::fromJSON(raw_json, simplifyVector = FALSE)
+expect_equal(m$property, "table")
+expect_equal(unlist(m$value$header), c("name", "n"))
+expect_equal(unlist(m$value$rows[[1L]]), c("a<b", "1.5"))
+expect_equal(unlist(m$value$rows[[2L]]), c("c", "2.0"))
+# no markup, no escaping on the wire: strings travel raw
+expect_false(grepl("<td>", raw_json, fixed = TRUE))
+expect_true(grepl("a<b", rawToChar(charToRaw(raw_json)), fixed = TRUE) ||
+    grepl("a\\u003cb", raw_json, fixed = TRUE))
+
+# single-column, single-row frames stay arrays (I() beats auto_unbox)
+one <- glinty:::df_to_table(data.frame(x = "only"))
+one_json <- as.character(jsonlite::toJSON(
+    list(type = "update", id = "t", property = "table", value = one),
+    auto_unbox = TRUE
+))
+expect_true(grepl('"header":["x"]', one_json, fixed = TRUE))
+expect_true(grepl('"rows":[["only"]]', one_json, fixed = TRUE))
 
 # render_table rejects non-data.frames via the error path
 with_session(s, {
