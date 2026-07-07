@@ -1,0 +1,186 @@
+/* glinty default stylesheet. Small, neutral, overridable. */
+
+:root {
+    --g-fg: #1a1a1a;
+    --g-bg: #ffffff;
+    --g-muted: #6a6a6a;
+    --g-border: #d0d0d5;
+    --g-accent: #2456d6;
+    --g-accent-fg: #ffffff;
+    --g-error: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --g-fg: #e6e6e6;
+        --g-bg: #16181d;
+        --g-muted: #9a9aa2;
+        --g-border: #3a3d45;
+        --g-accent: #6f95f5;
+        --g-accent-fg: #10131a;
+    }
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--g-fg);
+    background: var(--g-bg);
+}
+
+.g-page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+}
+
+h1, h2, h3, h4 {
+    line-height: 1.25;
+}
+
+/* ---------- inputs ---------- */
+
+.g-input-group,
+.g-checkbox-group,
+.g-slider-group {
+    margin: 0.75rem 0;
+}
+
+.g-input-group label,
+.g-slider-group label {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--g-muted);
+    margin-bottom: 0.25rem;
+}
+
+.g-input,
+.g-textarea,
+.g-select,
+.g-number {
+    font: inherit;
+    color: inherit;
+    background: var(--g-bg);
+    border: 1px solid var(--g-border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.g-input:focus,
+.g-textarea:focus,
+.g-select:focus,
+.g-number:focus {
+    outline: 2px solid var(--g-accent);
+    outline-offset: 1px;
+    border-color: var(--g-accent);
+}
+
+.g-textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.g-checkbox-group label {
+    margin-left: 0.35rem;
+}
+
+.g-slider-group .g-slider {
+    vertical-align: middle;
+    max-width: 60%;
+}
+
+.g-slider-val {
+    display: inline-block;
+    min-width: 2.5em;
+    margin-left: 0.5rem;
+    color: var(--g-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.g-btn {
+    font: inherit;
+    padding: 0.45rem 1rem;
+    margin: 0.25rem 0.25rem 0.25rem 0;
+    border: none;
+    border-radius: 6px;
+    background: var(--g-accent);
+    color: var(--g-accent-fg);
+    cursor: pointer;
+}
+
+.g-btn:hover {
+    filter: brightness(1.1);
+}
+
+.g-btn:active {
+    filter: brightness(0.95);
+}
+
+/* ---------- outputs ---------- */
+
+.g-output {
+    font-weight: 500;
+}
+
+.g-table-output table,
+.g-table {
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    max-width: 100%;
+}
+
+.g-table th,
+.g-table td,
+.g-table-output th,
+.g-table-output td {
+    border: 1px solid var(--g-border);
+    padding: 0.3rem 0.6rem;
+    text-align: left;
+}
+
+.g-table th,
+.g-table-output th {
+    background: color-mix(in srgb, var(--g-border) 30%, var(--g-bg));
+}
+
+.g-plot-output {
+    display: block;
+    margin: 0.5rem 0;
+    max-width: 100%;
+    height: auto;
+}
+
+.g-error {
+    color: var(--g-error);
+}
+
+/* ---------- disconnect overlay ---------- */
+
+.g-disconnected-root {
+    filter: grayscale(1) opacity(0.5);
+    pointer-events: none;
+}
+
+.g-disconnected-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 1000;
+}
+
+.g-disconnected-box {
+    background: var(--g-bg);
+    color: var(--g-fg);
+    border: 1px solid var(--g-border);
+    border-radius: 8px;
+    padding: 1.25rem 2rem;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
