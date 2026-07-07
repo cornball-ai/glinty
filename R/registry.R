@@ -89,6 +89,31 @@ mark_dead <- function(key) {
     invisible(NULL)
 }
 
+#' Rebind a connection to a different session id
+#'
+#' Resume support: a reconnecting client arrives on a fresh
+#' connection under a fresh transport id; rebinding points the old
+#' session id at the new connection so send_to_session() and event
+#' routing keep working under the resumed identity.
+#'
+#' @param from_sid character transport id assigned at upgrade
+#' @param to_sid character session id being resumed
+#' @return logical success, invisibly
+#' @keywords internal
+transport_rebind <- function(from_sid, to_sid) {
+    key <- REG$sessions[[from_sid]]
+    if (is.null(key)) {
+        return(invisible(FALSE))
+    }
+    REG$sessions[[from_sid]] <- NULL
+    REG$sessions[[to_sid]] <- key
+    entry <- REG$conns[[key]]
+    if (!is.null(entry)) {
+        entry$session_id <- to_sid
+    }
+    invisible(TRUE)
+}
+
 #' Generate a session id
 #'
 #' 32 hex characters. Restores .Random.seed so server traffic does
