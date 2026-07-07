@@ -12,6 +12,9 @@ app(
         checkbox_input("chk", "Enabled", value = TRUE),
         select_input("sel", "Choice:",
             choices = c(Alpha = "a", Bravo = "b", Charlie = "c")),
+        radio_buttons("mode", "Mode:",
+            choices = c(Fast = "fast", Careful = "careful")),
+        date_input("when", "Date:", value = "2026-07-07"),
         button("randomize", "Randomize from server"),
         h3("Current values"),
         table_output("values"),
@@ -21,10 +24,12 @@ app(
         show <- function(v) paste(as.character(v), collapse = ", ")
         output$values <- render_table(function() {
             data.frame(
-                input = c("txt", "notes", "num", "sl", "chk", "sel"),
+                input = c("txt", "notes", "num", "sl", "chk", "sel",
+                    "mode", "when"),
                 value = c(show(input$txt()), show(input$notes()),
                     show(input$num()), show(input$sl()),
-                    show(input$chk()), show(input$sel())),
+                    show(input$chk()), show(input$sel()),
+                    show(input$mode()), show(input$when())),
                 stringsAsFactors = FALSE
             )
         })
@@ -36,6 +41,10 @@ app(
             update_checkbox_input(session, "chk", value = runif(1) > 0.5)
             update_select_input(session, "sel",
                 selected = sample(c("a", "b", "c"), 1L))
+            update_radio_buttons(session, "mode",
+                selected = sample(c("fast", "careful"), 1L))
+            update_date_input(session, "when",
+                value = as.Date("2026-01-01") + sample(0:364, 1L))
         })
     }
 )

@@ -11,6 +11,12 @@
 
     function extractValue(el) {
         if (el.type === "checkbox") return el.checked;
+        if (el.type === "radio") {
+            var checked = document.querySelector(
+                'input[name="' + el.name + '"]:checked'
+            );
+            return checked ? checked.value : null;
+        }
         if (el.tagName === "SELECT" && el.multiple) {
             return Array.from(el.selectedOptions).map(function (o) {
                 return o.value;
@@ -26,6 +32,8 @@
         var inputs = {};
         document.querySelectorAll("[data-g-target]").forEach(function (el) {
             if (el.dataset.gEvent === "click") return;
+            /* radios: one value per group, from the checked member */
+            if (el.type === "radio" && !el.checked) return;
             inputs[el.dataset.gTarget] = extractValue(el);
         });
         return inputs;
@@ -95,9 +103,50 @@
         el[msg.property] = msg.value;
     }
 
+    function applyRadioUpdate(group, msg) {
+        if (msg.label !== undefined) {
+            var lab = group.querySelector(".g-radio-group-label");
+            if (lab) lab.textContent = msg.label;
+        }
+        if (msg.choices !== undefined) {
+            group.querySelectorAll(".g-radio-item").forEach(function (n) {
+                n.remove();
+            });
+            msg.choices.forEach(function (c, i) {
+                var item = document.createElement("div");
+                item.className = "g-radio-item";
+                var inp = document.createElement("input");
+                inp.type = "radio";
+                inp.name = msg.id;
+                inp.id = msg.id + "_" + (i + 1);
+                inp.value = c.value;
+                inp.className = "g-radio";
+                inp.dataset.gEvent = "change";
+                inp.dataset.gTarget = msg.id;
+                var lab = document.createElement("label");
+                lab.htmlFor = inp.id;
+                lab.textContent = c.label;
+                item.appendChild(inp);
+                item.appendChild(lab);
+                group.appendChild(item);
+            });
+        }
+        if (msg.selected !== undefined) {
+            var target = group.querySelector(
+                'input[name="' + msg.id + '"][value="' + msg.selected + '"]'
+            );
+            if (target) target.checked = true;
+        }
+    }
+
     function applyInputUpdate(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
+
+        if (el.classList && el.classList.contains("g-radio-group")) {
+            applyRadioUpdate(el, msg);
+            return;
+        }
 
         if (msg.label !== undefined) {
             var lab = document.querySelector('label[for="' + msg.id + '"]');

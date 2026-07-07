@@ -196,3 +196,90 @@ button <- function(id, label) {
     tag("button", text = label, attrs = list(id = id, class = "g-btn"),
         bind = list(event = "click", target = id))
 }
+
+#' Create a radio button group
+#'
+#' One input value shared by the group: the checked member's value.
+#'
+#' @param id character input ID (also the shared name of the group)
+#' @param label character group label text
+#' @param choices character vector of choices; names are display labels
+#' @param selected character value checked initially (first choice by
+#'   default)
+#' @return A UI element
+#' @examples
+#' radio_buttons("mode", "Mode:", c(Fast = "fast", Careful = "careful"))
+#' @export
+radio_buttons <- function(id, label = "", choices = character(0),
+                          selected = NULL) {
+    if (is.null(names(choices))) {
+        names(choices) <- choices
+    }
+    if (is.null(selected) && length(choices) > 0L) {
+        selected <- choices[[1L]]
+    }
+    items <- lapply(seq_along(choices), function(i) {
+        item_id <- paste0(id, "_", i)
+        attrs <- list(id = item_id, type = "radio", name = id,
+            value = choices[[i]], class = "g-radio")
+        if (identical(choices[[i]], selected)) {
+            attrs$checked <- "checked"
+        }
+        tag(
+            "div",
+            attrs = list(class = "g-radio-item"),
+            children = list(
+                            tag("input", attrs = attrs,
+                                bind = list(event = "change", target = id)),
+                            tag("label", text = names(choices)[[i]],
+                                attrs = list("for" = item_id))
+            )
+        )
+    })
+    tag(
+        "div",
+        attrs = list(id = id, class = "g-radio-group"),
+        children = c(
+            list(tag("label", text = label,
+                attrs = list(class = "g-radio-group-label"))),
+            items
+        )
+    )
+}
+
+#' Create a date input
+#'
+#' The input value arrives server-side as a "YYYY-MM-DD" string;
+#' convert with as.Date() at the point of use. No hidden coercion.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value character initial date, "YYYY-MM-DD" (optional)
+#' @param min character earliest selectable date (optional)
+#' @param max character latest selectable date (optional)
+#' @return A UI element
+#' @examples
+#' date_input("start", "Start:", value = "2026-07-07")
+#' @export
+date_input <- function(id, label = "", value = NULL, min = NULL,
+                       max = NULL) {
+    attrs <- list(id = id, type = "date", class = "g-date")
+    if (!is.null(value)) {
+        attrs$value <- as.character(value)
+    }
+    if (!is.null(min)) {
+        attrs$min <- as.character(min)
+    }
+    if (!is.null(max)) {
+        attrs$max <- as.character(max)
+    }
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("input", attrs = attrs,
+                            bind = list(event = "change", target = id))
+        )
+    )
+}

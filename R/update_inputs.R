@@ -94,6 +94,64 @@ update_checkbox_input <- function(session, id, value = NULL, label = NULL) {
                       sync_value = value)
 }
 
+#' Update a radio button group from the server
+#'
+#' @param session a glinty_session
+#' @param id character input ID
+#' @param choices character vector of choices; names are display
+#'   labels (NULL leaves them alone)
+#' @param selected character value to check (NULL leaves it alone,
+#'   unless choices are replaced, in which case the first choice is
+#'   checked)
+#' @param label character new group label text
+#' @return invisible(NULL)
+#' @examples
+#' \dontrun{
+#' update_radio_buttons(session, "mode", selected = "careful")
+#' }
+#' @export
+update_radio_buttons <- function(session, id, choices = NULL,
+                                 selected = NULL, label = NULL) {
+    choice_list <- NULL
+    if (!is.null(choices)) {
+        if (is.null(names(choices))) {
+            names(choices) <- choices
+        }
+        if (is.null(selected)) {
+            selected <- choices[[1L]]
+        }
+        choice_list <- lapply(seq_along(choices), function(i) {
+            list(value = unname(choices[[i]]), label = names(choices)[[i]])
+        })
+    }
+    send_input_update(session, id,
+        list(choices = choice_list, selected = selected, label = label),
+        sync_value = selected)
+}
+
+#' Update a date input from the server
+#'
+#' @param session a glinty_session
+#' @param id character input ID
+#' @param value character new date, "YYYY-MM-DD"
+#' @param min character new earliest selectable date
+#' @param max character new latest selectable date
+#' @return invisible(NULL)
+#' @examples
+#' \dontrun{
+#' update_date_input(session, "start", value = "2026-01-01")
+#' }
+#' @export
+update_date_input <- function(session, id, value = NULL, min = NULL,
+                              max = NULL) {
+    if (!is.null(value)) {
+        value <- as.character(value)
+    }
+    send_input_update(session, id,
+        list(value = value, min = min, max = max),
+        sync_value = value)
+}
+
 #' Update a numeric input from the server
 #'
 #' @param session a glinty_session

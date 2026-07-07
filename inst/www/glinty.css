@@ -88,6 +88,30 @@ h1, h2, h3, h4 {
     margin-left: 0.35rem;
 }
 
+.g-radio-group {
+    margin: 0.75rem 0;
+}
+
+.g-radio-group-label {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--g-muted);
+    margin-bottom: 0.25rem;
+}
+
+.g-radio-item label {
+    margin-left: 0.35rem;
+}
+
+.g-date {
+    font: inherit;
+    color: inherit;
+    background: var(--g-bg);
+    border: 1px solid var(--g-border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+}
+
 .g-slider-group .g-slider {
     vertical-align: middle;
     max-width: 60%;
