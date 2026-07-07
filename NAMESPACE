@@ -1,8 +1,10 @@
 # tinyrox says don't edit this manually, but it can't stop you!
 
 export(flush_reactions)
+export(invalidate_later)
 export(isolate)
 export(observe)
+export(observe_event)
 export(output_property)
 export(reactive)
 export(reactive_val)
