@@ -1,3 +1,8 @@
+# glinty (development version)
+
+- Tables travel as structure (header + rows) instead of HTML;
+  frontends render them natively.
+
 # glinty 0.2.0
 
 - flitR native backend: run_app_native() renders apps in a native
