@@ -21,6 +21,13 @@ observe <- function(fn, priority = 0L, label = "") {
     obs$destroyed <- FALSE
     obs$ctx <- NULL
 
+    # Tag with the current session (the "domain") so session_end()
+    # can destroy every observer the session created.
+    obs$session <- .globals$current_session
+    if (!is.null(obs$session)) {
+        obs$session$observers <- c(obs$session$observers, list(obs))
+    }
+
     run <- function() {
         if (obs$destroyed) {
             return()
@@ -33,7 +40,9 @@ observe <- function(fn, priority = 0L, label = "") {
         },
                                label = label
         )
-        with_context(obs$ctx, obs$fn)
+        with_context(obs$ctx, function() {
+            tryCatch(obs$fn(), glinty_silent = function(c) invisible(NULL))
+        })
     }
 
     obs$run <- run

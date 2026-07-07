@@ -30,7 +30,14 @@ flush_reactions <- function() {
 
         for (obs in queue) {
             if (!obs$destroyed) {
-                obs$run()
+                # Re-runs happen under the observer's own session so
+                # nested observe()/invalidate_later() calls land in
+                # the right domain.
+                old_session <- .globals$current_session
+                .globals$current_session <- obs$session
+                tryCatch(obs$run(), finally = {
+                    .globals$current_session <- old_session
+                })
             }
         }
     }

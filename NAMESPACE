@@ -3,5 +3,12 @@
 export(flush_reactions)
 export(isolate)
 export(observe)
+export(output_property)
 export(reactive)
 export(reactive_val)
+export(req)
+
+S3method("[[",glinty_input)
+S3method("[[<-",glinty_output)
+S3method("$",glinty_input)
+S3method("$<-",glinty_output)
