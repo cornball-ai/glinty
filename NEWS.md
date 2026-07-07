@@ -1,5 +1,8 @@
 # glinty (development version)
 
+- Client-sized plots: `plot_output()`/`render_plot()` default to
+  responsive sizing driven by the browser's reported dimensions,
+  re-rendering on window resize.
 - New inputs: `radio_buttons()` and `date_input()`, with
   `update_radio_buttons()` and `update_date_input()`.
 
