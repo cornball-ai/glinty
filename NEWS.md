@@ -1,3 +1,8 @@
+# glinty (development version)
+
+- New inputs: `radio_buttons()` and `date_input()`, with
+  `update_radio_buttons()` and `update_date_input()`.
+
 # glinty 0.1.0
 
 Initial release.
