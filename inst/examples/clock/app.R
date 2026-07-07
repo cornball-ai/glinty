@@ -8,7 +8,7 @@ app(
         text_output("now"),
         slider_input("n", "Wavelengths:", min = 1, max = 10, value = 2,
             step = 1),
-        plot_output("wave", width = 480L, height = 360L),
+        plot_output("wave"),
         title = "glinty clock"
     ),
     server = function(input, output) {
@@ -22,6 +22,6 @@ app(
             x <- seq(0, n * 2 * pi, length.out = 500L)
             plot(x, sin(x), type = "l", lwd = 2, col = "#2456d6",
                 xlab = "x", ylab = "sin(x)")
-        }, width = 480, height = 360)
+        })
     }
 )

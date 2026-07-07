@@ -22,6 +22,13 @@ make_output_proxy <- function(session) {
             "textContent"
         }
         renderer <- as_renderer(value, default_prop)
+        # Renderers with a bind hook (e.g. render_plot with client
+        # sizing) build their fn once they know their output id and
+        # session.
+        if (!is.null(renderer$bind)) {
+            renderer <- new_renderer(renderer$bind(id, session),
+                renderer$property)
+        }
         obs <- with_session(session, observe(
                 fn = function() {
             # Render errors become error messages for this output;
