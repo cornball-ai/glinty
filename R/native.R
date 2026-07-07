@@ -29,12 +29,12 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
     }
     if (!requireNamespace("flitR", quietly = TRUE)) {
         stop("the native backend needs the flitR package ",
-            "(and flitR::install_engine())", call. = FALSE)
+             "(and flitR::install_engine())", call. = FALSE)
     }
     exports <- getNamespaceExports("flitR")
     if (!all(c("image", "render_dirty", "ensure_window") %in% exports)) {
         stop("this glinty needs a newer flitR (image op and driver ",
-            "API); update flitR", call. = FALSE)
+             "API); update flitR", call. = FALSE)
     }
 
     # Reset reactive state
@@ -87,7 +87,7 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
                 flitR::reset_widgets()
                 items <- build_native_ops(app_obj$ui, s, values)
                 sc <- do.call(flitR::scene,
-                    c(items, list(width = width, height = height)))
+                              c(items, list(width = width, height = height)))
                 flitR::send_scene_to_conn(conn, sc)
             }
             if (native$done) {
@@ -109,7 +109,7 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
                 break
             }
         },
-        interrupt = function(e) message("\nglinty native app stopped.")
+             interrupt = function(e) message("\nglinty native app stopped.")
     )
     invisible(NULL)
 }
@@ -127,10 +127,8 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
 #' @return invisible(NULL)
 #' @keywords internal
 native_apply <- function(msg_json, values, native) {
-    msg <- tryCatch(
-        jsonlite::fromJSON(msg_json, simplifyVector = FALSE),
-        error = function(e) NULL
-    )
+    msg <- tryCatch(jsonlite::fromJSON(msg_json, simplifyVector = FALSE),
+                    error = function(e) NULL)
     if (is.null(msg) || is.null(msg$type)) {
         return(invisible(NULL))
     }

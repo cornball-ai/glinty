@@ -12,13 +12,12 @@
 handle_upload <- function(req) {
     bad <- function(status, msg) {
         http_response_raw(status, "application/json",
-            sprintf('{"ok":false,"error":"%s"}', msg))
+                          sprintf('{"ok":false,"error":"%s"}', msg))
     }
     q <- parse_query(req$query)
     sid <- unname(q["session"])
     input_id <- unname(q["id"])
-    if (is.na(sid) || is.na(input_id) || !nzchar(sid) ||
-        !nzchar(input_id)) {
+    if (is.na(sid) || is.na(input_id) || !nzchar(sid) || !nzchar(input_id)) {
         return(bad(400L, "missing session or id"))
     }
     session <- .globals$sessions[[sid]]
@@ -49,11 +48,11 @@ handle_upload <- function(req) {
         fname <- basename(p$filename)
         ext <- tolower(tools::file_ext(fname))
         datapath <- tempfile("upload-", tmpdir = dir,
-            fileext = if (nzchar(ext)) paste0(".", ext) else "")
+                             fileext = if (nzchar(ext)) paste0(".", ext) else "")
         writeBin(p$value, datapath)
         data.frame(name = fname, size = length(p$value),
-            type = NA_character_, datapath = datapath,
-            stringsAsFactors = FALSE)
+                   type = NA_character_, datapath = datapath,
+                   stringsAsFactors = FALSE)
     })
     handle_input(session, input_id, do.call(rbind, rows))
     http_response_raw(200L, "application/json", '{"ok":true}')

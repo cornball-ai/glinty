@@ -27,7 +27,7 @@ make_output_proxy <- function(session) {
         # session.
         if (!is.null(renderer$bind)) {
             renderer <- new_renderer(renderer$bind(id, session),
-                renderer$property)
+                                     renderer$property)
         }
         obs <- with_session(session, observe(
                 fn = function() {
@@ -40,7 +40,7 @@ make_output_proxy <- function(session) {
             )
             if (is.null(result$err)) {
                 session$send_output(id,
-                    update_msg(id, renderer$property, result$ok))
+                                    update_msg(id, renderer$property, result$ok))
             } else {
                 session$send_output(id, error_msg(id, result$err))
             }

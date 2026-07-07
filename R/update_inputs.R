@@ -125,8 +125,8 @@ update_radio_buttons <- function(session, id, choices = NULL,
         })
     }
     send_input_update(session, id,
-        list(choices = choice_list, selected = selected, label = label),
-        sync_value = selected)
+                      list(choices = choice_list, selected = selected, label = label),
+                      sync_value = selected)
 }
 
 #' Update a date input from the server
@@ -147,9 +147,8 @@ update_date_input <- function(session, id, value = NULL, min = NULL,
     if (!is.null(value)) {
         value <- as.character(value)
     }
-    send_input_update(session, id,
-        list(value = value, min = min, max = max),
-        sync_value = value)
+    send_input_update(session, id, list(value = value, min = min, max = max),
+                      sync_value = value)
 }
 
 #' Update a numeric input from the server

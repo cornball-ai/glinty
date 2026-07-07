@@ -227,10 +227,8 @@ file_input <- function(id, label = "", accept = NULL, multiple = FALSE) {
     tag(
         "div",
         attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("input", attrs = attrs)
-        )
+        children = list(tag("label", text = label, attrs = list("for" = id)),
+                        tag("input", attrs = attrs))
     )
 }
 
@@ -258,7 +256,7 @@ radio_buttons <- function(id, label = "", choices = character(0),
     items <- lapply(seq_along(choices), function(i) {
         item_id <- paste0(id, "_", i)
         attrs <- list(id = item_id, type = "radio", name = id,
-            value = choices[[i]], class = "g-radio")
+                      value = choices[[i]], class = "g-radio")
         if (identical(choices[[i]], selected)) {
             attrs$checked <- "checked"
         }
@@ -277,9 +275,9 @@ radio_buttons <- function(id, label = "", choices = character(0),
         "div",
         attrs = list(id = id, class = "g-radio-group"),
         children = c(
-            list(tag("label", text = label,
-                attrs = list(class = "g-radio-group-label"))),
-            items
+                     list(tag("label", text = label,
+                              attrs = list(class = "g-radio-group-label"))),
+                     items
         )
     )
 }
@@ -298,8 +296,7 @@ radio_buttons <- function(id, label = "", choices = character(0),
 #' @examples
 #' date_input("start", "Start:", value = "2026-07-07")
 #' @export
-date_input <- function(id, label = "", value = NULL, min = NULL,
-                       max = NULL) {
+date_input <- function(id, label = "", value = NULL, min = NULL, max = NULL) {
     attrs <- list(id = id, type = "date", class = "g-date")
     if (!is.null(value)) {
         attrs$value <- as.character(value)

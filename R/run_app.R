@@ -105,10 +105,8 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
             dispatch_client_message(s, txt)
             return(invisible(NULL))
         }
-        first <- tryCatch(
-            jsonlite::fromJSON(txt, simplifyVector = FALSE),
-            error = function(e) NULL
-        )
+        first <- tryCatch(jsonlite::fromJSON(txt, simplifyVector = FALSE),
+                          error = function(e) NULL)
         if (!is.null(first) && identical(first$type, "resume")) {
             old_id <- first$session_id
             old <- if (is.character(old_id) && nzchar(old_id)) {
@@ -117,7 +115,7 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
                 NULL
             }
             if (!is.null(old) && isTRUE(old$detached) &&
-                transport_rebind(sid, old_id)) {
+                     transport_rebind(sid, old_id)) {
                 resume_session(old)
             } else {
                 # unknown or expired: honest fresh session; the

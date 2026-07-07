@@ -68,8 +68,8 @@ parse_multipart <- function(body, boundary) {
         }
 
         cd <- grep("content-disposition",
-            strsplit(hdr_txt, "\r\n", fixed = TRUE)[[1L]],
-            ignore.case = TRUE, value = TRUE)[1L]
+                   strsplit(hdr_txt, "\r\n", fixed = TRUE)[[1L]],
+                   ignore.case = TRUE, value = TRUE)[1L]
         if (is.na(cd)) {
             next
         }
@@ -110,12 +110,11 @@ parse_query <- function(q) {
     pairs <- strsplit(q, "&", fixed = TRUE)[[1L]]
     pairs <- pairs[nzchar(pairs)]
     keys <- sub("=.*$", "", pairs)
-    vals <- ifelse(grepl("=", pairs, fixed = TRUE),
-        sub("^[^=]*=", "", pairs), "")
+    vals <- ifelse(grepl("=", pairs, fixed = TRUE), sub("^[^=]*=", "", pairs),
+                   "")
     vals <- vapply(vals, function(v) {
         URLdecode(chartr("+", " ", v))
     }, character(1L), USE.NAMES = FALSE)
-    names(vals) <- vapply(keys, URLdecode, character(1L),
-        USE.NAMES = FALSE)
+    names(vals) <- vapply(keys, URLdecode, character(1L), USE.NAMES = FALSE)
     vals
 }
