@@ -4,12 +4,17 @@ app(
     ui = page(
         h1("Input gallery"),
         p("Every widget wired to a live echo table, plus server-side updates."),
-        text_input("txt", "Text:", value = "hello"),
+        row(
+            text_input("txt", "Text:", value = "hello"),
+            number_input("num", "Number:", value = 3, min = 0, max = 10)
+        ),
         textarea_input("notes", "Notes:", rows = 3L),
-        number_input("num", "Number:", value = 3, min = 0, max = 10),
-        slider_input("sl", "Slider:", min = 0, max = 100, value = 50,
-            step = 1),
-        checkbox_input("chk", "Enabled", value = TRUE),
+        row(
+            slider_input("sl", "Slider:", min = 0, max = 100, value = 50,
+                step = 1),
+            checkbox_input("chk", "Enabled", value = TRUE),
+            align = "center"
+        ),
         select_input("sel", "Choice:",
             choices = c(Alpha = "a", Bravo = "b", Charlie = "c")),
         radio_buttons("mode", "Mode:",

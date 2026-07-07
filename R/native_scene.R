@@ -107,6 +107,24 @@ translate_tag <- function(tg, session, values, unsupported) {
         return(translate_plot(tg, values))
     }
     if (name == "div") {
+        if (identical(cls, "g-layout-row") ||
+            identical(cls, "g-layout-col")) {
+            items <- translate_tags(tg$children, session, values,
+                unsupported)
+            if (length(items) == 0L) {
+                return(NULL)
+            }
+            gap <- suppressWarnings(as.numeric(tg$attrs[["data-g-gap"]]))
+            if (length(gap) != 1L || is.na(gap)) {
+                gap <- if (identical(cls, "g-layout-row")) 12 else 8
+            }
+            layout_fn <- if (identical(cls, "g-layout-row")) {
+                flitR::row
+            } else {
+                flitR::column
+            }
+            return(do.call(layout_fn, c(items, list(gap = gap))))
+        }
         if (identical(cls, "g-radio-group")) {
             unsupported$tags <- c(unsupported$tags, "radio_buttons")
             return(NULL)
