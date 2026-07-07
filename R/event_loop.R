@@ -31,7 +31,7 @@ run_ws_server <- function(port, handlers, max_tick = 1) {
         repeat {
             loop_tick(srv, handlers, max_tick)
         },
-        interrupt = function(e) message("\nglinty server stopped.")
+             interrupt = function(e) message("\nglinty server stopped.")
     )
     invisible(NULL)
 }
@@ -54,17 +54,21 @@ loop_tick <- function(srv, handlers, max_tick) {
     drain_all_sessions()
 
     tmo <- next_timer_deadline()
-    tmo <- if (is.null(tmo)) max_tick else min(max_tick, max(tmo, 0))
+    if (is.null(tmo)) {
+        tmo <- max_tick
+    } else {
+        tmo <- min(max_tick, max(tmo, 0))
+    }
 
     conn_keys <- names(REG$conns)
-    socks <- c(list(srv), unname(lapply(REG$conns[conn_keys],
-        function(e) e$con)))
+    socks <- c(list(srv),
+               unname(lapply(REG$conns[conn_keys], function(e) e$con)))
     ready <- socketSelect(socks, write = FALSE, timeout = tmo)
 
     if (isTRUE(ready[1L])) {
         con <- tryCatch(
-            socketAccept(srv, blocking = FALSE, open = "r+b", timeout = 5),
-            error = function(e) NULL
+                        socketAccept(srv, blocking = FALSE, open = "r+b", timeout = 5),
+                        error = function(e) NULL
         )
         if (!is.null(con)) {
             conn_add(con, "http_pending")
@@ -74,7 +78,9 @@ loop_tick <- function(srv, handlers, max_tick) {
     readable <- conn_keys[ready[-1L]]
     for (key in readable) {
         entry <- REG$conns[[key]]
-        if (is.null(entry)) next
+        if (is.null(entry)) {
+            next
+        }
         tryCatch({
             data <- drain_socket(entry$con)
             if (length(data) == 0L) {
@@ -85,7 +91,7 @@ loop_tick <- function(srv, handlers, max_tick) {
                 entry$buf <- c(entry$buf, data)
                 if (length(entry$buf) > MAX_CONN_BUF) {
                     conn_close(key, notify = TRUE, handlers = handlers,
-                        code = 1009L)
+                               code = 1009L)
                 } else if (identical(entry$state, "http_pending")) {
                     handle_http_bytes(key, handlers)
                 } else {
@@ -109,7 +115,9 @@ drain_socket <- function(con) {
     repeat {
         chunk <- readBin(con, "raw", 65536L)
         out <- c(out, chunk)
-        if (length(chunk) < 65536L) break
+        if (length(chunk) < 65536L) {
+            break
+        }
     }
     out
 }
@@ -131,22 +139,26 @@ handle_http_bytes <- function(key, handlers) {
     if (pos < 0L) {
         if (length(entry$buf) > MAX_HTTP_HEAD) {
             tryCatch(suppressWarnings(writeBin(
-                http_response_raw(400L, "text/plain", "Bad Request"),
-                entry$con
-            )), error = function(e) NULL)
+                        http_response_raw(400L, "text/plain", "Bad Request"),
+                        entry$con
+                    )), error = function(e) NULL)
             conn_close(key, notify = FALSE, handlers = handlers)
         }
         return(invisible(NULL))
     }
 
-    head_raw <- if (pos > 1L) entry$buf[seq_len(pos - 1L)] else raw(0L)
+    if (pos > 1L) {
+        head_raw <- entry$buf[seq_len(pos - 1L)]
+    } else {
+        head_raw <- raw(0L)
+    }
     entry$buf <- raw(0L)
     req <- parse_http_head(head_raw)
     if (is.null(req)) {
         tryCatch(suppressWarnings(writeBin(
-            http_response_raw(400L, "text/plain", "Bad Request"),
-            entry$con
-        )), error = function(e) NULL)
+                    http_response_raw(400L, "text/plain", "Bad Request"),
+                    entry$con
+                )), error = function(e) NULL)
         conn_close(key, notify = FALSE, handlers = handlers)
         return(invisible(NULL))
     }
@@ -182,7 +194,7 @@ handle_http_bytes <- function(key, handlers) {
         resp <- http_response_raw(404L, "text/plain", "Not found")
     }
     tryCatch(suppressWarnings(writeBin(resp, entry$con)),
-        error = function(e) NULL)
+             error = function(e) NULL)
     conn_close(key, notify = FALSE, handlers = handlers)
     invisible(NULL)
 }
@@ -262,9 +274,9 @@ handle_ws_bytes <- function(key, handlers) {
             return(invisible(NULL))
         } else if (op == WS_PING) {
             tryCatch(
-                suppressWarnings(writeBin(ws_pong_frame(frame$payload),
-                    entry$con)),
-                error = function(e) mark_dead(key)
+                     suppressWarnings(writeBin(ws_pong_frame(frame$payload),
+                        entry$con)),
+                     error = function(e) mark_dead(key)
             )
         } else if (op == WS_PONG) {
             # ignore

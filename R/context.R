@@ -84,4 +84,3 @@ isolate <- function(expr) {
     on.exit(.globals$current_context <- old)
     expr
 }
-

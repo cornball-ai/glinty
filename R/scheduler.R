@@ -72,7 +72,7 @@ run_due_timers <- function(now = timer_now()) {
         .globals$timers <- .globals$timers[-1L]
         tryCatch(timer$fn(), error = function(e) {
             warning("glinty timer callback failed: ", conditionMessage(e),
-                call. = FALSE)
+                    call. = FALSE)
         })
         fired <- fired + 1L
     }
@@ -102,7 +102,7 @@ invalidate_later <- function(millis, session = NULL) {
     ctx <- .globals$current_context
     if (is.null(ctx)) {
         stop("invalidate_later() must be called from a reactive context",
-            call. = FALSE)
+             call. = FALSE)
     }
     if (is.null(session)) {
         session <- .globals$current_session

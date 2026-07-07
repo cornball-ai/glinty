@@ -26,8 +26,12 @@ page <- function(..., title = "glinty app") {
 #' @export
 div <- function(..., class = NULL, id = NULL) {
     attrs <- list()
-    if (!is.null(class)) attrs$class <- class
-    if (!is.null(id)) attrs$id <- id
+    if (!is.null(class)) {
+        attrs$class <- class
+    }
+    if (!is.null(id)) {
+        attrs$id <- id
+    }
     tag("div", children = list(...), attrs = attrs)
 }
 
@@ -48,8 +52,12 @@ span <- function(..., class = NULL, id = NULL) {
         children <- list()
     }
     attrs <- list()
-    if (!is.null(class)) attrs$class <- class
-    if (!is.null(id)) attrs$id <- id
+    if (!is.null(class)) {
+        attrs$class <- class
+    }
+    if (!is.null(id)) {
+        attrs$id <- id
+    }
     tag("span", children = children, text = text, attrs = attrs)
 }
 
@@ -69,7 +77,9 @@ p <- function(..., class = NULL) {
         children <- list()
     }
     attrs <- list()
-    if (!is.null(class)) attrs$class <- class
+    if (!is.null(class)) {
+        attrs$class <- class
+    }
     tag("p", children = children, text = text, attrs = attrs)
 }
 

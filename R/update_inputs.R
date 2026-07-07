@@ -17,9 +17,8 @@
 #' }
 #' @export
 update_text_input <- function(session, id, value = NULL, label = NULL) {
-    send_input_update(session, id,
-        list(value = value, label = label),
-        sync_value = value)
+    send_input_update(session, id, list(value = value, label = label),
+                      sync_value = value)
 }
 
 #' Update a select input from the server
@@ -38,19 +37,23 @@ update_text_input <- function(session, id, value = NULL, label = NULL) {
 #' update_select_input(session, "engine", choices = c("a", "b"))
 #' }
 #' @export
-update_select_input <- function(session, id, choices = NULL,
-                                selected = NULL, label = NULL) {
+update_select_input <- function(session, id, choices = NULL, selected = NULL,
+                                label = NULL) {
     choice_list <- NULL
     if (!is.null(choices)) {
-        if (is.null(names(choices))) names(choices) <- choices
-        if (is.null(selected)) selected <- choices[[1L]]
+        if (is.null(names(choices))) {
+            names(choices) <- choices
+        }
+        if (is.null(selected)) {
+            selected <- choices[[1L]]
+        }
         choice_list <- lapply(seq_along(choices), function(i) {
             list(value = unname(choices[[i]]), label = names(choices)[[i]])
         })
     }
     send_input_update(session, id,
-        list(choices = choice_list, selected = selected, label = label),
-        sync_value = selected)
+                      list(choices = choice_list, selected = selected, label = label),
+                      sync_value = selected)
 }
 
 #' Update a slider input from the server
@@ -70,8 +73,8 @@ update_select_input <- function(session, id, choices = NULL,
 update_slider_input <- function(session, id, value = NULL, min = NULL,
                                 max = NULL, step = NULL) {
     send_input_update(session, id,
-        list(value = value, min = min, max = max, step = step),
-        sync_value = value)
+                      list(value = value, min = min, max = max, step = step),
+                      sync_value = value)
 }
 
 #' Update a checkbox input from the server
@@ -87,9 +90,8 @@ update_slider_input <- function(session, id, value = NULL, min = NULL,
 #' }
 #' @export
 update_checkbox_input <- function(session, id, value = NULL, label = NULL) {
-    send_input_update(session, id,
-        list(value = value, label = label),
-        sync_value = value)
+    send_input_update(session, id, list(value = value, label = label),
+                      sync_value = value)
 }
 
 #' Update a numeric input from the server
@@ -109,8 +111,8 @@ update_checkbox_input <- function(session, id, value = NULL, label = NULL) {
 update_number_input <- function(session, id, value = NULL, min = NULL,
                                 max = NULL, step = NULL) {
     send_input_update(session, id,
-        list(value = value, min = min, max = max, step = step),
-        sync_value = value)
+                      list(value = value, min = min, max = max, step = step),
+                      sync_value = value)
 }
 
 #' Queue an update_input message and sync server-side state

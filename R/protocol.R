@@ -10,9 +10,9 @@
 #' @keywords internal
 update_msg <- function(id, property, value) {
     as.character(jsonlite::toJSON(
-        list(type = "update", id = id, property = property, value = value),
-        auto_unbox = TRUE
-    ))
+                                  list(type = "update", id = id, property = property, value = value),
+                                  auto_unbox = TRUE
+        ))
 }
 
 #' Create a typed input-update message
@@ -39,9 +39,9 @@ update_input_msg <- function(id, fields) {
 #' @keywords internal
 error_msg <- function(id, message) {
     as.character(jsonlite::toJSON(
-        list(type = "error", id = id, message = message),
-        auto_unbox = TRUE, null = "null"
-    ))
+                                  list(type = "error", id = id, message = message),
+                                  auto_unbox = TRUE, null = "null"
+        ))
 }
 
 #' Create the session config message
@@ -54,9 +54,9 @@ error_msg <- function(id, message) {
 #' @keywords internal
 config_msg <- function(session_id) {
     as.character(jsonlite::toJSON(
-        list(type = "config", session_id = session_id, protocol = 1L),
-        auto_unbox = TRUE
-    ))
+                                  list(type = "config", session_id = session_id, protocol = 1L),
+                                  auto_unbox = TRUE
+        ))
 }
 
 #' Dispatch one client message to a session
@@ -72,10 +72,8 @@ config_msg <- function(session_id) {
 #' @return invisible(NULL)
 #' @keywords internal
 dispatch_client_message <- function(session, txt) {
-    msg <- tryCatch(
-        jsonlite::fromJSON(txt, simplifyVector = FALSE),
-        error = function(e) NULL
-    )
+    msg <- tryCatch(jsonlite::fromJSON(txt, simplifyVector = FALSE),
+                    error = function(e) NULL)
     if (is.null(msg) || is.null(msg$type)) {
         session$send(error_msg(NULL, "malformed message"))
         return(invisible(NULL))
@@ -94,7 +92,7 @@ dispatch_client_message <- function(session, txt) {
         }
     } else {
         session$send(error_msg(NULL,
-            paste0("unknown message type: ", msg$type)))
+                               paste0("unknown message type: ", msg$type)))
     }
     invisible(NULL)
 }

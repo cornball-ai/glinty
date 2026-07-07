@@ -10,14 +10,16 @@
 #' @export
 text_input <- function(id, label = "", value = "", placeholder = "") {
     attrs <- list(id = id, type = "text", class = "g-input", value = value)
-    if (nzchar(placeholder)) attrs$placeholder <- placeholder
+    if (nzchar(placeholder)) {
+        attrs$placeholder <- placeholder
+    }
     tag(
         "div",
         attrs = list(class = "g-input-group"),
         children = list(
-            tag("label", text = label, attrs = list("for" = id)),
-            tag("input", attrs = attrs,
-                bind = list(event = "input", target = id))
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("input", attrs = attrs,
+                            bind = list(event = "input", target = id))
         )
     )
 }
@@ -39,13 +41,13 @@ textarea_input <- function(id, label = "", value = "", rows = 4L,
         "div",
         attrs = list(class = "g-input-group"),
         children = list(
-            tag("label", text = label, attrs = list("for" = id)),
-            tag("textarea",
-                text = value,
-                attrs = list(id = id, class = "g-textarea",
-                             rows = as.character(rows),
-                             placeholder = placeholder),
-                bind = list(event = "input", target = id))
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("textarea",
+                            text = value,
+                            attrs = list(id = id, class = "g-textarea",
+                    rows = as.character(rows),
+                    placeholder = placeholder),
+                            bind = list(event = "input", target = id))
         )
     )
 }
@@ -61,14 +63,16 @@ textarea_input <- function(id, label = "", value = "", rows = 4L,
 #' @export
 checkbox_input <- function(id, label = "", value = FALSE) {
     attrs <- list(id = id, type = "checkbox", class = "g-checkbox")
-    if (isTRUE(value)) attrs$checked <- "checked"
+    if (isTRUE(value)) {
+        attrs$checked <- "checked"
+    }
     tag(
         "div",
         attrs = list(class = "g-checkbox-group"),
         children = list(
-            tag("input", attrs = attrs,
-                bind = list(event = "change", target = id)),
-            tag("label", text = label, attrs = list("for" = id))
+                        tag("input", attrs = attrs,
+                            bind = list(event = "change", target = id)),
+                        tag("label", text = label, attrs = list("for" = id))
         )
     )
 }
@@ -85,7 +89,9 @@ checkbox_input <- function(id, label = "", value = FALSE) {
 #' @export
 select_input <- function(id, label = "", choices = character(0),
                          selected = NULL) {
-    if (is.null(names(choices))) names(choices) <- choices
+    if (is.null(names(choices))) {
+        names(choices) <- choices
+    }
     if (is.null(selected) && length(choices) > 0L) {
         selected <- choices[[1L]]
     }
@@ -98,11 +104,9 @@ select_input <- function(id, label = "", choices = character(0),
         "div",
         attrs = list(class = "g-input-group"),
         children = list(
-            tag("label", text = label, attrs = list("for" = id)),
-            tag("select",
-                attrs = list(id = id, class = "g-select"),
-                children = options,
-                bind = list(event = "change", target = id))
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("select", attrs = list(id = id, class = "g-select"),
+                            children = options, bind = list(event = "change", target = id))
         )
     )
 }
@@ -125,18 +129,16 @@ slider_input <- function(id, label = "", min = 0, max = 1, value = 0.5,
         "div",
         attrs = list(class = "g-slider-group"),
         children = list(
-            tag("label", text = label, attrs = list("for" = id)),
-            tag("input",
-                attrs = list(id = id, type = "range", class = "g-slider",
-                             min = as.character(min),
-                             max = as.character(max),
-                             value = as.character(value),
-                             step = as.character(step)),
-                bind = list(event = "input", target = id)),
-            tag("span",
-                text = as.character(value),
-                attrs = list(id = paste0(id, "_val"),
-                             class = "g-slider-val"))
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("input",
+                            attrs = list(id = id, type = "range", class = "g-slider",
+                    min = as.character(min), max = as.character(max),
+                    value = as.character(value),
+                    step = as.character(step)),
+                            bind = list(event = "input", target = id)),
+                        tag("span",
+                            text = as.character(value),
+                            attrs = list(id = paste0(id, "_val"), class = "g-slider-val"))
         )
     )
 }
@@ -156,17 +158,25 @@ slider_input <- function(id, label = "", min = 0, max = 1, value = 0.5,
 number_input <- function(id, label = "", value = NULL, min = NULL,
                          max = NULL, step = NULL) {
     attrs <- list(id = id, type = "number", class = "g-number")
-    if (!is.null(value)) attrs$value <- as.character(value)
-    if (!is.null(min)) attrs$min <- as.character(min)
-    if (!is.null(max)) attrs$max <- as.character(max)
-    if (!is.null(step)) attrs$step <- as.character(step)
+    if (!is.null(value)) {
+        attrs$value <- as.character(value)
+    }
+    if (!is.null(min)) {
+        attrs$min <- as.character(min)
+    }
+    if (!is.null(max)) {
+        attrs$max <- as.character(max)
+    }
+    if (!is.null(step)) {
+        attrs$step <- as.character(step)
+    }
     tag(
         "div",
         attrs = list(class = "g-input-group"),
         children = list(
-            tag("label", text = label, attrs = list("for" = id)),
-            tag("input", attrs = attrs,
-                bind = list(event = "input", target = id))
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("input", attrs = attrs,
+                            bind = list(event = "input", target = id))
         )
     )
 }
@@ -183,10 +193,6 @@ number_input <- function(id, label = "", value = NULL, min = NULL,
 #' button("go", "Run")
 #' @export
 button <- function(id, label) {
-    tag(
-        "button",
-        text = label,
-        attrs = list(id = id, class = "g-btn"),
-        bind = list(event = "click", target = id)
-    )
+    tag("button", text = label, attrs = list(id = id, class = "g-btn"),
+        bind = list(event = "click", target = id))
 }

@@ -10,7 +10,9 @@
 #' @keywords internal
 find_header_end <- function(buf) {
     n <- length(buf)
-    if (n < 4L) return(-1L)
+    if (n < 4L) {
+        return(-1L)
+    }
     cr <- which(buf[seq_len(n - 3L)] == as.raw(13L))
     for (i in cr) {
         if (buf[i + 1L] == as.raw(10L) &&
@@ -31,12 +33,18 @@ find_header_end <- function(buf) {
 #' @keywords internal
 parse_http_head <- function(head_raw) {
     txt <- tryCatch(rawToChar(head_raw), error = function(e) NULL)
-    if (is.null(txt)) return(NULL)
+    if (is.null(txt)) {
+        return(NULL)
+    }
     lines <- strsplit(txt, "\r\n", fixed = TRUE)[[1L]]
-    if (length(lines) < 1L) return(NULL)
+    if (length(lines) < 1L) {
+        return(NULL)
+    }
 
     parts <- strsplit(lines[1L], " ", fixed = TRUE)[[1L]]
-    if (length(parts) < 2L) return(NULL)
+    if (length(parts) < 2L) {
+        return(NULL)
+    }
     method <- parts[1L]
     target <- parts[2L]
 
@@ -73,7 +81,11 @@ parse_http_head <- function(head_raw) {
 #' @keywords internal
 get_header <- function(req, name) {
     h <- req$headers
-    if (name %in% names(h)) unname(h[[name]]) else NULL
+    if (name %in% names(h)) {
+        unname(h[[name]])
+    } else {
+        NULL
+    }
 }
 
 #' Build a complete HTTP response
@@ -89,33 +101,28 @@ get_header <- function(req, name) {
 #' @keywords internal
 http_response_raw <- function(status, content_type, body,
                               extra_headers = NULL) {
-    reason <- switch(as.character(status),
-        "200" = "OK",
-        "400" = "Bad Request",
-        "403" = "Forbidden",
-        "404" = "Not Found",
-        "426" = "Upgrade Required",
-        "500" = "Internal Server Error",
-        "OK"
-    )
+    reason <- switch(as.character(status), "200" = "OK",
+                     "400" = "Bad Request", "403" = "Forbidden",
+                     "404" = "Not Found", "426" = "Upgrade Required",
+                     "500" = "Internal Server Error", "OK")
     if (is.character(body)) {
         body <- charToRaw(paste(body, collapse = ""))
     }
     extra <- ""
     if (length(extra_headers) > 0L) {
         extra <- paste0(
-            paste0(names(extra_headers), ": ", extra_headers,
-                collapse = "\r\n"),
-            "\r\n"
+                        paste0(names(extra_headers), ": ", extra_headers,
+                               collapse = "\r\n"),
+                        "\r\n"
         )
     }
     header <- paste0(
-        "HTTP/1.1 ", status, " ", reason, "\r\n",
-        "Content-Type: ", content_type, "\r\n",
-        "Content-Length: ", length(body), "\r\n",
-        extra,
-        "Connection: close\r\n",
-        "\r\n"
+                     "HTTP/1.1 ", status, " ", reason, "\r\n",
+                     "Content-Type: ", content_type, "\r\n",
+                     "Content-Length: ", length(body), "\r\n",
+                     extra,
+                     "Connection: close\r\n",
+                     "\r\n"
     )
     c(charToRaw(header), body)
 }
@@ -137,20 +144,12 @@ serve_static <- function(file_name, dir) {
         return(http_response_raw(404L, "text/plain", "Not found"))
     }
     ext <- tools::file_ext(file_path)
-    ct <- switch(ext,
-        "js" = "application/javascript",
-        "css" = "text/css",
-        "html" = "text/html",
-        "png" = "image/png",
-        "jpg" = "image/jpeg",
-        "jpeg" = "image/jpeg",
-        "svg" = "image/svg+xml",
-        "ico" = "image/x-icon",
-        "wav" = "audio/wav",
-        "mp3" = "audio/mpeg",
-        "json" = "application/json",
-        "application/octet-stream"
-    )
+    ct <- switch(ext, "js" = "application/javascript", "css" = "text/css",
+                 "html" = "text/html", "png" = "image/png",
+                 "jpg" = "image/jpeg", "jpeg" = "image/jpeg",
+                 "svg" = "image/svg+xml", "ico" = "image/x-icon",
+                 "wav" = "audio/wav", "mp3" = "audio/mpeg",
+                 "json" = "application/json", "application/octet-stream")
     body <- readBin(file_path, "raw", file.info(file_path)$size)
     http_response_raw(200L, ct, body)
 }

@@ -60,10 +60,8 @@ conn_close <- function(key, notify, handlers, code = 1000L) {
     sid <- entry$session_id
     was_ws <- identical(entry$state, "ws_open")
     if (was_ws) {
-        tryCatch(
-            suppressWarnings(writeBin(ws_close_frame(code), entry$con)),
-            error = function(e) NULL
-        )
+        tryCatch(suppressWarnings(writeBin(ws_close_frame(code), entry$con)),
+                 error = function(e) NULL)
     }
     tryCatch(close(entry$con), error = function(e) NULL)
     REG$conns[[key]] <- NULL
@@ -100,12 +98,11 @@ mark_dead <- function(key) {
 #' @return character session id
 #' @keywords internal
 new_session_id <- function() {
-    had_seed <- exists(".Random.seed", envir = globalenv(),
-        inherits = FALSE)
+    had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
     if (had_seed) {
         old_seed <- get(".Random.seed", envir = globalenv())
         on.exit(assign(".Random.seed", old_seed, envir = globalenv()))
     }
     paste(sprintf("%02x", sample.int(256L, 16L, replace = TRUE) - 1L),
-        collapse = "")
+          collapse = "")
 }

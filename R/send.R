@@ -22,14 +22,14 @@ send_to_session <- function(session_id, text) {
     }
     ok <- TRUE
     tryCatch(
-        withCallingHandlers(
-            writeBin(ws_text_frame(text), entry$con),
-            warning = function(w) {
-                ok <<- FALSE
-                invokeRestart("muffleWarning")
-            }
+             withCallingHandlers(
+                                 writeBin(ws_text_frame(text), entry$con),
+                                 warning = function(w) {
+        ok <<- FALSE
+        invokeRestart("muffleWarning")
+    }
         ),
-        error = function(e) ok <<- FALSE
+             error = function(e) ok <<- FALSE
     )
     if (!ok) {
         mark_dead(key)

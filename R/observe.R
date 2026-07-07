@@ -55,4 +55,3 @@ observe <- function(fn, priority = 0L, label = "") {
 
     invisible(obs)
 }
-

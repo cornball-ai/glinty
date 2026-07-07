@@ -5,10 +5,7 @@
 #' @return a glinty_renderer
 #' @keywords internal
 new_renderer <- function(fn, property) {
-    structure(
-        list(fn = fn, property = property),
-        class = "glinty_renderer"
-    )
+    structure(list(fn = fn, property = property), class = "glinty_renderer")
 }
 
 #' Render plain text
@@ -24,10 +21,8 @@ new_renderer <- function(fn, property) {
 #' }
 #' @export
 render_text <- function(fn) {
-    new_renderer(
-        function() paste(as.character(fn()), collapse = " "),
-        "textContent"
-    )
+    new_renderer(function() paste(as.character(fn()), collapse = " "),
+                 "textContent")
 }
 
 #' Render HTML markup
@@ -45,15 +40,15 @@ render_text <- function(fn) {
 #' @export
 render_html <- function(fn) {
     new_renderer(
-        function() {
-            val <- fn()
-            if (inherits(val, "glinty_tag")) {
-                tag_to_html(val)
-            } else {
-                paste(as.character(val), collapse = "")
-            }
-        },
-        "innerHTML"
+                 function() {
+        val <- fn()
+        if (inherits(val, "glinty_tag")) {
+            tag_to_html(val)
+        } else {
+            paste(as.character(val), collapse = "")
+        }
+    },
+                 "innerHTML"
     )
 }
 
@@ -70,14 +65,14 @@ render_html <- function(fn) {
 #' @export
 render_table <- function(fn) {
     new_renderer(
-        function() {
-            df <- fn()
-            if (!is.data.frame(df)) {
-                stop("render_table() expects a data.frame", call. = FALSE)
-            }
-            df_to_html(df)
-        },
-        "innerHTML"
+                 function() {
+        df <- fn()
+        if (!is.data.frame(df)) {
+            stop("render_table() expects a data.frame", call. = FALSE)
+        }
+        df_to_html(df)
+    },
+                 "innerHTML"
     )
 }
 
@@ -90,19 +85,16 @@ df_to_html <- function(df) {
     cols <- lapply(df, function(col) {
         if (is.numeric(col)) format(col, trim = TRUE) else as.character(col)
     })
-    head_cells <- paste0("<th>", html_escape(names(df)), "</th>",
-        collapse = "")
+    head_cells <- paste0("<th>", html_escape(names(df)), "</th>", collapse = "")
     rows <- vapply(seq_len(nrow(df)), function(i) {
         cells <- vapply(cols, function(col) {
             paste0("<td>", html_escape(col[[i]]), "</td>")
         }, character(1L))
         paste0("<tr>", paste(cells, collapse = ""), "</tr>")
     }, character(1L))
-    paste0(
-        '<table class="g-table"><thead><tr>', head_cells,
-        "</tr></thead><tbody>", paste(rows, collapse = ""),
-        "</tbody></table>"
-    )
+    paste0('<table class="g-table"><thead><tr>', head_cells,
+           "</tr></thead><tbody>", paste(rows, collapse = ""),
+           "</tbody></table>")
 }
 
 #' Render a base graphics plot
@@ -124,20 +116,19 @@ df_to_html <- function(df) {
 render_plot <- function(fn, width = 480, height = 360, res = 72) {
     if (!capabilities("png")) {
         stop("render_plot() requires PNG support in this R build",
-            call. = FALSE)
+             call. = FALSE)
     }
     new_renderer(
-        function() {
-            tmp <- tempfile(fileext = ".png")
-            on.exit(unlink(tmp), add = TRUE)
-            grDevices::png(tmp, width = width, height = height, res = res)
-            tryCatch(fn(), finally = grDevices::dev.off())
-            bytes <- readBin(tmp, "raw", file.info(tmp)$size)
-            uri <- paste0("data:image/png;base64,",
-                jsonlite::base64_enc(bytes))
-            gsub("[\r\n]", "", uri)
-        },
-        "src"
+                 function() {
+        tmp <- tempfile(fileext = ".png")
+        on.exit(unlink(tmp), add = TRUE)
+        grDevices::png(tmp, width = width, height = height, res = res)
+        tryCatch(fn(), finally = grDevices::dev.off())
+        bytes <- readBin(tmp, "raw", file.info(tmp)$size)
+        uri <- paste0("data:image/png;base64,", jsonlite::base64_enc(bytes))
+        gsub("[\r\n]", "", uri)
+    },
+                 "src"
     )
 }
 

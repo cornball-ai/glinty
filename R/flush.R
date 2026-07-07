@@ -56,4 +56,3 @@ schedule_flush <- function() {
         .globals$flush_scheduled <- TRUE
     }
 }
-

@@ -34,4 +34,3 @@ reactive_val <- function(value = NULL) {
 
     structure(rv, class = c("reactive_val", "reactive", "function"))
 }
-

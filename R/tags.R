@@ -19,10 +19,8 @@
 tag <- function(name, children = list(), text = NULL, attrs = list(),
                 bind = NULL) {
     structure(
-              list(
-                   tag = name, attrs = attrs, text = text,
-                   children = children, bind = bind
-        ),
+              list(tag = name, attrs = attrs, text = text, children = children,
+                   bind = bind),
               class = "glinty_tag"
     )
 }
@@ -48,8 +46,12 @@ html_escape <- function(x) {
 #' @return character HTML string
 #' @keywords internal
 tag_to_html <- function(x) {
-    if (is.null(x)) return("")
-    if (is.character(x)) return(html_escape(x))
+    if (is.null(x)) {
+        return("")
+    }
+    if (is.character(x)) {
+        return(html_escape(x))
+    }
 
     void <- c("input", "br", "hr", "img", "meta", "link")
     name <- x$tag
@@ -59,19 +61,17 @@ tag_to_html <- function(x) {
     if (length(x$attrs) > 0) {
         for (nm in names(x$attrs)) {
             attr_parts <- c(
-                attr_parts,
-                paste0(nm, '="', html_escape(as.character(x$attrs[[nm]])), '"')
+                            attr_parts,
+                            paste0(nm, '="', html_escape(as.character(x$attrs[[nm]])), '"')
             )
         }
     }
 
     # Add data attributes for event binding
     if (!is.null(x$bind)) {
-        attr_parts <- c(
-            attr_parts,
-            paste0('data-g-event="', x$bind$event, '"'),
-            paste0('data-g-target="', x$bind$target, '"')
-        )
+        attr_parts <- c(attr_parts,
+                        paste0('data-g-event="', x$bind$event, '"'),
+                        paste0('data-g-target="', x$bind$target, '"'))
     }
 
     attr_str <- if (length(attr_parts) > 0) {
@@ -90,8 +90,8 @@ tag_to_html <- function(x) {
         inner <- html_escape(x$text)
     } else if (length(x$children) > 0) {
         inner <- paste(
-            vapply(x$children, tag_to_html, character(1)),
-            collapse = ""
+                       vapply(x$children, tag_to_html, character(1)),
+                       collapse = ""
         )
     }
 

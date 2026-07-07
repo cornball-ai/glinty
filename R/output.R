@@ -23,30 +23,27 @@ make_output_proxy <- function(session) {
         }
         renderer <- as_renderer(value, default_prop)
         obs <- with_session(session, observe(
-            fn = function() {
-                # Render errors become error messages for this output;
-                # glinty_silent (req) passes through to the observer
-                # runner and suppresses the update entirely.
-                result <- tryCatch(
-                    list(ok = renderer$fn()),
-                    error = function(e) list(err = conditionMessage(e))
-                )
-                if (is.null(result$err)) {
-                    session$send(update_msg(id, renderer$property,
-                        result$ok))
-                } else {
-                    session$send(error_msg(id, result$err))
-                }
-            },
-            label = paste0("output:", id)
-        ))
+                fn = function() {
+            # Render errors become error messages for this output;
+            # glinty_silent (req) passes through to the observer
+            # runner and suppresses the update entirely.
+            result <- tryCatch(
+                               list(ok = renderer$fn()),
+                               error = function(e) list(err = conditionMessage(e))
+            )
+            if (is.null(result$err)) {
+                session$send(update_msg(id, renderer$property, result$ok))
+            } else {
+                session$send(error_msg(id, result$err))
+            }
+        },
+                label = paste0("output:", id)
+            ))
         output_reg[[id]] <- obs
     }
 
-    structure(
-        list(.reg = reg_output, .env = output_reg, .props = prop_reg),
-        class = "glinty_output"
-    )
+    structure(list(.reg = reg_output, .env = output_reg, .props = prop_reg),
+              class = "glinty_output")
 }
 
 #' Register an output renderer
@@ -92,8 +89,8 @@ as_renderer <- function(value, default_prop = "textContent") {
         stop("output values must be functions or renderers", call. = FALSE)
     }
     structure(
-        list(fn = function() as.character(value()), property = default_prop),
-        class = "glinty_renderer"
+              list(fn = function() as.character(value()), property = default_prop),
+              class = "glinty_renderer"
     )
 }
 

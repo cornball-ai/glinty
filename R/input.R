@@ -8,10 +8,7 @@
 #' @return a glinty_input proxy
 #' @keywords internal
 make_input_proxy <- function(session) {
-    structure(
-        list(.env = session$input_env),
-        class = "glinty_input"
-    )
+    structure(list(.env = session$input_env), class = "glinty_input")
 }
 
 #' Access an input value

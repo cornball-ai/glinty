@@ -49,8 +49,7 @@ table_output <- function(id) {
 plot_output <- function(id, width = 480L, height = 360L) {
     tag("img", attrs = list(id = id, class = "g-plot-output",
                             width = as.character(width),
-                            height = as.character(height),
-                            alt = ""))
+                            height = as.character(height), alt = ""))
 }
 
 #' Create an audio output element
@@ -65,6 +64,5 @@ plot_output <- function(id, width = 480L, height = 360L) {
 #' @export
 audio_output <- function(id) {
     tag("audio",
-        attrs = list(id = id, controls = "controls",
-                     class = "g-audio-output"))
+        attrs = list(id = id, controls = "controls", class = "g-audio-output"))
 }

@@ -37,29 +37,29 @@ observe_event <- function(event_fn, handler_fn, ignore_init = TRUE,
     state$done <- FALSE
 
     o <- observe(
-        fn = function() {
-            val <- event_fn()
-            if (state$first) {
-                state$first <- FALSE
-                if (ignore_init) {
-                    return(invisible(NULL))
-                }
-            }
-            if (state$done) {
+                 fn = function() {
+        val <- event_fn()
+        if (state$first) {
+            state$first <- FALSE
+            if (ignore_init) {
                 return(invisible(NULL))
             }
-            if (ignore_null && !is_truthy(val)) {
-                return(invisible(NULL))
+        }
+        if (state$done) {
+            return(invisible(NULL))
+        }
+        if (ignore_null && !is_truthy(val)) {
+            return(invisible(NULL))
+        }
+        isolate(if (takes_value) handler_fn(val) else handler_fn())
+        if (once) {
+            state$done <- TRUE
+            if (!is.null(state$obs)) {
+                state$obs$destroy()
             }
-            isolate(if (takes_value) handler_fn(val) else handler_fn())
-            if (once) {
-                state$done <- TRUE
-                if (!is.null(state$obs)) {
-                    state$obs$destroy()
-                }
-            }
-        },
-        priority = priority, label = label
+        }
+    },
+                 priority = priority, label = label
     )
 
     state$obs <- o

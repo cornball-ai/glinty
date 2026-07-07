@@ -44,8 +44,7 @@ app <- function(ui, server) {
 #' run_app(app_obj, port = 8080)
 #' }
 #' @export
-run_app <- function(app_obj, port = 8080L, static_dir = "www",
-                    quiet = FALSE) {
+run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
@@ -58,7 +57,7 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     .globals$timers <- list()
 
     page_html <- full_page_html(
-        tag_to_html(app_obj$ui),
+                                tag_to_html(app_obj$ui),
         if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app"
     )
     pkg_www <- system.file("www", package = "glinty")
@@ -69,35 +68,35 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     n_formals <- length(formals(app_obj$server))
 
     handlers <- list(
-        on_request = function(req) {
-            route_http(req, page_html, pkg_www, static_dir)
-        },
-        on_open = function(sid) {
-            s <- new_session(sid, send_fn = function(msg) {
-                send_to_session(sid, msg)
-            })
-            s$send(config_msg(sid))
-            with_session(s, {
-                if (n_formals >= 3L) {
-                    app_obj$server(s$input, s$output, s)
-                } else {
-                    app_obj$server(s$input, s$output)
-                }
-            })
-            flush_reactions()
-        },
-        on_message = function(sid, txt) {
-            s <- .globals$sessions[[sid]]
-            if (!is.null(s)) {
-                dispatch_client_message(s, txt)
+                     on_request = function(req) {
+        route_http(req, page_html, pkg_www, static_dir)
+    },
+                     on_open = function(sid) {
+        s <- new_session(sid, send_fn = function(msg) {
+            send_to_session(sid, msg)
+        })
+        s$send(config_msg(sid))
+        with_session(s, {
+            if (n_formals >= 3L) {
+                app_obj$server(s$input, s$output, s)
+            } else {
+                app_obj$server(s$input, s$output)
             }
-        },
-        on_close = function(sid) {
-            s <- .globals$sessions[[sid]]
-            if (!is.null(s)) {
-                session_end(s)
-            }
+        })
+        flush_reactions()
+    },
+                     on_message = function(sid, txt) {
+        s <- .globals$sessions[[sid]]
+        if (!is.null(s)) {
+            dispatch_client_message(s, txt)
         }
+    },
+                     on_close = function(sid) {
+        s <- .globals$sessions[[sid]]
+        if (!is.null(s)) {
+            session_end(s)
+        }
+    }
     )
 
     if (!quiet) {
@@ -121,8 +120,7 @@ route_http <- function(req, page_html, pkg_www, static_dir) {
         return(http_response_raw(404L, "text/plain", "Not found"))
     }
     if (req$path %in% c("/", "")) {
-        return(http_response_raw(200L, "text/html; charset=utf-8",
-            page_html))
+        return(http_response_raw(200L, "text/html; charset=utf-8", page_html))
     }
     if (startsWith(req$path, "/glinty/")) {
         return(serve_static(sub("^/glinty/", "", req$path), pkg_www))
@@ -146,8 +144,7 @@ route_http <- function(req, page_html, pkg_www, static_dir) {
 #' @export
 run_example <- function(name, port = 8080L) {
     examples_dir <- system.file("examples", package = "glinty")
-    available <- list.dirs(examples_dir, recursive = FALSE,
-        full.names = FALSE)
+    available <- list.dirs(examples_dir, recursive = FALSE, full.names = FALSE)
     if (missing(name)) {
         message("Available examples: ", paste(available, collapse = ", "))
         return(invisible(NULL))
@@ -156,14 +153,14 @@ run_example <- function(name, port = 8080L) {
     app_file <- file.path(app_dir, "app.R")
     if (!file.exists(app_file)) {
         stop("no example named '", name, "'; available: ",
-            paste(available, collapse = ", "), call. = FALSE)
+             paste(available, collapse = ", "), call. = FALSE)
     }
     app_obj <- source(app_file, local = new.env())$value
     if (!inherits(app_obj, "glinty_app")) {
         stop("example '", name, "' did not end with an app() object",
-            call. = FALSE)
+             call. = FALSE)
     }
     www <- file.path(app_dir, "www")
     run_app(app_obj, port = port,
-        static_dir = if (dir.exists(www)) www else NULL)
+            static_dir = if (dir.exists(www)) www else NULL)
 }

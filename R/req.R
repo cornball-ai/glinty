@@ -17,10 +17,8 @@ req <- function(...) {
     args <- list(...)
     for (a in args) {
         if (!is_truthy(a)) {
-            cond <- structure(
-                class = c("glinty_silent", "condition"),
-                list(message = "", call = NULL)
-            )
+            cond <- structure(class = c("glinty_silent", "condition"),
+                              list(message = "", call = NULL))
             stop(cond)
         }
     }
