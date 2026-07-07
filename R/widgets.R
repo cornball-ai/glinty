@@ -197,6 +197,43 @@ button <- function(id, label) {
         bind = list(event = "click", target = id))
 }
 
+#' Create a file input
+#'
+#' Files upload over a plain POST (not the WebSocket); when the
+#' upload completes, the input value becomes a data.frame with one
+#' row per file: name, size, type, datapath. The datapath points at
+#' a server-side copy in a per-session temp dir removed when the
+#' session ends. Size is capped by getOption("glinty.max_upload")
+#' (10 MB default).
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param accept character vector of accepted types/extensions,
+#'   e.g. c(".csv", "image/png") (optional)
+#' @param multiple logical allow selecting several files
+#' @return A UI element
+#' @examples
+#' file_input("dataset", "CSV:", accept = ".csv")
+#' @export
+file_input <- function(id, label = "", accept = NULL, multiple = FALSE) {
+    attrs <- list(id = id, type = "file", class = "g-file")
+    attrs[["data-g-upload"]] <- id
+    if (!is.null(accept)) {
+        attrs$accept <- paste(accept, collapse = ",")
+    }
+    if (isTRUE(multiple)) {
+        attrs$multiple <- "multiple"
+    }
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("input", attrs = attrs)
+        )
+    )
+}
+
 #' Create a radio button group
 #'
 #' One input value shared by the group: the checked member's value.

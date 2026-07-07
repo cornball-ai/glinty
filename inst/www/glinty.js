@@ -119,8 +119,35 @@
 
         root.addEventListener("change", function (ev) {
             var el = ev.target;
+            if (el.dataset.gUpload) {
+                uploadFiles(el);
+                return;
+            }
             if (el.dataset.gEvent !== "change") return;
             sendInput(el);
+        });
+    }
+
+    /* ---------- file uploads (plain POST, not the WS) ---------- */
+
+    function uploadFiles(el) {
+        if (!sessionId || !el.files || el.files.length === 0) return;
+        var fd = new FormData();
+        Array.from(el.files).forEach(function (f) {
+            fd.append("file", f, f.name);
+        });
+        el.disabled = true;
+        fetch(
+            "/upload?session=" + encodeURIComponent(sessionId) +
+                "&id=" + encodeURIComponent(el.dataset.gUpload),
+            { method: "POST", body: fd }
+        ).then(function (resp) {
+            if (!resp.ok) throw new Error("upload failed: " + resp.status);
+            el.classList.remove("g-error");
+        }).catch(function () {
+            el.classList.add("g-error");
+        }).finally(function () {
+            el.disabled = false;
         });
     }
 

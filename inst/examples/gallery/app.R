@@ -15,6 +15,7 @@ app(
         radio_buttons("mode", "Mode:",
             choices = c(Fast = "fast", Careful = "careful")),
         date_input("when", "Date:", value = "2026-07-07"),
+        file_input("upload", "File:", multiple = TRUE),
         button("randomize", "Randomize from server"),
         h3("Current values"),
         table_output("values"),
@@ -25,11 +26,18 @@ app(
         output$values <- render_table(function() {
             data.frame(
                 input = c("txt", "notes", "num", "sl", "chk", "sel",
-                    "mode", "when"),
+                    "mode", "when", "upload"),
                 value = c(show(input$txt()), show(input$notes()),
                     show(input$num()), show(input$sl()),
                     show(input$chk()), show(input$sel()),
-                    show(input$mode()), show(input$when())),
+                    show(input$mode()), show(input$when()),
+                    {
+                        f <- input$upload()
+                        if (is.null(f)) "" else {
+                            paste(f$name, sprintf("(%d B)", f$size),
+                                collapse = ", ")
+                        }
+                    }),
                 stringsAsFactors = FALSE
             )
         })
