@@ -1,3 +1,9 @@
+# glinty (development version)
+
+- render_ui()/ui_output(): dynamic tag-tree content on both
+  frontends, with show/hide via NULL and last-state replay for
+  nested outputs.
+
 # glinty 0.3.0
 
 - Native parity: select, textarea, number, and table_output render
