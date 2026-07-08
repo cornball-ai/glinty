@@ -185,12 +185,43 @@
         el.appendChild(tbl);
     }
 
+    function buildTagNode(node) {
+        if (node === null || node === undefined) return null;
+        if (typeof node === "string") {
+            return document.createTextNode(node);
+        }
+        var el = document.createElement(node.tag);
+        var attrs = node.attrs || {};
+        Object.keys(attrs).forEach(function (k) {
+            el.setAttribute(k, attrs[k]);
+        });
+        if (node.bind) {
+            el.setAttribute("data-g-event", node.bind.event);
+            el.setAttribute("data-g-target", node.bind.target);
+        }
+        if (node.text !== null && node.text !== undefined) {
+            el.textContent = node.text;
+        } else {
+            (node.children || []).forEach(function (c) {
+                var child = buildTagNode(c);
+                if (child) el.appendChild(child);
+            });
+        }
+        return el;
+    }
+
     function applyUpdate(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
         clearError(el);
         if (msg.property === "table") {
             buildTable(el, msg.value || {});
+            return;
+        }
+        if (msg.property === "ui") {
+            el.textContent = "";
+            var node = buildTagNode(msg.value);
+            if (node) el.appendChild(node);
             return;
         }
         el[msg.property] = msg.value;

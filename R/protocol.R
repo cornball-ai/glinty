@@ -11,7 +11,7 @@
 update_msg <- function(id, property, value) {
     as.character(jsonlite::toJSON(
                                   list(type = "update", id = id, property = property, value = value),
-                                  auto_unbox = TRUE
+                                  auto_unbox = TRUE, null = "null"
         ))
 }
 
@@ -116,4 +116,17 @@ normalize_value <- function(value) {
         }
     }
     value
+}
+
+#' Strip classes recursively so jsonlite serializes tag trees cleanly
+#'
+#' @param x a UI tree or subtree
+#' @return the same structure with classes removed
+#' @keywords internal
+unclass_recursive <- function(x) {
+    if (is.list(x)) {
+        x <- unclass(x)
+        x <- lapply(x, unclass_recursive)
+    }
+    x
 }

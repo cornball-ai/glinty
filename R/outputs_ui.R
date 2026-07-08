@@ -79,3 +79,17 @@ audio_output <- function(id) {
     tag("audio",
         attrs = list(id = id, controls = "controls", class = "g-audio-output"))
 }
+
+#' Create a dynamic UI output placeholder
+#'
+#' The container for render_ui(): server-built tag trees replace its
+#' contents at runtime, on both the browser and native frontends.
+#'
+#' @param id character output ID
+#' @return A UI element
+#' @examples
+#' ui_output("panel")
+#' @export
+ui_output <- function(id) {
+    tag("div", attrs = list(id = id, class = "g-ui-output"))
+}

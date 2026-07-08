@@ -20,6 +20,8 @@ app(
         slider_input("sl", "Slider:", min = 0, max = 100, value = 50,
             step = 1),
         button("randomize", "Randomize from server"),
+        checkbox_input("more", "Show dynamic panel"),
+        ui_output("panel"),
         h3("Current values"),
         table_output("values"),
         title = "glinty native parity"
@@ -34,6 +36,21 @@ app(
                     show(input$chk()), show(input$sl())),
                 stringsAsFactors = FALSE
             )
+        })
+        output$panel <- render_ui(function() {
+            if (isTRUE(input$more())) {
+                div(
+                    h4("Dynamic content"),
+                    text_input("extra", "Appeared at runtime:"),
+                    text_output("echo_extra")
+                )
+            } else {
+                NULL
+            }
+        })
+        output$echo_extra <- render_text(function() {
+            v <- input$extra()
+            if (is.null(v)) "" else paste("you typed:", v)
         })
         observe_event(input$randomize, function() {
             update_text_input(session, "txt",
