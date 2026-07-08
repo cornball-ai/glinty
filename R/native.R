@@ -33,7 +33,7 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
     }
     exports <- getNamespaceExports("flitR")
     if (!all(c("image", "render_dirty", "ensure_window",
-        "select", "textarea", "number") %in% exports)) {
+                "select", "textarea", "number") %in% exports)) {
         stop("this glinty needs a newer flitR (image op and driver ",
              "API); update flitR", call. = FALSE)
     }
