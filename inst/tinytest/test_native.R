@@ -105,16 +105,17 @@ inp3 <- find_op(ops3, "hit", "name")
 expect_equal(inp3$input$value, "jorge")
 
 # --- unsupported widgets fail fast with a list ---
+# (select/textarea/number/table graduated to supported in v0.3)
 bad_ui <- page(
-    select_input("sel", choices = c("a", "b")),
     radio_buttons("r", choices = c("x")),
-    table_output("tbl")
+    date_input("d"),
+    html_output("h")
 )
 err <- tryCatch(build_native_ops(bad_ui, s, new.env()),
     error = function(e) conditionMessage(e))
-expect_true(grepl("select_input", err))
 expect_true(grepl("radio_buttons", err))
-expect_true(grepl("table_output", err))
+expect_true(grepl("date_input", err))
+expect_true(grepl("html_output", err))
 
 # --- native_apply: protocol messages set values and dirty ---
 native <- new.env(parent = emptyenv())
