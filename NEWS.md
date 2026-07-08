@@ -1,5 +1,8 @@
 # glinty (development version)
 
+- Native parity: select, textarea, number, and table_output render
+  natively (needs flitR >= 0.0.1.3); native sessions seed inputs
+  from widget defaults like the browser init harvest.
 - Shared layout: row() and column() map to flexbox in the browser
   and flitR layouts natively.
 - Tables travel as structure (header + rows) instead of HTML;

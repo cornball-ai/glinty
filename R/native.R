@@ -32,7 +32,8 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
              "(and flitR::install_engine())", call. = FALSE)
     }
     exports <- getNamespaceExports("flitR")
-    if (!all(c("image", "render_dirty", "ensure_window") %in% exports)) {
+    if (!all(c("image", "render_dirty", "ensure_window",
+        "select", "textarea", "number") %in% exports)) {
         stop("this glinty needs a newer flitR (image op and driver ",
              "API); update flitR", call. = FALSE)
     }
@@ -61,6 +62,9 @@ run_app_native <- function(app_obj, width = 800L, height = 600L,
             app_obj$server(s$input, s$output)
         }
     })
+    # the native init harvest: seed inputs from widget defaults, as
+    # the browser client does from the rendered DOM
+    harvest_native_inputs(app_obj$ui, s)
     flush_reactions()
 
     conn <- flitR::ensure_window()

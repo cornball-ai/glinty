@@ -134,8 +134,7 @@ translate_tag <- function(tg, session, values, unsupported) {
             return(NULL)
         }
         if (identical(cls, "g-table-output")) {
-            unsupported$tags <- c(unsupported$tags, "table_output")
-            return(NULL)
+            return(translate_table(tg, values))
         }
         # generic containers (including input groups): stack children
         items <- translate_tags(tg$children, session, values, unsupported)
@@ -145,12 +144,51 @@ translate_tag <- function(tg, session, values, unsupported) {
         return(do.call(flitR::column, c(items, list(gap = 4))))
     }
     if (name == "select") {
-        unsupported$tags <- c(unsupported$tags, "select_input")
-        return(NULL)
+        id <- if (!is.null(tg$bind)) tg$bind$target else tg$attrs$id
+        opts <- Filter(function(ch) {
+            inherits(ch, "glinty_tag") && identical(ch$tag, "option")
+        }, tg$children)
+        vals <- vapply(opts, function(o) as.character(o$attrs$value),
+            character(1L))
+        labs <- vapply(opts, function(o) {
+            if (is.null(o$text)) as.character(o$attrs$value) else o$text
+        }, character(1L))
+        choices <- vals
+        names(choices) <- labs
+        cur <- isolate(session$input[[id]]())
+        if (is.null(cur)) {
+            marked <- which(vapply(opts, function(o) {
+                !is.null(o$attrs$selected)
+            }, logical(1L)))
+            cur <- if (length(marked) > 0L) {
+                vals[[marked[[1L]]]]
+            } else if (length(vals) > 0L) {
+                vals[[1L]]
+            } else {
+                NULL
+            }
+        }
+        return(flitR::select(id, 0, 0, w = 200, h = 32,
+            value = cur, choices = choices,
+            on_change = function(v) {
+                handle_input(session, id, v)
+            }))
     }
     if (name == "textarea") {
-        unsupported$tags <- c(unsupported$tags, "textarea_input")
-        return(NULL)
+        id <- if (!is.null(tg$bind)) tg$bind$target else tg$attrs$id
+        cur <- isolate(session$input[[id]]())
+        if (is.null(cur)) {
+            cur <- if (is.null(tg$text)) "" else tg$text
+        }
+        n_rows <- suppressWarnings(as.numeric(tg$attrs$rows))
+        if (length(n_rows) != 1L || is.na(n_rows)) {
+            n_rows <- 4
+        }
+        return(flitR::textarea(id, 0, 0, w = 300, rows = n_rows,
+            value = as.character(cur),
+            on_change = function(v) {
+                handle_input(session, id, v)
+            }))
     }
     if (name == "audio") {
         unsupported$tags <- c(unsupported$tags, "audio_output")
@@ -216,7 +254,21 @@ translate_input <- function(tg, session, unsupported) {
             handle_input(session, id, v)
         }))
     }
-    kind <- switch(type, "number" = "number_input", "date" = "date_input",
+    if (identical(type, "number")) {
+        cur <- isolate(session$input[[id]]())
+        if (is.null(cur)) {
+            cur <- suppressWarnings(as.numeric(tg$attrs$value))
+        }
+        if (length(cur) != 1L || is.na(cur)) {
+            cur <- NULL
+        }
+        return(flitR::number(id, 0, 0, w = 120, h = 32,
+                             value = cur,
+                             on_change = function(v) {
+            handle_input(session, id, v)
+        }))
+    }
+    kind <- switch(type, "date" = "date_input",
                    "file" = "file_input", "radio" = "radio_buttons",
                    paste0("input[type=", type, "]"))
     unsupported$tags <- c(unsupported$tags, kind)
@@ -279,4 +331,113 @@ tag_text <- function(tg) {
     }
     chars <- Filter(is.character, tg$children)
     paste(unlist(chars), collapse = " ")
+}
+
+#' Draw a structured table as a native grid
+#'
+#' Consumes the wire table format ({header, rows}) stored by
+#' native_apply. Column widths from a character-count heuristic;
+#' text self-corrects via flitR's measurement cache like all native
+#' text. Empty until the first update arrives.
+#'
+#' @param tg the table_output div tag
+#' @param values output value env
+#' @return list of flitR ops, or NULL before the first update
+#' @keywords internal
+translate_table <- function(tg, values) {
+    id <- tg$attrs$id
+    data <- if (is.null(id)) NULL else values[[id]]
+    if (is.null(data) || is.null(data$header)) {
+        return(NULL)
+    }
+    header <- vapply(data$header, as.character, character(1L))
+    rows <- lapply(data$rows, function(r) {
+        vapply(r, as.character, character(1L))
+    })
+    n_col <- length(header)
+    if (n_col == 0L) {
+        return(NULL)
+    }
+    col_w <- vapply(seq_len(n_col), function(j) {
+        cells <- c(header[[j]], vapply(rows, function(r) {
+            if (j <= length(r)) r[[j]] else ""
+        }, character(1L)))
+        max(nchar(cells)) * 8 + 16
+    }, numeric(1L))
+    row_h <- 24
+    xs <- cumsum(c(0, col_w))[seq_len(n_col)]
+
+    ops <- list()
+    grid_row <- function(cells, y, is_header) {
+        for (j in seq_along(cells)) {
+            ops[[length(ops) + 1L]] <<- flitR::rect(xs[[j]], y,
+                col_w[[j]], row_h, "#CCCCCC")
+            ops[[length(ops) + 1L]] <<- flitR::rect(xs[[j]] + 1, y + 1,
+                col_w[[j]] - 2, row_h - 2,
+                if (is_header) "#EEEEEE" else "#FFFFFF")
+            ops[[length(ops) + 1L]] <<- flitR::text(xs[[j]] + 8, y + 5,
+                cells[[j]], size = 13,
+                color = if (is_header) "#111111" else "#333333")
+        }
+    }
+    grid_row(header, 0, TRUE)
+    for (i in seq_along(rows)) {
+        grid_row(rows[[i]], i * row_h, FALSE)
+    }
+    ops
+}
+
+#' Seed session inputs from the UI tree's initial values
+#'
+#' The browser client harvests rendered DOM values into its init
+#' message; this is the native equivalent, walking the tag tree for
+#' widget defaults so input$x() matches what the window shows.
+#'
+#' @param tg a glinty_tag (or character, ignored)
+#' @param session the native session
+#' @return invisible(NULL)
+#' @keywords internal
+harvest_native_inputs <- function(tg, session) {
+    if (!inherits(tg, "glinty_tag")) {
+        return(invisible(NULL))
+    }
+    id <- if (!is.null(tg$bind)) tg$bind$target else NULL
+    if (!is.null(id)) {
+        if (identical(tg$tag, "input")) {
+            type <- tg$attrs$type
+            if (identical(type, "text") && !is.null(tg$attrs$value)) {
+                handle_input(session, id, tg$attrs$value)
+            } else if (identical(type, "checkbox")) {
+                handle_input(session, id, !is.null(tg$attrs$checked))
+            } else if (identical(type, "range") ||
+                identical(type, "number")) {
+                v <- suppressWarnings(as.numeric(tg$attrs$value))
+                if (length(v) == 1L && !is.na(v)) {
+                    handle_input(session, id, v)
+                }
+            }
+        } else if (identical(tg$tag, "textarea")) {
+            handle_input(session, id,
+                if (is.null(tg$text)) "" else tg$text)
+        } else if (identical(tg$tag, "select")) {
+            opts <- Filter(function(ch) {
+                inherits(ch, "glinty_tag") && identical(ch$tag, "option")
+            }, tg$children)
+            marked <- Filter(function(o) !is.null(o$attrs$selected), opts)
+            pick <- if (length(marked) > 0L) {
+                marked[[1L]]
+            } else if (length(opts) > 0L) {
+                opts[[1L]]
+            } else {
+                NULL
+            }
+            if (!is.null(pick)) {
+                handle_input(session, id, as.character(pick$attrs$value))
+            }
+        }
+    }
+    for (child in tg$children) {
+        harvest_native_inputs(child, session)
+    }
+    invisible(NULL)
 }
