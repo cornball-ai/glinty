@@ -184,3 +184,40 @@ client_dim <- function(session, id, dim, fallback) {
 render_audio <- function(fn) {
     new_renderer(function() as.character(fn()), "src")
 }
+
+#' Render a dynamic UI subtree
+#'
+#' The portable path for dynamic content: fn returns a glinty_tag
+#' (wrap several in div()/column()) or NULL to render nothing. The
+#' tag tree travels structured on the wire; the browser builds real
+#' DOM from it (event bindings included, via delegation) and the
+#' native backend translates it like static UI. Inputs that first
+#' appear inside dynamic UI start as NULL server-side until the user
+#' touches them, on both frontends. For raw markup strings use
+#' render_html() (browser-only escape hatch).
+#'
+#' @param fn zero-arg function returning a glinty_tag or NULL
+#' @return a glinty_renderer for assignment to output$id
+#' @examples
+#' \dontrun{
+#' output$panel <- render_ui(function() {
+#'     if (isTRUE(input$show())) div(text_input("extra", "Extra:"))
+#' })
+#' }
+#' @export
+render_ui <- function(fn) {
+    new_renderer(
+                 function() {
+        val <- fn()
+        if (is.null(val)) {
+            return(NULL)
+        }
+        if (!inherits(val, "glinty_tag")) {
+            stop("render_ui() expects a glinty_tag or NULL; wrap ",
+                 "multiple elements in div() or column()", call. = FALSE)
+        }
+        unclass_recursive(val)
+    },
+                 "ui"
+    )
+}

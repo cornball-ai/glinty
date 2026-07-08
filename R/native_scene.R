@@ -138,6 +138,14 @@ translate_tag <- function(tg, session, values, unsupported) {
         if (identical(cls, "g-table-output")) {
             return(translate_table(tg, values))
         }
+        if (identical(cls, "g-ui-output")) {
+            tree <- if (is.null(tg$attrs$id)) NULL else values[[tg$attrs$id]]
+            if (is.null(tree)) {
+                return(NULL)
+            }
+            return(translate_tag(rehydrate_tag(tree), session, values,
+                unsupported))
+        }
         # generic containers (including input groups): stack children
         items <- translate_tags(tg$children, session, values, unsupported)
         if (length(items) == 0L) {
@@ -459,4 +467,33 @@ harvest_native_inputs <- function(tg, session) {
         harvest_native_inputs(child, session)
     }
     invisible(NULL)
+}
+
+#' Rebuild a glinty_tag tree from parsed wire JSON
+#'
+#' render_ui() ships unclassed tag trees; the native side rebuilds
+#' the class so translate_tag() can walk them like static UI.
+#'
+#' @param x parsed JSON node (named list, character, or NULL)
+#' @return a glinty_tag, character, or NULL
+#' @keywords internal
+rehydrate_tag <- function(x) {
+    if (is.character(x)) {
+        return(x)
+    }
+    if (!is.list(x) || is.null(x$tag)) {
+        return(NULL)
+    }
+    kids <- if (is.null(x$children)) list() else x$children
+    structure(
+        list(
+            tag = x$tag,
+            attrs = if (is.null(x$attrs)) list() else x$attrs,
+            text = x$text,
+            children = Filter(Negate(is.null),
+                lapply(kids, rehydrate_tag)),
+            bind = x$bind
+        ),
+        class = "glinty_tag"
+    )
 }

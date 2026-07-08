@@ -41,6 +41,19 @@ make_output_proxy <- function(session) {
             if (is.null(result$err)) {
                 session$send_output(id,
                                     update_msg(id, renderer$property, result$ok))
+                # Dynamic UI: elements just (re)built client-side have
+                # never seen their outputs' patches. Replay the last
+                # known state of any output id inside the new tree so
+                # panels appear current, not blank.
+                if (identical(renderer$property, "ui") &&
+                    !is.null(result$ok)) {
+                    for (oid in collect_tree_ids(result$ok)) {
+                        if (!identical(oid, id) &&
+                            !is.null(session$last_sent[[oid]])) {
+                            session$send(session$last_sent[[oid]])
+                        }
+                    }
+                }
             } else {
                 session$send_output(id, error_msg(id, result$err))
             }
@@ -122,4 +135,23 @@ output_property <- function(output, id, property) {
     prop_reg <- .subset2(output, ".props")
     prop_reg[[id]] <- property
     invisible(NULL)
+}
+
+#' Collect element ids from an unclassed tag tree
+#'
+#' @param x an unclassed tag tree node
+#' @return character vector of ids
+#' @keywords internal
+collect_tree_ids <- function(x) {
+    if (!is.list(x)) {
+        return(character(0L))
+    }
+    ids <- character(0L)
+    if (!is.null(x$attrs$id)) {
+        ids <- as.character(x$attrs$id)
+    }
+    for (child in if (is.null(x$children)) list() else x$children) {
+        ids <- c(ids, collect_tree_ids(child))
+    }
+    ids
 }
