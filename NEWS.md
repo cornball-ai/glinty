@@ -1,4 +1,4 @@
-# glinty (development version)
+# glinty 0.3.0
 
 - Native parity: select, textarea, number, and table_output render
   natively (needs flitR >= 0.0.1.3); native sessions seed inputs

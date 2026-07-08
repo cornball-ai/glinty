@@ -158,8 +158,8 @@ row <- function(..., gap = NULL, align = NULL) {
     if (!is.null(align)) {
         align <- match.arg(align, c("start", "center", "end"))
         style <- c(style, paste0("align-items:",
-            switch(align, start = "flex-start", center = "center",
-                end = "flex-end"), ";"))
+                                 switch(align, start = "flex-start", center = "center",
+                                        end = "flex-end"), ";"))
     }
     if (length(style) > 0L) {
         attrs$style <- paste(style, collapse = "")

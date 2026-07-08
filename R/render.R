@@ -93,7 +93,7 @@ df_to_table <- function(df) {
     })
     rows <- lapply(seq_len(nrow(df)), function(i) {
         I(vapply(cols, function(col) col[[i]], character(1L),
-            USE.NAMES = FALSE))
+                 USE.NAMES = FALSE))
     })
     list(header = I(names(df)), rows = rows)
 }

@@ -104,11 +104,19 @@ window is just another client of glinty's wire protocol: reactive
 core, sessions, and renderers are identical, and `render_plot()`
 draws natively through flitR's image op.
 
-The supported widget subset is text, headings, `text_input`,
-`button`, `checkbox_input`, `slider_input`, `text_output`, and
-`plot_output`; anything else fails fast with a named list. Don't
+The supported widget set covers text, headings, `text_input`,
+`textarea_input`, `number_input`, `select_input`, `button`,
+`checkbox_input`, `slider_input`, `text_output`, `table_output`
+(drawn as a native grid), and `plot_output`; the remaining
+browser-only widgets (radio, date, file, `html_output`, audio) fail
+fast with a named list. Native sessions seed inputs from widget
+defaults, mirroring the browser's init harvest. Don't
 `library(flitR)` alongside glinty (both export `app`, `text`, and
 friends); `run_app_native()` only needs it installed.
+
+Layout carries across frontends too: `row(...)` and `column(...)`
+map to flexbox in the browser and flitR's row/column natively (note
+`row()` masks `base::row()` when glinty is attached).
 
 ## Resilience
 
