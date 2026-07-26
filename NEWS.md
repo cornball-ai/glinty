@@ -1,5 +1,13 @@
-# glinty (development version)
+# glinty 0.4.1
 
+- Secrets no longer reach the page. run_app() refuses to start when
+  the rendered page contains the value of a secret-looking environment
+  variable, and password_input() no longer accepts a value at all.
+  Prefilling an input from Sys.getenv() renders the secret into page
+  source as a plain attribute, where type="password" masks the screen
+  and not the HTML. New env_secrets_in() exposes the same check for
+  apps to assert in their own tests. **Breaking**: password_input()
+  drops its value argument.
 - Fixed: SVG built by render_ui() never rendered. buildTagNode() used
   createElement() for every node, which puts SVG in the HTML namespace
   as an HTMLUnknownElement. Inline icons in dynamic UI silently

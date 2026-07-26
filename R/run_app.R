@@ -45,6 +45,11 @@ app <- function(ui, server) {
 #' @param port integer HTTP port (default 8080)
 #' @param static_dir character directory served under /static/
 #'   (default "www" in the working directory; skipped if absent)
+#' @param check_secrets logical refuse to start when the rendered page
+#'   contains the value of a secret-looking environment variable (see
+#'   env_secrets_in()). The usual cause is prefilling an input from
+#'   Sys.getenv(), which publishes the secret to anyone who can fetch
+#'   the page. Set FALSE only deliberately.
 #' @param max_upload integer largest accepted request body in bytes
 #'   (default 10 MB). Bodies are buffered whole in memory before
 #'   routing, so this is a memory ceiling as much as a policy one;
@@ -58,7 +63,8 @@ app <- function(ui, server) {
 #' }
 #' @export
 run_app <- function(app_obj, port = 8080L, static_dir = "www",
-                    max_upload = 10485760L, quiet = FALSE) {
+                    max_upload = 10485760L, check_secrets = TRUE,
+                    quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
@@ -79,6 +85,11 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
         if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app",
                                 app_obj$ui$head
     )
+    # Before a single byte is served, not after.
+    if (isTRUE(check_secrets)) {
+        check_page_secrets(page_html)
+    }
+
     pkg_www <- system.file("www", package = "glinty")
     if (!is.null(static_dir) && !dir.exists(static_dir)) {
         static_dir <- NULL
