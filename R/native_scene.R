@@ -146,11 +146,7 @@ translate_tag <- function(tg, session, values, unsupported) {
             return(do.call(layout_fn, c(items, list(gap = gap))))
         }
         if (identical(cls, "g-tabset")) {
-            # Panels are all present in the tree, so stacking them
-            # would silently show every tab at once. Native tabs need
-            # their own selection state; until then, say so.
-            unsupported$tags <- c(unsupported$tags, "tabset")
-            return(NULL)
+            return(translate_tabset(tg, session, values, unsupported))
         }
         if (identical(cls, "g-conditional")) {
             # Evaluated server-side against the same inputs the client
@@ -264,6 +260,98 @@ translate_tag <- function(tg, session, values, unsupported) {
     NULL
 }
 
+#' Translate a tabset
+#'
+#' The nav strip comes from flitR::tabs(); below it only the selected
+#' panel is emitted. That is the immediate-mode reading of a tab: an
+#' unselected panel is not hidden, it is simply not drawn this frame,
+#' which is also why the browser's DOM-preserving behaviour (inputs
+#' keeping their values while hidden) does not carry over.
+#'
+#' Switching needs somewhere to hold the selection, and the only
+#' durable place is the tabset's own input. A tabset without an id has
+#' nowhere to put it, so rather than draw a nav that does nothing when
+#' clicked, say so.
+#'
+#' @param tg the g-tabset glinty_tag
+#' @param session the native session
+#' @param values output value env
+#' @param unsupported collector env
+#' @return a flitR item, or NULL
+#' @keywords internal
+translate_tabset <- function(tg, session, values, unsupported) {
+    id <- tg$attrs$id
+    if (is.null(id)) {
+        unsupported$tags <- c(unsupported$tags,
+                              "tabset without an id (native tabs need one to hold the selection)")
+        return(NULL)
+    }
+
+    nav <- tab_child(tg, "g-tab-nav")
+    bodies <- tab_child(tg, "g-tab-bodies")
+    if (is.null(nav) || is.null(bodies)) {
+        return(NULL)
+    }
+
+    labels <- vapply(nav$children, function(b) {
+        as.character(b$attrs[["data-g-tab-panel"]])
+    }, character(1L))
+    if (length(labels) == 0L) {
+        return(NULL)
+    }
+
+    selected <- isolate(session$input[[id]]())
+    if (!is.character(selected) || length(selected) != 1L ||
+        !selected %in% labels) {
+        # Fall back to whichever button the UI marked active.
+        active <- Filter(function(b) {
+            grepl("g-tab-active", as.character(b$attrs$class), fixed = TRUE)
+        }, nav$children)
+        selected <- if (length(active) > 0L) {
+            as.character(active[[1L]]$attrs[["data-g-tab-panel"]])
+        } else {
+            labels[[1L]]
+        }
+    }
+
+    strip <- flitR::tabs(id, 0, 0, labels, selected = selected,
+                         on_select = function(label) {
+        handle_input(session, id, label)
+    })
+
+    body <- Filter(function(b) {
+        identical(as.character(b$attrs[["data-g-tab-panel"]]), selected)
+    }, bodies$children)
+
+    items <- list(strip)
+    if (length(body) > 0L) {
+        panel <- translate_tags(body[[1L]]$children, session, values,
+                                unsupported)
+        if (length(panel) > 0L) {
+            items <- c(items, list(do.call(flitR::column,
+                        c(panel, list(gap = 8)))))
+        }
+    }
+    do.call(flitR::column, c(items, list(gap = 10)))
+}
+
+#' Find a direct child of a tabset by class
+#'
+#' @param tg the g-tabset glinty_tag
+#' @param cls character class to match
+#' @return the matching child, or NULL
+#' @keywords internal
+tab_child <- function(tg, cls) {
+    hit <- Filter(function(ch) {
+        inherits(ch, "glinty_tag") && identical(as.character(ch$attrs$class),
+            cls)
+    }, tg$children)
+    if (length(hit) == 0L) {
+        return(NULL)
+    }
+    hit[[1L]]
+}
+
 #' Translate a leaf input element
 #'
 #' @param tg the input glinty_tag
@@ -279,7 +367,10 @@ translate_input <- function(tg, session, unsupported) {
         id <- tg$attrs$id
     }
 
-    if (identical(type, "text")) {
+    # Password is the same widget with mask = TRUE: flitR draws bullets
+    # while the real string stays in R, so nothing secret reaches the
+    # renderer.
+    if (identical(type, "text") || identical(type, "password")) {
         cur <- isolate(session$input[[id]]())
         if (is.null(cur)) {
             cur <- tg$attrs$value
@@ -289,6 +380,12 @@ translate_input <- function(tg, session, unsupported) {
         }
         return(flitR::input(id, 0, 0, w = 260, h = 32,
                             value = as.character(cur),
+                            placeholder = if (is.null(tg$attrs$placeholder)) {
+                    ""
+                } else {
+                    as.character(tg$attrs$placeholder)
+                },
+                            mask = identical(type, "password"),
                             on_change = function(v) {
             handle_input(session, id, v)
         }))
@@ -334,12 +431,8 @@ translate_input <- function(tg, session, unsupported) {
             handle_input(session, id, v)
         }))
     }
-    # A password field is deliberately not mapped to flitR's plain
-    # input: flitR cannot mask characters, so rendering it as one
-    # would put the secret on screen. Failing is the safer answer.
     kind <- switch(type, "date" = "date_input", "file" = "file_input",
-                   "radio" = "radio_buttons", "password" = "password_input",
-                   paste0("input[type=", type, "]"))
+                   "radio" = "radio_buttons", paste0("input[type=", type, "]"))
     unsupported$tags <- c(unsupported$tags, kind)
     NULL
 }
@@ -482,7 +575,8 @@ harvest_native_inputs <- function(tg, session) {
     if (!is.null(id)) {
         if (identical(tg$tag, "input")) {
             type <- tg$attrs$type
-            if (identical(type, "text") && !is.null(tg$attrs$value)) {
+            if ((identical(type, "text") || identical(type, "password")) &&
+                !is.null(tg$attrs$value)) {
                 handle_input(session, id, tg$attrs$value)
             } else if (identical(type, "checkbox")) {
                 handle_input(session, id, !is.null(tg$attrs$checked))
@@ -509,6 +603,13 @@ harvest_native_inputs <- function(tg, session) {
             if (!is.null(pick)) {
                 handle_input(session, id, as.character(pick$attrs$value))
             }
+        } else if (identical(tg$tag, "button") &&
+            !is.null(tg$attrs[["data-g-tab-panel"]]) &&
+            grepl("g-tab-active", as.character(tg$attrs$class), fixed = TRUE)) {
+            # The open tab is state, not an event, so the server knows
+            # it from the start -- same as the browser's init harvest.
+            handle_input(session, id,
+                         as.character(tg$attrs[["data-g-tab-panel"]]))
         }
     }
     for (child in tg$children) {
