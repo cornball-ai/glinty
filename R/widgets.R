@@ -31,15 +31,23 @@ text_input <- function(id, label = "", value = "", placeholder = "") {
 #' any other input, so serve the app over HTTPS if the connection
 #' leaves the machine.
 #'
+#' There is deliberately no value argument. A value= attribute is
+#' rendered into the page source in plain text, where the masking does
+#' nothing, so prefilling a password field from a secret publishes it
+#' to anyone who can fetch the page. Read the secret server-side
+#' instead and let an empty field mean "use the configured one".
+#'
 #' @param id character input ID
 #' @param label character label text
-#' @param value character initial value
-#' @param placeholder character placeholder text
+#' @param placeholder character placeholder text; a good place to say
+#'   which environment variable is in play, without echoing it
 #' @return A UI element
 #' @examples
-#' password_input("api_key", "API Key:")
+#' password_input("api_key", "API Key:",
+#'                placeholder = "using OPENAI_API_KEY (type to override)")
 #' @export
-password_input <- function(id, label = "", value = "", placeholder = "") {
+password_input <- function(id, label = "", placeholder = "") {
+    value <- ""
     attrs <- list(id = id, type = "password", class = "g-input", value = value)
     if (nzchar(placeholder)) {
         attrs$placeholder <- placeholder

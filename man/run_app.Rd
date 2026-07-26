@@ -4,7 +4,7 @@
 \title{Run a glinty application}
 \usage{
 run_app(app_obj, port = 8080L, static_dir = "www", max_upload = 10485760L,
-        quiet = FALSE)
+        check_secrets = TRUE, quiet = FALSE)
 }
 \arguments{
 \item{app_obj}{a glinty_app object}
@@ -19,6 +19,12 @@ run_app(app_obj, port = 8080L, static_dir = "www", max_upload = 10485760L,
 routing, so this is a memory ceiling as much as a policy one;
 raise it deliberately for apps that take audio or video.
 Oversized requests get a 413 without being read.}
+
+\item{check_secrets}{logical refuse to start when the rendered page
+contains the value of a secret-looking environment variable (see
+env_secrets_in()). The usual cause is prefilling an input from
+Sys.getenv(), which publishes the secret to anyone who can fetch
+the page. Set FALSE only deliberately.}
 
 \item{quiet}{logical suppress the startup message}
 }
