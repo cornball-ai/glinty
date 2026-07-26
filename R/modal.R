@@ -36,15 +36,15 @@ show_modal <- function(session, ..., title = NULL, footer = NULL,
     }
     body <- list(...)
     session$send(modal_msg(
-                            title = title,
-                            body = lapply(body, unclass_recursive),
-                            footer = if (is.null(footer)) {
-            NULL
-        } else {
-            unclass_recursive(footer)
-        },
-                            easy_close = isTRUE(easy_close)
-    ))
+                           title = title,
+                           body = lapply(body, unclass_recursive),
+                           footer = if (is.null(footer)) {
+                NULL
+            } else {
+                unclass_recursive(footer)
+            },
+                           easy_close = isTRUE(easy_close)
+        ))
     invisible(NULL)
 }
 

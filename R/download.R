@@ -92,11 +92,11 @@ handle_download <- function(req) {
     }
 
     name <- tryCatch(
-                     if (is.function(handler$filename)) {
-        handler$filename()
-    } else {
-        handler$filename
-    },
+        if (is.function(handler$filename)) {
+            handler$filename()
+        } else {
+            handler$filename
+        },
                      error = function(e) NULL
     )
     if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
@@ -115,10 +115,8 @@ handle_download <- function(req) {
     }
 
     body <- readBin(tmp, "raw", file.info(tmp)$size)
-    headers <- c("Content-Disposition" = paste0(
-                     "attachment; filename=\"", gsub('"', "", name, fixed = TRUE),
-                     "\""
-    ))
+    headers <- c("Content-Disposition" = paste0("attachment; filename=\"",
+            gsub('"', "", name, fixed = TRUE), "\""))
     http_response_raw(200L, mime_type(tools::file_ext(name)), body,
                       extra_headers = headers)
 }

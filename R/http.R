@@ -158,14 +158,13 @@ serve_static <- function(file_name, dir) {
 #'   application/octet-stream
 #' @keywords internal
 mime_type <- function(ext) {
-    switch(tolower(ext), "js" = "application/javascript",
-           "css" = "text/css", "html" = "text/html", "txt" = "text/plain",
-           "csv" = "text/csv", "png" = "image/png", "jpg" = "image/jpeg",
-           "jpeg" = "image/jpeg", "gif" = "image/gif",
-           "webp" = "image/webp", "svg" = "image/svg+xml",
-           "ico" = "image/x-icon", "wav" = "audio/wav",
-           "mp3" = "audio/mpeg", "m4a" = "audio/mp4", "ogg" = "audio/ogg",
-           "flac" = "audio/flac", "webm" = "audio/webm",
+    switch(tolower(ext), "js" = "application/javascript", "css" = "text/css",
+           "html" = "text/html", "txt" = "text/plain", "csv" = "text/csv",
+           "png" = "image/png", "jpg" = "image/jpeg", "jpeg" = "image/jpeg",
+           "gif" = "image/gif", "webp" = "image/webp",
+           "svg" = "image/svg+xml", "ico" = "image/x-icon",
+           "wav" = "audio/wav", "mp3" = "audio/mpeg", "m4a" = "audio/mp4",
+           "ogg" = "audio/ogg", "flac" = "audio/flac", "webm" = "audio/webm",
            "woff" = "font/woff", "woff2" = "font/woff2",
            "pdf" = "application/pdf", "zip" = "application/zip",
            "json" = "application/json", "application/octet-stream")

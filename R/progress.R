@@ -31,15 +31,13 @@
 #' })
 #' }
 #' @export
-with_progress <- function(session, expr, message = "", detail = "",
-                          value = 0) {
+with_progress <- function(session, expr, message = "", detail = "", value = 0) {
     if (!inherits(session, "glinty_session")) {
         stop("session must be a glinty_session", call. = FALSE)
     }
     handle <- new.env(parent = emptyenv())
     handle$session <- session
-    handle$id <- paste0("p", length(.globals$progress) + 1L, "-",
-                        session$id)
+    handle$id <- paste0("p", length(.globals$progress) + 1L, "-", session$id)
     handle$value <- clamp_progress(value)
     handle$message <- message
     handle$detail <- detail

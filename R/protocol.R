@@ -59,8 +59,7 @@ custom_msg <- function(handler, value) {
 modal_msg <- function(title, body, footer, easy_close) {
     as.character(jsonlite::toJSON(
                                   list(type = "modal", action = "show", title = title,
-                                       body = body, footer = footer,
-                                       easy_close = easy_close),
+                                       body = body, footer = footer, easy_close = easy_close),
                                   auto_unbox = TRUE, null = "null"
         ))
 }
