@@ -317,12 +317,24 @@
         el.appendChild(tbl);
     }
 
-    function buildTagNode(node) {
+    var SVG_NS = "http://www.w3.org/2000/svg";
+
+    function buildTagNode(node, ns) {
         if (node === null || node === undefined) return null;
         if (typeof node === "string") {
             return document.createTextNode(node);
         }
-        var el = document.createElement(node.tag);
+        /* SVG lives in its own namespace. createElement() would build an
+           HTMLUnknownElement that parses fine and never renders, so an
+           inline icon inside render_ui() would silently vanish. Static
+           UI escapes this because the HTML parser handles it. Every
+           descendant of <svg> inherits the namespace. */
+        if (node.tag === "svg") {
+            ns = SVG_NS;
+        }
+        var el = ns
+            ? document.createElementNS(ns, node.tag)
+            : document.createElement(node.tag);
         var attrs = node.attrs || {};
         Object.keys(attrs).forEach(function (k) {
             el.setAttribute(k, attrs[k]);
@@ -338,7 +350,7 @@
             el.textContent = node.text;
         } else {
             (node.children || []).forEach(function (c) {
-                var child = buildTagNode(c);
+                var child = buildTagNode(c, ns);
                 if (child) el.appendChild(child);
             });
         }
