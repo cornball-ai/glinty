@@ -24,6 +24,37 @@ text_input <- function(id, label = "", value = "", placeholder = "") {
     )
 }
 
+#' Create a password input
+#'
+#' Identical to text_input() except the browser masks the characters.
+#' Masking is display only: the value travels over the WebSocket like
+#' any other input, so serve the app over HTTPS if the connection
+#' leaves the machine.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value character initial value
+#' @param placeholder character placeholder text
+#' @return A UI element
+#' @examples
+#' password_input("api_key", "API Key:")
+#' @export
+password_input <- function(id, label = "", value = "", placeholder = "") {
+    attrs <- list(id = id, type = "password", class = "g-input", value = value)
+    if (nzchar(placeholder)) {
+        attrs$placeholder <- placeholder
+    }
+    tag(
+        "div",
+        attrs = list(class = "g-input-group"),
+        children = list(
+                        tag("label", text = label, attrs = list("for" = id)),
+                        tag("input", attrs = attrs,
+                            bind = list(event = "input", target = id))
+        )
+    )
+}
+
 #' Create a multi-line text input
 #'
 #' @param id character input ID

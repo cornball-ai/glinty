@@ -23,6 +23,22 @@ html_output <- function(id) {
     tag("div", attrs = list(id = id, class = "g-html-output"))
 }
 
+#' Create a preformatted text output placeholder
+#'
+#' A pre element patched on textContent, so whitespace and line
+#' breaks survive and the value is always displayed literally. Pair
+#' with render_text() for console-style output such as str() dumps or
+#' captured messages.
+#'
+#' @param id character output ID
+#' @return A UI element
+#' @examples
+#' verbatim_output("raw")
+#' @export
+verbatim_output <- function(id) {
+    tag("pre", attrs = list(id = id, class = "g-verbatim-output"))
+}
+
 #' Create a table output placeholder
 #'
 #' @param id character output ID
