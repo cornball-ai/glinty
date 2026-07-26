@@ -6,6 +6,9 @@
     var sessionId = null;
     var debounceTimers = new Map();
     var DEBOUNCE_MS = 200;
+    var customHandlers = {};
+    var pending = [];
+    var connectedFired = false;
 
     /* ---------- value extraction ---------- */
 
@@ -76,10 +79,20 @@
 
     /* ---------- outgoing ---------- */
 
+    /* Queue rather than drop: app scripts can fire before the socket
+       is open, and a silently lost input is a miserable bug. */
     function send(msg) {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
+        } else {
+            pending.push(msg);
         }
+    }
+
+    function flushPending() {
+        var queued = pending;
+        pending = [];
+        queued.forEach(send);
     }
 
     function sendInput(el) {
@@ -104,7 +117,18 @@
     function bindEvents(root) {
         root.addEventListener("click", function (ev) {
             var el = ev.target.closest('[data-g-event="click"]');
-            if (el) send({ type: "click", id: el.dataset.gTarget });
+            if (!el) return;
+            /* A bind carrying a value is an event input (which item
+               was clicked), not an action-button counter. */
+            if (el.dataset.gValue !== undefined) {
+                send({
+                    type: "input",
+                    id: el.dataset.gTarget,
+                    value: el.dataset.gValue
+                });
+            } else {
+                send({ type: "click", id: el.dataset.gTarget });
+            }
         });
 
         root.addEventListener("input", function (ev) {
@@ -198,6 +222,9 @@
         if (node.bind) {
             el.setAttribute("data-g-event", node.bind.event);
             el.setAttribute("data-g-target", node.bind.target);
+            if (node.bind.value !== null && node.bind.value !== undefined) {
+                el.setAttribute("data-g-value", node.bind.value);
+            }
         }
         if (node.text !== null && node.text !== undefined) {
             el.textContent = node.text;
@@ -338,6 +365,27 @@
             sessionId = msg.session_id;
             retries = 0;
             hideBanner();
+            flushPending();
+            /* Once per page load, not once per socket: a successful
+               resume keeps the DOM and the app's JS state, and a
+               failed one reloads above. Re-firing would make apps
+               double-register their listeners. */
+            if (!connectedFired) {
+                connectedFired = true;
+                document.dispatchEvent(new CustomEvent("glinty:connected", {
+                    detail: { sessionId: sessionId }
+                }));
+            }
+            break;
+        case "custom":
+            if (Object.prototype.hasOwnProperty.call(
+                customHandlers, msg.handler
+            )) {
+                customHandlers[msg.handler](msg.value);
+            } else {
+                console.warn("glinty: no handler for custom message",
+                             msg.handler);
+            }
             break;
         case "update":
             applyUpdate(msg);
@@ -434,6 +482,33 @@
         ws.addEventListener("message", onMessage);
         ws.addEventListener("close", handleClose);
     }
+
+    /* ---------- public API ---------- */
+
+    /* The contract for app-supplied scripts. Loaded after this file,
+       so window.Glinty is always defined when they run. */
+    window.Glinty = {
+        /* Set an input from JavaScript. Every call invalidates
+           dependents, so there is no priority concept; opts is
+           accepted and ignored so Shiny-shaped code ports as-is. */
+        setInputValue: function (id, value, opts) {
+            void opts;
+            send({ type: "input", id: id, value: value });
+        },
+        /* Register a handler for send_custom_message(). Registering
+           the same name twice replaces the first handler. */
+        addCustomMessageHandler: function (name, fn) {
+            if (typeof fn !== "function") {
+                console.error("glinty: handler for", name, "is not a function");
+                return;
+            }
+            customHandlers[name] = fn;
+        },
+        /* Current session id, or null before the first config. */
+        sessionId: function () {
+            return sessionId;
+        }
+    };
 
     document.addEventListener("DOMContentLoaded", function () {
         var root = document.getElementById("glinty-root");
