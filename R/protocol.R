@@ -48,6 +48,47 @@ custom_msg <- function(handler, value) {
         ))
 }
 
+#' Create a modal open message
+#'
+#' @param title character heading, or NULL
+#' @param body list of unclassed tag trees
+#' @param footer an unclassed tag tree, or NULL
+#' @param easy_close logical dismiss on backdrop click or Escape
+#' @return character JSON string
+#' @keywords internal
+modal_msg <- function(title, body, footer, easy_close) {
+    as.character(jsonlite::toJSON(
+                                  list(type = "modal", action = "show", title = title,
+                                       body = body, footer = footer, easy_close = easy_close),
+                                  auto_unbox = TRUE, null = "null"
+        ))
+}
+
+#' Create a modal close message
+#'
+#' @return character JSON string
+#' @keywords internal
+modal_close_msg <- function() {
+    as.character(jsonlite::toJSON(list(type = "modal", action = "hide"),
+                                  auto_unbox = TRUE))
+}
+
+#' Create a progress message
+#'
+#' @param action character "show", "update" or "hide"
+#' @param handle a progress handle
+#' @return character JSON string
+#' @keywords internal
+progress_msg <- function(action, handle) {
+    msg <- list(type = "progress", action = action, id = handle$id)
+    if (!identical(action, "hide")) {
+        msg$message <- handle$message
+        msg$detail <- handle$detail
+        msg$value <- handle$value
+    }
+    as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
+}
+
 #' Create an error message
 #'
 #' @param id character output ID, or NULL for session-level errors

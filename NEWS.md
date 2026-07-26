@@ -1,5 +1,12 @@
 # glinty (development version)
 
+- show_modal()/remove_modal()/modal_button(): dialogs built from tag
+  trees, mounted inside the app root so inputs in them bind normally.
+- with_progress()/inc_progress()/set_progress(): progress bars that
+  update during a blocking call, via a new session flush_now() that
+  pushes queued messages instead of waiting for the event loop.
+- download_handler()/download_button(): serve bytes over a plain GET,
+  alongside the existing upload route.
 - password_input() and verbatim_output().
 - tabset()/tab_panel(): client-side tab switching. Hidden panels keep
   their DOM, so inputs inside them keep their values. With an id the

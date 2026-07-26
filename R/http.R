@@ -143,21 +143,29 @@ serve_static <- function(file_name, dir) {
     if (!file.exists(file_path) || dir.exists(file_path)) {
         return(http_response_raw(404L, "text/plain", "Not found"))
     }
-    # webm is registered as video/webm for the container, but glinty's
-    # only media output is audio, and audio-only webm in an <audio>
-    # element wants audio/webm.
-    ext <- tolower(tools::file_ext(file_path))
-    ct <- switch(ext, "js" = "application/javascript", "css" = "text/css",
-                 "html" = "text/html", "txt" = "text/plain",
-                 "png" = "image/png", "jpg" = "image/jpeg",
-                 "jpeg" = "image/jpeg", "gif" = "image/gif",
-                 "webp" = "image/webp", "svg" = "image/svg+xml",
-                 "ico" = "image/x-icon", "wav" = "audio/wav",
-                 "mp3" = "audio/mpeg", "m4a" = "audio/mp4",
-                 "ogg" = "audio/ogg", "flac" = "audio/flac",
-                 "webm" = "audio/webm", "woff" = "font/woff",
-                 "woff2" = "font/woff2", "json" = "application/json",
-                 "application/octet-stream")
     body <- readBin(file_path, "raw", file.info(file_path)$size)
-    http_response_raw(200L, ct, body)
+    http_response_raw(200L, mime_type(tools::file_ext(file_path)), body)
+}
+
+#' Map a file extension to a MIME type
+#'
+#' webm is registered as video/webm for the container, but glinty's
+#' only media output is audio, and audio-only webm in an <audio>
+#' element wants audio/webm.
+#'
+#' @param ext character file extension, with or without case
+#' @return character MIME type, falling back to
+#'   application/octet-stream
+#' @keywords internal
+mime_type <- function(ext) {
+    switch(tolower(ext), "js" = "application/javascript", "css" = "text/css",
+           "html" = "text/html", "txt" = "text/plain", "csv" = "text/csv",
+           "png" = "image/png", "jpg" = "image/jpeg", "jpeg" = "image/jpeg",
+           "gif" = "image/gif", "webp" = "image/webp",
+           "svg" = "image/svg+xml", "ico" = "image/x-icon",
+           "wav" = "audio/wav", "mp3" = "audio/mpeg", "m4a" = "audio/mp4",
+           "ogg" = "audio/ogg", "flac" = "audio/flac", "webm" = "audio/webm",
+           "woff" = "font/woff", "woff2" = "font/woff2",
+           "pdf" = "application/pdf", "zip" = "application/zip",
+           "json" = "application/json", "application/octet-stream")
 }

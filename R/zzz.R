@@ -9,5 +9,6 @@
     .globals$sessions <- new.env(parent = emptyenv())
     .globals$timers <- list()
     .globals$timer_id_counter <- 0L
+    .globals$progress <- list()
     reg_reset()
 }

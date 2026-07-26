@@ -72,6 +72,7 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     .globals$flush_scheduled <- FALSE
     .globals$current_session <- NULL
     .globals$timers <- list()
+    .globals$progress <- list()
 
     page_html <- full_page_html(
                                 tag_to_html(app_obj$ui),
@@ -168,6 +169,9 @@ route_http <- function(req, page_html, pkg_www, static_dir) {
     }
     if (!identical(req$method, "GET")) {
         return(http_response_raw(404L, "text/plain", "Not found"))
+    }
+    if (identical(req$path, "/download")) {
+        return(handle_download(req))
     }
     if (req$path %in% c("/", "")) {
         return(http_response_raw(200L, "text/html; charset=utf-8", page_html))

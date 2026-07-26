@@ -21,6 +21,7 @@ new_session <- function(id, send_fn = NULL) {
     s$detached <- FALSE
     s$grace_timer <- NULL
     s$last_sent <- new.env(parent = emptyenv())
+    s$downloads <- new.env(parent = emptyenv())
     s$send_fn <- send_fn
 
     s$send <- function(msg) {
@@ -56,6 +57,19 @@ new_session <- function(id, send_fn = NULL) {
 
     s$on_ended <- function(fn) {
         s$on_ended_cbs <- c(s$on_ended_cbs, list(fn))
+        invisible(NULL)
+    }
+
+    # Push queued messages to the client right now instead of waiting
+    # for the event loop to come back around. The loop is
+    # single-threaded, so a long blocking call (an HTTP request to a
+    # transcription API, say) starves the normal drain and everything
+    # queued behind it arrives at once when the call returns. Progress
+    # reporting is the case that needs this: without it, a progress
+    # bar would jump from empty to gone.
+    s$flush_now <- function() {
+        flush_reactions()
+        drain_session(s)
         invisible(NULL)
     }
 

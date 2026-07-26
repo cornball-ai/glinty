@@ -227,6 +227,18 @@
             if (btn) activateTab(btn);
         });
 
+        root.addEventListener("click", function (ev) {
+            if (ev.target.closest("[data-g-modal-close]")) {
+                closeModal();
+                return;
+            }
+            var dl = ev.target.closest("[data-g-download]");
+            if (dl) {
+                ev.preventDefault();
+                startDownload(dl);
+            }
+        });
+
         root.addEventListener("input", function (ev) {
             var el = ev.target;
             if (el.dataset.gEvent !== "input") return;
@@ -501,12 +513,137 @@
         case "update_input":
             applyInputUpdate(msg);
             break;
+        case "modal":
+            if (msg.action === "hide") {
+                closeModal();
+            } else {
+                showModal(msg);
+            }
+            break;
+        case "progress":
+            applyProgress(msg);
+            break;
         case "error":
             applyError(msg);
             break;
         default:
             console.warn("glinty: unknown message type", msg.type);
         }
+    }
+
+    /* ---------- modals ---------- */
+
+    /* Mounted inside #glinty-root, not document.body, so the existing
+       event delegation reaches buttons and inputs in the dialog. */
+    function closeModal() {
+        var open = document.getElementById("g-modal");
+        if (open) open.remove();
+    }
+
+    function showModal(msg) {
+        closeModal();
+        var root = document.getElementById("glinty-root");
+        if (!root) return;
+
+        var overlay = document.createElement("div");
+        overlay.id = "g-modal";
+        overlay.className = "g-modal-overlay";
+
+        var box = document.createElement("div");
+        box.className = "g-modal-box";
+
+        if (msg.title !== null && msg.title !== undefined) {
+            var h = document.createElement("h3");
+            h.className = "g-modal-title";
+            h.textContent = msg.title;
+            box.appendChild(h);
+        }
+
+        var body = document.createElement("div");
+        body.className = "g-modal-body";
+        (msg.body || []).forEach(function (node) {
+            var el = buildTagNode(node);
+            if (el) body.appendChild(el);
+        });
+        box.appendChild(body);
+
+        if (msg.footer) {
+            var foot = document.createElement("div");
+            foot.className = "g-modal-footer";
+            var f = buildTagNode(msg.footer);
+            if (f) foot.appendChild(f);
+            box.appendChild(foot);
+        }
+
+        if (msg.easy_close) {
+            overlay.addEventListener("click", function (ev) {
+                if (ev.target === overlay) closeModal();
+            });
+        }
+        overlay.dataset.gEasyClose = msg.easy_close ? "1" : "0";
+
+        overlay.appendChild(box);
+        root.appendChild(overlay);
+        refreshConditionals();
+    }
+
+    document.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Escape") return;
+        var open = document.getElementById("g-modal");
+        if (open && open.dataset.gEasyClose === "1") closeModal();
+    });
+
+    /* ---------- progress ---------- */
+
+    function progressContainer() {
+        var el = document.getElementById("g-progress");
+        if (!el) {
+            el = document.createElement("div");
+            el.id = "g-progress";
+            el.className = "g-progress-stack";
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    function applyProgress(msg) {
+        if (msg.action === "hide") {
+            var gone = document.getElementById(msg.id);
+            if (gone) gone.remove();
+            var stack = document.getElementById("g-progress");
+            if (stack && stack.children.length === 0) stack.remove();
+            return;
+        }
+        var bar = document.getElementById(msg.id);
+        if (!bar) {
+            bar = document.createElement("div");
+            bar.id = msg.id;
+            bar.className = "g-progress";
+            bar.innerHTML =
+                '<div class="g-progress-message"></div>' +
+                '<div class="g-progress-track">' +
+                '<div class="g-progress-fill"></div></div>' +
+                '<div class="g-progress-detail"></div>';
+            progressContainer().appendChild(bar);
+        }
+        bar.querySelector(".g-progress-message").textContent =
+            msg.message || "";
+        bar.querySelector(".g-progress-detail").textContent =
+            msg.detail || "";
+        bar.querySelector(".g-progress-fill").style.width =
+            Math.round((msg.value || 0) * 100) + "%";
+    }
+
+    /* ---------- downloads ---------- */
+
+    /* The page HTML is built once and served to every session, so the
+       URL cannot be baked into the href at render time. Resolve it on
+       click, when the session id is known and current. */
+    function startDownload(el) {
+        if (!sessionId) return;
+        window.location.href =
+            "/download?session=" + encodeURIComponent(sessionId) +
+            "&id=" + encodeURIComponent(el.dataset.gDownload);
     }
 
     /* ---------- disconnect overlay ---------- */
