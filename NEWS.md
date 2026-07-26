@@ -1,3 +1,10 @@
+# glinty (development version)
+
+- Fixed: SVG built by render_ui() never rendered. buildTagNode() used
+  createElement() for every node, which puts SVG in the HTML namespace
+  as an HTMLUnknownElement. Inline icons in dynamic UI silently
+  vanished; static UI was unaffected.
+
 # glinty 0.4.0
 
 Everything an app needs beyond the reactive core: app-supplied

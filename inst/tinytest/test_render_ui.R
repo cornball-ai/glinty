@@ -148,3 +148,28 @@ replayed <- Filter(function(m) identical(m$id, "live_count"), later)
 expect_equal(length(replayed), 1L)
 expect_equal(replayed[[1L]]$value, "42")
 glinty:::session_end(s3)
+
+# --- SVG subtrees are built in the SVG namespace ---
+# createElement() would produce an HTMLUnknownElement that parses fine
+# and never renders, so an inline icon inside render_ui() would
+# silently vanish. Static UI escapes this because the HTML parser
+# handles namespaces itself. R can only pin the source invariant here;
+# tools/jsbridge.js exercises it at runtime.
+js <- paste(readLines(system.file("www", "glinty.js", package = "glinty"),
+                      warn = FALSE), collapse = "\n")
+expect_true(grepl("createElementNS", js, fixed = TRUE))
+expect_true(grepl("http://www.w3.org/2000/svg", js, fixed = TRUE))
+expect_true(grepl("buildTagNode(c, ns)", js, fixed = TRUE))
+
+# an svg tag tree survives the round trip through the wire format
+svg <- tag("svg", attrs = list(viewBox = "0 0 24 24"),
+           children = list(tag("path", attrs = list(d = "M8 5l11 7-11 7z"))))
+wire <- glinty:::unclass_recursive(svg)
+expect_equal(wire$tag, "svg")
+expect_equal(wire$children[[1]]$tag, "path")
+expect_equal(wire$children[[1]]$attrs$d, "M8 5l11 7-11 7z")
+
+# and renders as real markup in static UI
+html <- glinty:::tag_to_html(svg)
+expect_true(grepl("<svg viewBox=\"0 0 24 24\">", html, fixed = TRUE))
+expect_true(grepl("<path d=\"M8 5l11 7-11 7z\">", html, fixed = TRUE))
