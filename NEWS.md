@@ -1,5 +1,14 @@
 # glinty (development version)
 
+- page() takes css, js, favicon and head arguments, so apps can ship
+  a stylesheet, a tab icon and their own scripts. App CSS is linked
+  after glinty's own; app scripts load after the JS client at the end
+  of the body.
+- run_app() takes max_upload instead of leaving the cap to a hidden
+  option. Request bodies are buffered whole in memory, so the ceiling
+  belongs to the app.
+- serve_static() handles webm, m4a, ogg, flac, woff, woff2, gif, webp
+  and txt, and matches extensions case-insensitively.
 - render_ui()/ui_output(): dynamic tag-tree content on both
   frontends, with show/hide via NULL and last-state replay for
   nested outputs.
