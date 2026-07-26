@@ -149,15 +149,15 @@ serve_static <- function(file_name, dir) {
     ext <- tolower(tools::file_ext(file_path))
     ct <- switch(ext, "js" = "application/javascript", "css" = "text/css",
                  "html" = "text/html", "txt" = "text/plain",
-                 "png" = "image/png",
-                 "jpg" = "image/jpeg", "jpeg" = "image/jpeg",
-                 "gif" = "image/gif", "webp" = "image/webp",
-                 "svg" = "image/svg+xml", "ico" = "image/x-icon",
-                 "wav" = "audio/wav", "mp3" = "audio/mpeg",
-                 "m4a" = "audio/mp4", "ogg" = "audio/ogg",
-                 "flac" = "audio/flac", "webm" = "audio/webm",
-                 "woff" = "font/woff", "woff2" = "font/woff2",
-                 "json" = "application/json", "application/octet-stream")
+                 "png" = "image/png", "jpg" = "image/jpeg",
+                 "jpeg" = "image/jpeg", "gif" = "image/gif",
+                 "webp" = "image/webp", "svg" = "image/svg+xml",
+                 "ico" = "image/x-icon", "wav" = "audio/wav",
+                 "mp3" = "audio/mpeg", "m4a" = "audio/mp4",
+                 "ogg" = "audio/ogg", "flac" = "audio/flac",
+                 "webm" = "audio/webm", "woff" = "font/woff",
+                 "woff2" = "font/woff2", "json" = "application/json",
+                 "application/octet-stream")
     body <- readBin(file_path, "raw", file.info(file_path)$size)
     http_response_raw(200L, ct, body)
 }

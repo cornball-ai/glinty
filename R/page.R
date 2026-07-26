@@ -101,6 +101,5 @@ raw_head_html <- function(extra) {
     if (is.character(extra)) {
         return(paste0(paste(extra, collapse = "\n"), "\n"))
     }
-    stop("page(head=) expects a glinty_tag, character, or NULL",
-         call. = FALSE)
+    stop("page(head=) expects a glinty_tag, character, or NULL", call. = FALSE)
 }
