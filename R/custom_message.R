@@ -37,8 +37,7 @@ send_custom_message <- function(session, handler, value = NULL) {
     if (!inherits(session, "glinty_session")) {
         stop("session must be a glinty_session", call. = FALSE)
     }
-    if (!is.character(handler) || length(handler) != 1L ||
-        !nzchar(handler)) {
+    if (!is.character(handler) || length(handler) != 1L || !nzchar(handler)) {
         stop("handler must be a non-empty character string", call. = FALSE)
     }
     session$send(custom_msg(handler, value))

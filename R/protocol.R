@@ -43,8 +43,7 @@ update_input_msg <- function(id, fields) {
 #' @keywords internal
 custom_msg <- function(handler, value) {
     as.character(jsonlite::toJSON(
-                                  list(type = "custom", handler = handler,
-                                       value = value),
+                                  list(type = "custom", handler = handler, value = value),
                                   auto_unbox = TRUE, null = "null"
         ))
 }
