@@ -1,3 +1,11 @@
+# glinty (development version)
+
+- Native: tabset and password_input render instead of failing.
+  tabset draws its nav strip and emits only the selected panel;
+  password_input masks with bullets and the real string never leaves
+  R. Needs flitR >= 0.0.2.1. A native tabset requires an id, since
+  that input is where the selection lives.
+
 # glinty 0.4.1
 
 - Secrets no longer reach the page. run_app() refuses to start when

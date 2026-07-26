@@ -115,21 +115,34 @@ core, sessions, and renderers are identical, and `render_plot()`
 draws natively through flitR's image op.
 
 The supported widget set covers text, headings, `text_input`,
-`textarea_input`, `number_input`, `select_input`, `button`,
-`checkbox_input`, `slider_input`, `text_output`, `verbatim_output`,
-`table_output` (drawn as a native grid), and `plot_output`.
-`conditional_panel()` works too: its condition is evaluated
-server-side against the same inputs the browser would use, so both
-frontends agree on what shows.
+`password_input`, `textarea_input`, `number_input`, `select_input`,
+`button`, `checkbox_input`, `slider_input`, `text_output`,
+`verbatim_output`, `table_output` (drawn as a native grid),
+`plot_output`, `tabset` and `conditional_panel`.
+
+Two of those need a word:
+
+`conditional_panel()`'s condition is evaluated server-side against the
+same inputs the browser would use, so both frontends agree on what
+shows.
+
+`tabset()` draws its nav strip and emits **only the selected panel**.
+That is the immediate-mode reading of a tab: an unselected panel is
+not hidden, it is simply not drawn this frame. So unlike the browser,
+inputs inside an unselected tab do not keep their values natively.
+A tabset needs an `id` to work natively, since that input is where
+the selection lives.
+
+`password_input()` masks with bullets via flitR, and the real string
+never leaves R: flitR's `scene()` strips the hit records that carry it
+before anything goes over the wire.
 
 Everything else is browser-only and **fails fast with a named list**
 rather than rendering something wrong: `radio_buttons`, `date_input`,
-`file_input`, `password_input`, `html_output`, `audio_output`,
-`tabset`, `download_button`, `modal_button`. `password_input` is
-refused on purpose — flitR cannot mask characters, so drawing it as a
-plain field would put the secret on screen. Modals, progress bars and
-`send_custom_message()` are silently inert natively, since they have
-no native counterpart to get wrong.
+`file_input`, `html_output`, `audio_output`, `download_button`,
+`modal_button`. Modals, progress bars and `send_custom_message()` are
+silently inert natively, since they have no native counterpart to get
+wrong.
 
 Native sessions seed inputs from widget defaults, mirroring the
 browser's init harvest. Don't `library(flitR)` alongside glinty (both

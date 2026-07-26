@@ -18,17 +18,35 @@ native_apply <- glinty:::native_apply
 eval_condition <- glinty:::eval_condition
 tag_condition <- glinty:::tag_condition
 handle_input <- glinty:::handle_input
+harvest_native_inputs <- glinty:::harvest_native_inputs
 
 build <- function(ui, session, values = new.env(parent = emptyenv())) {
     build_native_ops(ui, session, values)
 }
 
+# Every string in a scene. Walks rather than unlist()ing, because the
+# ops carry closures (on_click, on_change) that unlist mangles.
+drawn <- function(x) {
+    out <- character(0L)
+    walk <- function(node) {
+        if (is.function(node)) {
+            return(invisible(NULL))
+        }
+        if (is.character(node)) {
+            out <<- c(out, node)
+            return(invisible(NULL))
+        }
+        if (is.list(node)) {
+            for (el in node) walk(el)
+        }
+        invisible(NULL)
+    }
+    walk(x)
+    out
+}
+
 # --- widgets with no native counterpart fail fast, by their own name
 s <- new_session("n1")
-expect_error(build(page(tabset(tab_panel("A", h1("a")))), s), "tabset")
-expect_error(build(page(tabset(tab_panel("A", h1("a")), id = "t")), s),
-             "tabset")
-expect_error(build(page(password_input("key", "Key:")), s), "password_input")
 expect_error(build(page(download_button("dl", "Get")), s), "download_button")
 expect_error(build(page(modal_button("Cancel")), s), "modal_button")
 
@@ -36,12 +54,86 @@ expect_error(build(page(modal_button("Cancel")), s), "modal_button")
 err <- tryCatch(build(page(download_button("dl", "Get")), s),
                 error = function(e) conditionMessage(e))
 expect_false(grepl("\\ba\\b", err))
-err2 <- tryCatch(build(page(password_input("k", "K")), s),
-                 error = function(e) conditionMessage(e))
-expect_false(grepl("input\\[type=", err2))
 
 # an ordinary link still renders; only download buttons are refused
 expect_silent(build(page(a("cornball.ai", "https://cornball.ai")), s))
+session_end(s)
+
+# --- password_input renders, masked ---
+# flitR draws bullets while the real string stays in R. The value does
+# live on in the hit record, which is how editing works, but flitR's
+# scene() strips hit ops before the wire -- so what matters is that no
+# *text* op carries it.
+text_ops <- function(ops) {
+    out <- character(0L)
+    walk <- function(node) {
+        if (is.function(node)) {
+            return(invisible(NULL))
+        }
+        if (is.list(node)) {
+            if (identical(node$op, "text")) {
+                out <<- c(out, as.character(node$text))
+                return(invisible(NULL))
+            }
+            for (el in node) walk(el)
+        }
+        invisible(NULL)
+    }
+    walk(ops)
+    out
+}
+
+s <- new_session("n1b")
+expect_silent(build(page(password_input("key", "Key:")), s))
+handle_input(s, "key", "sk-secret-value")
+masked <- text_ops(build(page(password_input("key", "Key:")), s))
+expect_false(any(grepl("sk-secret-value", masked, fixed = TRUE)))
+expect_true(any(grepl("•", masked, fixed = TRUE)))
+# one bullet per character, so the caret stays where it belongs
+expect_true(any(masked == strrep("•", nchar("sk-secret-value"))))
+# an ordinary text input is not masked
+handle_input(s, "plain", "hello world")
+plain <- text_ops(build(page(text_input("plain", "P:")), s))
+expect_true(any(grepl("hello world", plain, fixed = TRUE)))
+session_end(s)
+
+# --- tabset renders, showing only the selected panel ---
+s <- new_session("n1c")
+ui <- page(tabset(
+    tab_panel("Text", h1("text panel")),
+    tab_panel("Segments", h1("segments panel")),
+    id = "results"
+))
+# the open tab is harvested as state, like the browser's init pass
+harvest_native_inputs(ui, s)
+expect_equal(isolate(s$input$results()), "Text")
+
+first <- drawn(build(ui, s))
+# both tab labels appear in the nav strip
+expect_true(any(grepl("^Text$", first)))
+expect_true(any(grepl("^Segments$", first)))
+# but only the selected panel's body is emitted -- an unselected panel
+# is not hidden, it is simply not drawn this frame
+expect_true(any(grepl("text panel", first, fixed = TRUE)))
+expect_false(any(grepl("segments panel", first, fixed = TRUE)))
+
+# switching the input switches the panel
+handle_input(s, "results", "Segments")
+second <- drawn(build(ui, s))
+expect_true(any(grepl("segments panel", second, fixed = TRUE)))
+expect_false(any(grepl("text panel", second, fixed = TRUE)))
+
+# a selection that is not one of the labels falls back rather than
+# rendering an empty tabset
+handle_input(s, "results", "Nonsense")
+expect_true(any(grepl("text panel", drawn(build(ui, s)), fixed = TRUE)))
+session_end(s)
+
+# --- a tabset without an id cannot hold a selection, so it says so ---
+s <- new_session("n1d")
+err3 <- tryCatch(build(page(tabset(tab_panel("A", h1("a")))), s),
+                 error = function(e) conditionMessage(e))
+expect_true(grepl("tabset without an id", err3, fixed = TRUE))
 session_end(s)
 
 # --- verbatim_output renders natively ---
