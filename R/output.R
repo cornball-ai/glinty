@@ -45,8 +45,7 @@ make_output_proxy <- function(session) {
                 # never seen their outputs' patches. Replay the last
                 # known state of any output id inside the new tree so
                 # panels appear current, not blank.
-                if (identical(renderer$property, "ui") &&
-                    !is.null(result$ok)) {
+                if (identical(renderer$property, "ui") && !is.null(result$ok)) {
                     for (oid in collect_tree_ids(result$ok)) {
                         if (!identical(oid, id) &&
                             !is.null(session$last_sent[[oid]])) {

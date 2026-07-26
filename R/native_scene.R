@@ -139,12 +139,16 @@ translate_tag <- function(tg, session, values, unsupported) {
             return(translate_table(tg, values))
         }
         if (identical(cls, "g-ui-output")) {
-            tree <- if (is.null(tg$attrs$id)) NULL else values[[tg$attrs$id]]
+            if (is.null(tg$attrs$id)) {
+                tree <- NULL
+            } else {
+                tree <- values[[tg$attrs$id]]
+            }
             if (is.null(tree)) {
                 return(NULL)
             }
             return(translate_tag(rehydrate_tag(tree), session, values,
-                unsupported))
+                                 unsupported))
         }
         # generic containers (including input groups): stack children
         items <- translate_tags(tg$children, session, values, unsupported)
@@ -484,16 +488,16 @@ rehydrate_tag <- function(x) {
     if (!is.list(x) || is.null(x$tag)) {
         return(NULL)
     }
-    kids <- if (is.null(x$children)) list() else x$children
+    if (is.null(x$children)) {
+        kids <- list()
+    } else {
+        kids <- x$children
+    }
     structure(
-        list(
-            tag = x$tag,
-            attrs = if (is.null(x$attrs)) list() else x$attrs,
-            text = x$text,
-            children = Filter(Negate(is.null),
-                lapply(kids, rehydrate_tag)),
-            bind = x$bind
-        ),
-        class = "glinty_tag"
+              list(tag = x$tag, attrs = if (is.null(x$attrs)) list() else x$attrs,
+                   text = x$text,
+                   children = Filter(Negate(is.null), lapply(kids, rehydrate_tag)),
+                   bind = x$bind),
+              class = "glinty_tag"
     )
 }

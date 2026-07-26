@@ -3,7 +3,8 @@
 \alias{run_app}
 \title{Run a glinty application}
 \usage{
-run_app(app_obj, port = 8080L, static_dir = "www", quiet = FALSE)
+run_app(app_obj, port = 8080L, static_dir = "www", max_upload = 10485760L,
+        quiet = FALSE)
 }
 \arguments{
 \item{app_obj}{a glinty_app object}
@@ -12,6 +13,12 @@ run_app(app_obj, port = 8080L, static_dir = "www", quiet = FALSE)
 
 \item{static_dir}{character directory served under /static/
 (default "www" in the working directory; skipped if absent)}
+
+\item{max_upload}{integer largest accepted request body in bytes
+(default 10 MB). Bodies are buffered whole in memory before
+routing, so this is a memory ceiling as much as a policy one;
+raise it deliberately for apps that take audio or video.
+Oversized requests get a 413 without being read.}
 
 \item{quiet}{logical suppress the startup message}
 }

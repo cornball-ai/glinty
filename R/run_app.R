@@ -45,6 +45,11 @@ app <- function(ui, server) {
 #' @param port integer HTTP port (default 8080)
 #' @param static_dir character directory served under /static/
 #'   (default "www" in the working directory; skipped if absent)
+#' @param max_upload integer largest accepted request body in bytes
+#'   (default 10 MB). Bodies are buffered whole in memory before
+#'   routing, so this is a memory ceiling as much as a policy one;
+#'   raise it deliberately for apps that take audio or video.
+#'   Oversized requests get a 413 without being read.
 #' @param quiet logical suppress the startup message
 #' @return invisible(NULL); runs until interrupt
 #' @examples
@@ -52,10 +57,14 @@ app <- function(ui, server) {
 #' run_app(app_obj, port = 8080)
 #' }
 #' @export
-run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
+run_app <- function(app_obj, port = 8080L, static_dir = "www",
+                    max_upload = 10485760L, quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
+
+    old_max <- options(glinty.max_upload = as.integer(max_upload))
+    on.exit(options(old_max), add = TRUE)
 
     # Reset reactive state
     .globals$current_context <- NULL
@@ -66,7 +75,8 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www", quiet = FALSE) {
 
     page_html <- full_page_html(
                                 tag_to_html(app_obj$ui),
-        if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app"
+        if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app",
+                                app_obj$ui$head
     )
     pkg_www <- system.file("www", package = "glinty")
     if (!is.null(static_dir) && !dir.exists(static_dir)) {
