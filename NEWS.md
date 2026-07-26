@@ -1,5 +1,16 @@
 # glinty (development version)
 
+- JavaScript bridge: window.Glinty exposes setInputValue(),
+  addCustomMessageHandler() and sessionId(). Calls made before the
+  socket opens queue and flush on connect. A glinty:connected event
+  fires once per page load.
+- send_custom_message() sends server-to-app-JavaScript messages.
+- Object-valued inputs keep their names. normalize_value() collapsed
+  named lists, which destroyed JSON objects sent from app JS; only
+  unnamed lists (JSON arrays) collapse now.
+- Click binds may carry a value, setting the input to that value
+  instead of bumping a counter, so one handler serves a list of rows.
+  Bind attributes are escaped like every other attribute.
 - page() takes css, js, favicon and head arguments, so apps can ship
   a stylesheet, a tab icon and their own scripts. App CSS is linked
   after glinty's own; app scripts load after the JS client at the end
