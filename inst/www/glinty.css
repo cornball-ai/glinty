@@ -239,3 +239,57 @@ h1, h2, h3, h4 {
     flex-direction: column;
     gap: 0.5rem;
 }
+
+/* ---------- visibility ---------- */
+
+/* The one lever conditional_panel() and tabset() pull. Kept blunt so
+   an app stylesheet can override it without a specificity fight. */
+.g-hidden {
+    display: none;
+}
+
+/* ---------- verbatim output ---------- */
+
+.g-verbatim-output {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+
+/* ---------- tabsets ---------- */
+
+.g-tab-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.g-tab-btn {
+    padding: 0.45rem 0.9rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    font: inherit;
+    color: #64748b;
+    cursor: pointer;
+}
+
+.g-tab-btn:hover {
+    color: #0f172a;
+}
+
+.g-tab-active {
+    color: #0f172a;
+    border-bottom-color: #0f172a;
+}
+
+.g-tab-body {
+    padding-top: 0.75rem;
+}

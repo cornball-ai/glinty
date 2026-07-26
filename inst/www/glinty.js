@@ -9,6 +9,11 @@
     var customHandlers = {};
     var pending = [];
     var connectedFired = false;
+    /* The client's view of every input it knows about. Conditional
+       panels are evaluated against this rather than re-read from the
+       DOM, so server-pushed updates and Glinty.setInputValue() count
+       the same as user edits. */
+    var inputValues = {};
 
     /* ---------- value extraction ---------- */
 
@@ -34,15 +39,98 @@
     function harvestInputs() {
         var inputs = {};
         document.querySelectorAll("[data-g-target]").forEach(function (el) {
-            if (el.dataset.gEvent === "click") return;
+            if (el.dataset.gEvent === "click") {
+                /* Clicks are events, not state -- except the open tab
+                   of a tabset, which is state the server should know
+                   from the start. */
+                if (el.classList.contains("g-tab-active")) {
+                    inputs[el.dataset.gTarget] = el.dataset.gValue;
+                }
+                return;
+            }
             /* radios: one value per group, from the checked member */
             if (el.type === "radio" && !el.checked) return;
             inputs[el.dataset.gTarget] = extractValue(el);
+        });
+        Object.keys(inputs).forEach(function (id) {
+            inputValues[id] = inputs[id];
         });
         measurePlots(function (id, dim, value) {
             inputs["..clientdata_output_" + id + "_" + dim] = value;
         });
         return inputs;
+    }
+
+    /* ---------- conditional panels ---------- */
+
+    function noteInput(id, value) {
+        inputValues[id] = value;
+        refreshConditionals();
+    }
+
+    function condMatches(actual, wanted) {
+        return wanted.some(function (w) {
+            if (typeof w === "boolean" || typeof actual === "boolean") {
+                return Boolean(actual) === Boolean(w);
+            }
+            if (actual === null || actual === undefined) return false;
+            return String(actual) === String(w);
+        });
+    }
+
+    function evalCondition(c) {
+        if (!c || typeof c !== "object") return false;
+        switch (c.op) {
+        case "is":
+            if (!Object.prototype.hasOwnProperty.call(inputValues, c.id)) {
+                return false;
+            }
+            return condMatches(inputValues[c.id], [].concat(c.values));
+        case "and":
+            return (c.args || []).every(evalCondition);
+        case "or":
+            return (c.args || []).some(evalCondition);
+        case "not":
+            return !evalCondition(c.arg);
+        default:
+            console.warn("glinty: unknown condition op", c.op);
+            return false;
+        }
+    }
+
+    function refreshConditionals() {
+        document.querySelectorAll("[data-g-cond]").forEach(function (el) {
+            var cond = el._gCond;
+            if (cond === undefined) {
+                try {
+                    cond = JSON.parse(el.dataset.gCond);
+                } catch (e) {
+                    console.error("glinty: bad condition", el.dataset.gCond);
+                    cond = null;
+                }
+                el._gCond = cond;
+            }
+            el.classList.toggle("g-hidden", !evalCondition(cond));
+        });
+    }
+
+    /* ---------- tabsets ---------- */
+
+    function activateTab(btn) {
+        var set = btn.closest(".g-tabset");
+        if (!set) return;
+        var name = btn.dataset.gTabPanel;
+        /* closest() re-check keeps a nested tabset from being driven
+           by its parent's buttons. */
+        set.querySelectorAll(".g-tab-btn").forEach(function (b) {
+            if (b.closest(".g-tabset") !== set) return;
+            b.classList.toggle("g-tab-active",
+                               b.dataset.gTabPanel === name);
+        });
+        set.querySelectorAll(".g-tab-body").forEach(function (p) {
+            if (p.closest(".g-tabset") !== set) return;
+            p.classList.toggle("g-hidden", p.dataset.gTabPanel !== name);
+        });
     }
 
     /* ---------- client-sized plots ---------- */
@@ -96,10 +184,12 @@
     }
 
     function sendInput(el) {
+        var value = extractValue(el);
+        noteInput(el.dataset.gTarget, value);
         send({
             type: "input",
             id: el.dataset.gTarget,
-            value: extractValue(el)
+            value: value
         });
     }
 
@@ -121,6 +211,7 @@
             /* A bind carrying a value is an event input (which item
                was clicked), not an action-button counter. */
             if (el.dataset.gValue !== undefined) {
+                noteInput(el.dataset.gTarget, el.dataset.gValue);
                 send({
                     type: "input",
                     id: el.dataset.gTarget,
@@ -129,6 +220,11 @@
             } else {
                 send({ type: "click", id: el.dataset.gTarget });
             }
+        });
+
+        root.addEventListener("click", function (ev) {
+            var btn = ev.target.closest(".g-tab-btn");
+            if (btn) activateTab(btn);
         });
 
         root.addEventListener("input", function (ev) {
@@ -249,6 +345,9 @@
             el.textContent = "";
             var node = buildTagNode(msg.value);
             if (node) el.appendChild(node);
+            /* the new subtree may contain conditional panels that
+               have never been evaluated */
+            refreshConditionals();
             return;
         }
         el[msg.property] = msg.value;
@@ -293,6 +392,15 @@
     function applyInputUpdate(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
+
+        /* A server-driven update is a value change like any other, so
+           conditional panels keyed on this input must see it. The
+           server already synced its own copy. */
+        if (msg.selected !== undefined) {
+            noteInput(msg.id, msg.selected);
+        } else if (msg.value !== undefined) {
+            noteInput(msg.id, el.type === "checkbox" ? !!msg.value : msg.value);
+        }
 
         if (el.classList && el.classList.contains("g-radio-group")) {
             applyRadioUpdate(el, msg);
@@ -493,6 +601,7 @@
            accepted and ignored so Shiny-shaped code ports as-is. */
         setInputValue: function (id, value, opts) {
             void opts;
+            noteInput(id, value);
             send({ type: "input", id: id, value: value });
         },
         /* Register a handler for send_custom_message(). Registering
@@ -514,6 +623,11 @@
         var root = document.getElementById("glinty-root");
         if (!root) return;
         bindEvents(root);
+        /* Seed inputValues and settle conditional panels before the
+           socket work starts, so the page never flashes content that
+           its condition says to hide. */
+        harvestInputs();
+        refreshConditionals();
         connect();
     });
 })();

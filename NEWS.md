@@ -1,5 +1,12 @@
 # glinty (development version)
 
+- password_input() and verbatim_output().
+- tabset()/tab_panel(): client-side tab switching. Hidden panels keep
+  their DOM, so inputs inside them keep their values. With an id the
+  tabset is also an input carrying the open tab's title.
+- conditional_panel() with input_is(), cond_and(), cond_or() and
+  cond_not(): show and hide content without rebuilding it, so nested
+  inputs survive. No JavaScript expression and no eval().
 - JavaScript bridge: window.Glinty exposes setInputValue(),
   addCustomMessageHandler() and sessionId(). Calls made before the
   socket opens queue and flush on connect. A glinty:connected event
