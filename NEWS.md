@@ -1,5 +1,16 @@
-# glinty (development version)
+# glinty 0.4.0
 
+Everything an app needs beyond the reactive core: app-supplied
+assets, a two-way JavaScript bridge, and the widgets Shiny users
+reach for first. Driven by porting two real Shiny apps onto glinty,
+so every addition below is a wall one of them hit.
+
+- Native parity for the new set is explicit: verbatim_output() and
+  conditional_panel() render natively (the condition is evaluated
+  server-side against the same inputs), and tabset, password_input,
+  download_button and modal_button fail fast by name rather than
+  drawing something wrong. Modals, progress and custom messages are
+  inert natively.
 - show_modal()/remove_modal()/modal_button(): dialogs built from tag
   trees, mounted inside the app root so inputs in them bind normally.
 - with_progress()/inc_progress()/set_progress(): progress bars that
