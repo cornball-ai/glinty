@@ -31,6 +31,23 @@ update_input_msg <- function(id, fields) {
     as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
 }
 
+#' Create a custom message
+#'
+#' The server-to-app-JavaScript channel: the client looks up handler
+#' among those registered with Glinty.addCustomMessageHandler() and
+#' calls it with value.
+#'
+#' @param handler character handler name
+#' @param value the payload, serialized as JSON
+#' @return character JSON string
+#' @keywords internal
+custom_msg <- function(handler, value) {
+    as.character(jsonlite::toJSON(
+                                  list(type = "custom", handler = handler, value = value),
+                                  auto_unbox = TRUE, null = "null"
+        ))
+}
+
 #' Create an error message
 #'
 #' @param id character output ID, or NULL for session-level errors
@@ -101,13 +118,19 @@ dispatch_client_message <- function(session, txt) {
 #' Normalize a JSON-decoded input value
 #'
 #' fromJSON(simplifyVector = FALSE) leaves arrays as lists (e.g.
-#' multi-select values); collapse homogeneous lists to vectors.
+#' multi-select values); collapse homogeneous ones to vectors.
+#'
+#' Only *unnamed* lists collapse. A JSON object decodes to a named
+#' list, and unlisting one would throw away the names and coerce
+#' mixed types to a single mode -- exactly the wrong thing for an
+#' object-valued input like Glinty.setInputValue("clip", {data: ...,
+#' size: ...}), which arrives as a named list instead.
 #'
 #' @param value a decoded JSON value
 #' @return an R value suitable for a reactive_val
 #' @keywords internal
 normalize_value <- function(value) {
-    if (is.list(value)) {
+    if (is.list(value) && is.null(names(value))) {
         atomic <- all(vapply(value, function(v) {
             is.atomic(v) && length(v) == 1L
         }, logical(1L)))

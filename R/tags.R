@@ -9,12 +9,21 @@
 #' @param children list of child tags
 #' @param text character text content (takes precedence over children)
 #' @param attrs named list of HTML attributes
-#' @param bind list with event and target fields for JS event binding
+#' @param bind list with event and target fields for JS event
+#'   binding, plus an optional value field. A click bind with a value
+#'   sets the input to that value instead of bumping an
+#'   action-button counter, which is how one delegated handler
+#'   serves a list of rows: every row targets the same input and
+#'   reports which one was clicked.
 #' @return A tag list with class "glinty_tag"
 #' @examples
 #' tag("input",
 #'     attrs = list(id = "col", type = "color"),
 #'     bind = list(event = "input", target = "col"))
+#'
+#' # a clickable row reporting its own id
+#' tag("div", text = "Entry 3",
+#'     bind = list(event = "click", target = "row_click", value = "id-3"))
 #' @export
 tag <- function(name, children = list(), text = NULL, attrs = list(),
                 bind = NULL) {
@@ -69,9 +78,16 @@ tag_to_html <- function(x) {
 
     # Add data attributes for event binding
     if (!is.null(x$bind)) {
-        attr_parts <- c(attr_parts,
-                        paste0('data-g-event="', x$bind$event, '"'),
-                        paste0('data-g-target="', x$bind$target, '"'))
+        attr_parts <- c(
+                        attr_parts,
+                        paste0('data-g-event="', html_escape(x$bind$event), '"'),
+                        paste0('data-g-target="', html_escape(x$bind$target), '"')
+        )
+        if (!is.null(x$bind$value)) {
+            attr_parts <- c(attr_parts,
+                            paste0('data-g-value="',
+                                   html_escape(as.character(x$bind$value)), '"'))
+        }
     }
 
     attr_str <- if (length(attr_parts) > 0) {
