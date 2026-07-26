@@ -65,7 +65,17 @@ calling them (`input$x()` instead of `input$x`).
 | `invalidateLater(1000)` | `invalidate_later(1000)` |
 | `input$x` | `input$x()` |
 | `output$y <- renderText({ ... })` | `output$y <- render_text(function() ...)` |
-| `renderUI` / `htmlOutput` | `render_html()` / `html_output()` |
+| `renderUI` / `uiOutput` | `render_ui()` / `ui_output()` |
+| `htmlOutput` | `html_output()` (browser-only escape hatch) |
+| `verbatimTextOutput` | `verbatim_output()` |
+| `passwordInput` | `password_input()` |
+| `conditionalPanel("input.x == 'a'")` | `conditional_panel(condition = input_is("x", "a"))` |
+| `navset_tab` / `nav_panel` | `tabset()` / `tab_panel()` |
+| `showModal(modalDialog(...))` | `show_modal(session, ...)` |
+| `withProgress` / `incProgress` | `with_progress()` / `inc_progress()` |
+| `downloadButton` / `downloadHandler` | `download_button()` / `download_handler()` |
+| `session$sendCustomMessage` | `send_custom_message()` |
+| `Shiny.setInputValue` | `Glinty.setInputValue` |
 | `renderTable` | `render_table()` (data.frame in, escaped table out) |
 | `renderPlot` | `render_plot()` (base graphics, fixed size) |
 | `textInput("x", "Label")` | `text_input("x", "Label")` |
@@ -106,13 +116,25 @@ draws natively through flitR's image op.
 
 The supported widget set covers text, headings, `text_input`,
 `textarea_input`, `number_input`, `select_input`, `button`,
-`checkbox_input`, `slider_input`, `text_output`, `table_output`
-(drawn as a native grid), and `plot_output`; the remaining
-browser-only widgets (radio, date, file, `html_output`, audio) fail
-fast with a named list. Native sessions seed inputs from widget
-defaults, mirroring the browser's init harvest. Don't
-`library(flitR)` alongside glinty (both export `app`, `text`, and
-friends); `run_app_native()` only needs it installed.
+`checkbox_input`, `slider_input`, `text_output`, `verbatim_output`,
+`table_output` (drawn as a native grid), and `plot_output`.
+`conditional_panel()` works too: its condition is evaluated
+server-side against the same inputs the browser would use, so both
+frontends agree on what shows.
+
+Everything else is browser-only and **fails fast with a named list**
+rather than rendering something wrong: `radio_buttons`, `date_input`,
+`file_input`, `password_input`, `html_output`, `audio_output`,
+`tabset`, `download_button`, `modal_button`. `password_input` is
+refused on purpose — flitR cannot mask characters, so drawing it as a
+plain field would put the secret on screen. Modals, progress bars and
+`send_custom_message()` are silently inert natively, since they have
+no native counterpart to get wrong.
+
+Native sessions seed inputs from widget defaults, mirroring the
+browser's init harvest. Don't `library(flitR)` alongside glinty (both
+export `app`, `text`, and friends); `run_app_native()` only needs it
+installed.
 
 Layout carries across frontends too: `row(...)` and `column(...)`
 map to flexbox in the browser and flitR's row/column natively (note

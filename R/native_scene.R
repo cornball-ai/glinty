@@ -81,7 +81,17 @@ translate_tag <- function(tg, session, values, unsupported) {
         }
         return(flitR::text(0, 0, tag_text(tg), size = 14))
     }
+    if (name == "pre" && identical(cls, "g-verbatim-output")) {
+        return(flitR::text(0, 0, native_value(values, tg$attrs$id), size = 13))
+    }
     if (name == "a") {
+        # A download link has no native counterpart, and drawing it as
+        # ordinary blue text would be a button that silently does
+        # nothing. Say so instead.
+        if (!is.null(tg$attrs[["data-g-download"]])) {
+            unsupported$tags <- c(unsupported$tags, "download_button")
+            return(NULL)
+        }
         return(flitR::text(0, 0, tag_text(tg), size = 14, color = "#2456D6"))
     }
     if (name == "label") {
@@ -90,6 +100,14 @@ translate_tag <- function(tg, session, values, unsupported) {
             return(NULL)
         }
         return(flitR::text(0, 0, txt, size = 12, color = "#666666"))
+    }
+    if (name == "button" && !is.null(tg$attrs[["data-g-modal-close"]])) {
+        unsupported$tags <- c(unsupported$tags, "modal_button")
+        return(NULL)
+    }
+    if (name == "button" && !is.null(tg$attrs[["data-g-tab-panel"]])) {
+        unsupported$tags <- c(unsupported$tags, "tabset")
+        return(NULL)
     }
     if (name == "button" && !is.null(tg$bind)) {
         id <- tg$bind$target
@@ -126,6 +144,28 @@ translate_tag <- function(tg, session, values, unsupported) {
                 flitR::column
             }
             return(do.call(layout_fn, c(items, list(gap = gap))))
+        }
+        if (identical(cls, "g-tabset")) {
+            # Panels are all present in the tree, so stacking them
+            # would silently show every tab at once. Native tabs need
+            # their own selection state; until then, say so.
+            unsupported$tags <- c(unsupported$tags, "tabset")
+            return(NULL)
+        }
+        if (identical(cls, "g-conditional")) {
+            # Evaluated server-side against the same inputs the client
+            # would use, so the two frontends agree on what shows.
+            # flitR's dirty flag rebuilds the scene on any state
+            # write, so the panel re-evaluates when an input changes.
+            cond <- tag_condition(tg)
+            if (is.null(cond) || !eval_condition(cond, session)) {
+                return(NULL)
+            }
+            items <- translate_tags(tg$children, session, values, unsupported)
+            if (length(items) == 0L) {
+                return(NULL)
+            }
+            return(do.call(flitR::column, c(items, list(gap = 4))))
         }
         if (identical(cls, "g-radio-group")) {
             unsupported$tags <- c(unsupported$tags, "radio_buttons")
@@ -294,8 +334,12 @@ translate_input <- function(tg, session, unsupported) {
             handle_input(session, id, v)
         }))
     }
+    # A password field is deliberately not mapped to flitR's plain
+    # input: flitR cannot mask characters, so rendering it as one
+    # would put the secret on screen. Failing is the safer answer.
     kind <- switch(type, "date" = "date_input", "file" = "file_input",
-                   "radio" = "radio_buttons", paste0("input[type=", type, "]"))
+                   "radio" = "radio_buttons", "password" = "password_input",
+                   paste0("input[type=", type, "]"))
     unsupported$tags <- c(unsupported$tags, kind)
     NULL
 }

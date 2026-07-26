@@ -149,3 +149,73 @@ check_conditions <- function(args, fn) {
 condition_json <- function(condition) {
     as.character(jsonlite::toJSON(unclass(condition), auto_unbox = TRUE))
 }
+
+#' Evaluate a condition against a session's inputs
+#'
+#' The R-side twin of the client's interpreter, used by the native
+#' backend, which has no JavaScript to run the browser one. The two
+#' must agree, so the matching rule is the same: logicals compare by
+#' truthiness, everything else by string, and an input that was never
+#' set matches nothing.
+#'
+#' @param cond a decoded condition list (from condition_json)
+#' @param session a glinty_session
+#' @return logical
+#' @keywords internal
+eval_condition <- function(cond, session) {
+    if (!is.list(cond) || is.null(cond$op)) {
+        return(FALSE)
+    }
+    if (identical(cond$op, "is")) {
+        val <- isolate(session$input[[cond$id]]())
+        if (is.null(val)) {
+            return(FALSE)
+        }
+        return(condition_matches(val, cond$values))
+    }
+    if (identical(cond$op, "and")) {
+        return(all(vapply(cond$args, eval_condition, logical(1L),
+                          session = session)))
+    }
+    if (identical(cond$op, "or")) {
+        return(any(vapply(cond$args, eval_condition, logical(1L),
+                          session = session)))
+    }
+    if (identical(cond$op, "not")) {
+        return(!eval_condition(cond$arg, session))
+    }
+    FALSE
+}
+
+#' Test one input value against a condition's candidates
+#'
+#' @param actual the input's current value
+#' @param wanted list or vector of candidate values
+#' @return logical
+#' @keywords internal
+condition_matches <- function(actual, wanted) {
+    for (w in wanted) {
+        if (is.logical(w) || is.logical(actual)) {
+            if (isTRUE(as.logical(actual)[[1L]]) == isTRUE(as.logical(w))) {
+                return(TRUE)
+            }
+        } else if (identical(as.character(actual)[[1L]], as.character(w))) {
+            return(TRUE)
+        }
+    }
+    FALSE
+}
+
+#' Read a conditional panel's condition off its tag
+#'
+#' @param tg a glinty_tag
+#' @return a decoded condition list, or NULL when absent or malformed
+#' @keywords internal
+tag_condition <- function(tg) {
+    raw <- tg$attrs[["data-g-cond"]]
+    if (is.null(raw)) {
+        return(NULL)
+    }
+    tryCatch(jsonlite::fromJSON(raw, simplifyVector = FALSE),
+             error = function(e) NULL)
+}
