@@ -53,8 +53,7 @@ tabset <- function(..., id = NULL, selected = NULL) {
     }
     ok <- vapply(panels, inherits, logical(1L), what = "glinty_tab_panel")
     if (!all(ok)) {
-        stop("tabset() children must all be tab_panel() objects",
-             call. = FALSE)
+        stop("tabset() children must all be tab_panel() objects", call. = FALSE)
     }
 
     titles <- vapply(panels, function(p) p$title, character(1L))
@@ -107,10 +106,8 @@ tabset <- function(..., id = NULL, selected = NULL) {
         "div",
         attrs = set_attrs,
         children = list(
-                        tag("div", children = buttons,
-                            attrs = list(class = "g-tab-nav")),
-                        tag("div", children = bodies,
-                            attrs = list(class = "g-tab-bodies"))
+                        tag("div", children = buttons, attrs = list(class = "g-tab-nav")),
+                        tag("div", children = bodies, attrs = list(class = "g-tab-bodies"))
         )
     )
 }

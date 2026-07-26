@@ -82,7 +82,8 @@ input_is <- function(id, values) {
 #' cond_and(input_is("backend", "qwen3"), input_is("use_voice_design", TRUE))
 #' @export
 cond_and <- function(...) {
-    new_condition(list(op = "and", args = check_conditions(list(...), "cond_and")))
+    new_condition(list(op = "and",
+                       args = check_conditions(list(...), "cond_and")))
 }
 
 #' Combine conditions with logical or
@@ -96,7 +97,8 @@ cond_and <- function(...) {
 #' cond_or(input_is("backend", "openai"), input_is("expert_mode", TRUE))
 #' @export
 cond_or <- function(...) {
-    new_condition(list(op = "or", args = check_conditions(list(...), "cond_or")))
+    new_condition(list(op = "or",
+                       args = check_conditions(list(...), "cond_or")))
 }
 
 #' Negate a condition
