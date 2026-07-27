@@ -155,7 +155,13 @@ class GlintyView extends StatelessWidget {
         GlintyRenderer(
           onInput: s.sendInput,
           onEvent: s.sendEvent,
-          onTicket: s.requestTicket,
+          // Only when the connection can actually deliver one. A
+          // download button wired to a ticket request whose grant
+          // has nowhere to go is the same lie as an InkWell with an
+          // empty onTap; the renderer disables it when this is null.
+          onTicket: (conn == null || conn.onDownload != null)
+              ? s.requestTicket
+              : null,
           onLink: conn?.onLink,
           values: s.values,
           inputs: s.inputs,

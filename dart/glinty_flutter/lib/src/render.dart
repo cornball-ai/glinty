@@ -405,6 +405,27 @@ class GlintyRenderer {
     // selection: rebuilding one from a fresh TextEditingController
     // every frame drops the caret and (with any latency at all) the
     // characters typed since the last frame.
+    // A number field has bounds and a step, and Flutter has no
+    // spinner to spend them on -- but they are what the server just
+    // told the user, so they are shown rather than stored and
+    // ignored. Nothing is clamped: silently rewriting what someone
+    // typed is worse than letting the server reject it.
+    String? helper;
+    if (numeric) {
+      final min = _numField(c, 'min');
+      final max = _numField(c, 'max');
+      final step = _numField(c, 'step');
+      final parts = [
+        if (min != null && max != null)
+          '$min to $max'
+        else if (min != null)
+          'at least $min'
+        else if (max != null)
+          'at most $max',
+        if (step != null) 'step $step',
+      ];
+      if (parts.isNotEmpty) helper = parts.join(', ');
+    }
     return _GlintyTextField(
       key: Key(id),
       value: _value(id, c.str('value') ?? '')?.toString() ?? '',
@@ -413,6 +434,7 @@ class GlintyRenderer {
       numeric: numeric,
       label: _label(c),
       hint: c.str('placeholder'),
+      helper: helper,
       // This is where `emit` is spent, and the only place that knows
       // Flutter calls these onChanged and onSubmitted.
       onChanged: emit == GlintyEmit.live ? report : null,
@@ -471,7 +493,10 @@ class GlintyRenderer {
   Widget _radios(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     // RadioGroup replaced per-tile groupValue/onChanged in 3.32.
-    return RadioGroup<String>(
+    return _labelled(
+        context,
+        c,
+        RadioGroup<String>(
       groupValue: _value(id, c.str('selected'))?.toString(),
       onChanged: (v) {
         if (v != null) onInput?.call(id, v);
@@ -485,7 +510,8 @@ class GlintyRenderer {
                   title: Text(ch.label),
                 ))
             .toList(),
-      ));
+      ),
+        ));
   }
 
   Widget _slider(BuildContext context, GlintyComponent c) {
@@ -652,6 +678,7 @@ class _GlintyTextField extends StatefulWidget {
     required this.numeric,
     this.label,
     this.hint,
+    this.helper,
     this.onChanged,
     this.onSubmitted,
   });
@@ -662,6 +689,7 @@ class _GlintyTextField extends StatefulWidget {
   final bool numeric;
   final String? label;
   final String? hint;
+  final String? helper;
   final void Function(String)? onChanged;
   final void Function(String)? onSubmitted;
 
@@ -736,6 +764,7 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         decoration: InputDecoration(
           labelText: widget.label,
           hintText: widget.hint,
+          helperText: widget.helper,
         ),
         onChanged: widget.onChanged,
         onSubmitted: widget.onSubmitted,

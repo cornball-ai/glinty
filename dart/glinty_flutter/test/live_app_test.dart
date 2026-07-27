@@ -86,6 +86,7 @@ Map<String, dynamic> welcome({bool? resumed, String revision = 'r1'}) => {
 
 void main() {
   _round3();
+  _round4();
   testWidgets('a tap redraws the app without a server frame',
       (tester) async {
     late FakeSocket socket;
@@ -502,35 +503,51 @@ void _round3() {
     expect(asked, 1);
   });
 
-  testWidgets('a disconnect before welcome does not kill the retry',
-      (tester) async {
+  test('a disconnect before welcome does not kill the replacement',
+      () async {
+    // Driven through GlintyConnection so the timeout is ours to set:
+    // an earlier version of this test advanced past the REPLACEMENT
+    // socket's own deadline too, so it passed by welcoming whatever
+    // third socket the retry had made. The assertion has to be about
+    // one identified socket surviving, not about "the last one".
+    // The retry delay deliberately dominates the timeout, so the two
+    // deadlines cannot overlap: the dead socket's timer would fire
+    // at t=100, well before the replacement is even created at
+    // t=300, and its own deadline at t=400.
     final sockets = <FakeSocket>[];
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: GlintyApp(
-          url: Uri.parse('ws://x/ws'),
-          open: (_) async {
-            final s = FakeSocket();
-            sockets.add(s);
-            return s;
-          },
-        ),
-      ),
-    ));
-    await tester.pump();
+    final conn = GlintyConnection(
+      url: Uri.parse('ws://x/ws'),
+      welcomeTimeout: const Duration(milliseconds: 100),
+      retryBase: const Duration(milliseconds: 300),
+      retryCap: const Duration(milliseconds: 300),
+      open: (_) async {
+        final s = FakeSocket();
+        sockets.add(s);
+        return s;
+      },
+    );
+    await conn.start();
+    expect(sockets, hasLength(1));
+
     // dropped before it ever answered hello
-    sockets.last.drop();
-    await tester.pump(const Duration(seconds: 1));
-    expect(sockets, hasLength(2));
+    sockets.first.drop();
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    expect(sockets, hasLength(2), reason: 'one retry, one socket');
+    final replacement = sockets[1];
 
-    // the dead socket's welcome timer must not fire into this one
-    await tester.pump(const Duration(seconds: 16));
-    sockets.last.deliver(welcome());
-    await tester.pumpAndSettle();
+    // t=350: the stale timer's moment (t=100) has passed. If it were
+    // still armed it would have run _onClosed a second time, spent
+    // another retry and opened another socket.
+    expect(sockets, hasLength(2),
+        reason: "the dead socket's timer would have forced an extra "
+            'retry');
+    expect(replacement.closed, isFalse);
 
-    expect(find.text('Name:'), findsOneWidget,
-        reason: "the first socket's timeout would have torn this "
-            'handshake down');
+    replacement.deliver(welcome());
+    await Future<void>.delayed(Duration.zero);
+    expect(conn.state, GlintyConnectionState.live);
+    expect(conn.session.ui, isNotNull);
+    conn.dispose();
   });
 
   test('adopting a cached tree still seeds its inputs', () {
@@ -562,3 +579,135 @@ Map<String, dynamic> welcomeSlider() => {
       'ui_revision': 'rs',
       'ui': sliderTree,
     };
+
+// --- Codex round 4: tested through the app, not around it ---
+
+void _round4() {
+  testWidgets('a download button in a real app with no onDownload is dead',
+      (tester) async {
+    late FakeSocket socket;
+    Widget app({void Function(Uri)? onDownload}) => MaterialApp(
+          home: Scaffold(
+            body: GlintyApp(
+              url: Uri.parse('ws://x/ws'),
+              onDownload: onDownload,
+              open: (_) async => socket = FakeSocket(),
+            ),
+          ),
+        );
+
+    // The previous test built a GlintyRenderer by hand, which never
+    // exercised the wiring GlintyView does -- and GlintyView handed
+    // it a ticket sink unconditionally.
+    await tester.pumpWidget(app());
+    await tester.pump();
+    socket.deliver(welcomeDownload());
+    await tester.pumpAndSettle();
+
+    expect(
+        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull,
+        reason: 'a grant with nowhere to go must not be requestable');
+    await tester.tap(find.byType(ElevatedButton), warnIfMissed: false);
+    await tester.pump();
+    expect(socket.sent.where((m) => m['type'] == 'ticket'), isEmpty);
+
+    await tester.pumpWidget(app(onDownload: (u) {}));
+    await tester.pump();
+    socket.deliver(welcomeDownload());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(ElevatedButton));
+    await tester.pump();
+    expect(socket.sent.where((m) => m['type'] == 'ticket'), hasLength(1));
+  });
+
+  testWidgets('a radio group shows its label, and relabels', (tester) async {
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcomeRadio());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mode:'), findsOneWidget);
+
+    socket.deliver({'type': 'input_update', 'id': 'mode',
+      'label': 'Strategy:', 'selected': 'b'});
+    await tester.pumpAndSettle();
+
+    expect(find.text('Strategy:'), findsOneWidget);
+    expect(find.text('Mode:'), findsNothing);
+    final group =
+        tester.widget<RadioGroup<String>>(find.byType(RadioGroup<String>));
+    expect(group.groupValue, 'b');
+  });
+
+  testWidgets('a number field shows the bounds the server pushed',
+      (tester) async {
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcomeNumber());
+    await tester.pumpAndSettle();
+
+    expect(find.text('1.0 to 10.0'), findsOneWidget);
+
+    socket.deliver({'type': 'input_update', 'id': 'k',
+      'min': 1, 'max': 100, 'step': 5});
+    await tester.pumpAndSettle();
+
+    expect(find.text('1.0 to 100.0, step 5.0'), findsOneWidget,
+        reason: 'bounds stored and never shown are bounds the user '
+            'is not told about');
+  });
+}
+
+final downloadTree = {
+  'component': 'page',
+  'children': [
+    {'component': 'download_button', 'id': 'report', 'label': 'Save',
+      'variant': 'default'},
+  ],
+};
+final radioTree = {
+  'component': 'page',
+  'children': [
+    {'component': 'radio_buttons', 'id': 'mode', 'label': 'Mode:',
+      'selected': 'a', 'emit': 'settle', 'choices': [
+        {'value': 'a', 'label': 'A'},
+        {'value': 'b', 'label': 'B'},
+      ]},
+  ],
+};
+final numberTree = {
+  'component': 'page',
+  'children': [
+    {'component': 'number_input', 'id': 'k', 'label': 'K:',
+      'value': 3, 'min': 1, 'max': 10, 'emit': 'live'},
+  ],
+};
+
+Map<String, dynamic> _welcomeOf(Object tree, String rev) => {
+      'type': 'welcome',
+      'session': 's1',
+      'protocol': 3,
+      'ui_revision': rev,
+      'ui': tree,
+    };
+
+Map<String, dynamic> welcomeDownload() => _welcomeOf(downloadTree, 'rd');
+Map<String, dynamic> welcomeRadio() => _welcomeOf(radioTree, 'rr');
+Map<String, dynamic> welcomeNumber() => _welcomeOf(numberTree, 'rn');
