@@ -315,8 +315,13 @@ html_slider <- function(x) {
 }
 
 html_file <- function(x) {
-    attrs <- list(id = x$id, type = "file", class = "g-file",
-                  multiple = if (isTRUE(x$multiple)) "multiple" else NULL)
+    # Declares itself like every other input, plus data-g-upload to mark
+    # that its value arrives over HTTP rather than the socket. Without
+    # the shared attributes it was an input the client had no way to
+    # recognise as one.
+    attrs <- c(html_bind(x),
+               list(type = "file", class = "g-file",
+                    multiple = if (isTRUE(x$multiple)) "multiple" else NULL))
     attrs[["data-g-upload"]] <- x$id
     if (!is.null(x$accept)) {
         attrs$accept <- paste(x$accept, collapse = ",")

@@ -1,8 +1,8 @@
 # Shared component fixtures.
 #
-# One set of trees that every lowering must handle. The browser and
-# flitR are asserted against these in stage 1; a Dart client is
-# asserted against the same list at stage 6.
+# One set of trees that every lowering must handle. The browser is
+# asserted against these here; the Flutter client is asserted against
+# the same file in cornball-ai/glinty-dart.
 #
 # The point is not coverage for its own sake. It is that a component
 # only counts as frontend-neutral once more than one lowering has had
@@ -90,7 +90,7 @@ component_fixtures <- function() {
               component = component("panel", variant = "card",
                                     title = "Results",
                                     children = list(component("text", value = "body"))),
-              notes = "a titled container; the browser draws a header, flitR may not"
+              notes = "a titled container; the browser draws a header, Flutter a Card"
         ),
          list(
               name = "empty-column",
@@ -116,12 +116,12 @@ component_fixtures <- function() {
          list(
               name = "audio-output",
               component = component("audio_output", id = "player"),
-              notes = "browser has a player element; flitR must refuse by name"
+              notes = "browser has a player element; Flutter needs a package outside the SDK"
         ),
          list(
               name = "text-input",
               component = component("text_input", id = "name", label = "Name:"),
-              notes = "emit defaults to live; the browser debounces, flitR cannot"
+              notes = "emit defaults to live; browser debounces, Flutter uses onChanged"
         ),
          list(
               name = "select-input",
@@ -133,7 +133,7 @@ component_fixtures <- function() {
               name = "slider-input",
               component = component("slider_input", id = "speed", min = 0.5,
                                     max = 2, value = 1, step = 0.1),
-              notes = "numbers, not CSS strings, so a frontend can compute with them"
+              notes = "numbers, not CSS strings: Flutter derives Slider divisions from step"
         ),
          list(
               name = "button-primary",
@@ -156,7 +156,7 @@ component_fixtures <- function() {
                          children = list(component("verbatim_output",
                                 id = "raw")))
                 )),
-              notes = "Flutter retains hidden panel state; flitR never emits it"
+              notes = "Flutter and the browser both retain hidden panel state"
         ),
          list(
               name = "conditional-panel",

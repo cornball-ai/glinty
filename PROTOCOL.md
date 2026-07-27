@@ -165,18 +165,11 @@ convention. A field that cannot be expressed cannot leak.
 
 ### The Flutter column
 
-Every component names the Flutter widget it is expected to lower to.
-This is a paper check, and it is the one that actually points at the
-target.
+Every component names the Flutter widget it lowers to. This started
+as a paper check; cornball-ai/glinty-dart now executes it against the
+same fixture file, so the table below is a summary of behaviour
+rather than an intention.
 
-flitR cannot serve that purpose. It is a **falsifier, not a
-validator**: where it cannot lower something the component is probably
-DOM-shaped, which is how `gap` became a number and `spacer` became
-theme units. But flitR is more primitive than the DOM in the opposite
-direction from Flutter — absolutely-positioned draw ops with layout
-computed in R, versus a framework that owns layout, retains widget
-state, and has its own focus and text models. **flitR disagreeing is a
-signal; flitR agreeing is not a clearance.**
 
 | component | Flutter | note |
 |---|---|---|
@@ -199,14 +192,14 @@ signal; flitR agreeing is not a clearance.**
 | `date_input` | `showDatePicker` | a dialog, not an inline field |
 | `file_input` | `file_picker` package | not in the SDK |
 | `button` | `FilledButton` etc. | variant selects the constructor |
-| `tabset` | `TabBar` + `TabBarView` | retains child state, unlike flitR |
+| `tabset` | `TabBar` + `TabBarView` | both retain hidden child state |
 
-Three of those already flag real work, none of which flitR would have
-surfaced: `select_input(multiple = TRUE)` has no single Flutter
-widget, `date_input` is a dialog rather than an inline control, and
-`file_input` needs a package outside the SDK. `icon` needs a
-name-to-`IconData` map that has to exist somewhere.
+Three of those flagged real work before any Dart existed, and all
+three still hold: `select_input(multiple = TRUE)` has no single
+Flutter widget, `date_input` is a dialog rather than an inline
+control, and `file_input` needs a package outside the SDK.
 
+`icon` needed a name-to-`IconData` map, which glinty-dart now has.
 None are blocking. All are cheaper to know now than after the
 vocabulary is frozen.
 
@@ -456,9 +449,9 @@ make it slower.
 
 ## Staging
 
-1. **Component representation.** Builders emit components. Two
-   lowerings land together: component -> DOM in the browser client,
-   and component -> flitR ops in `native_scene.R`.
+1. **Component representation.** Builders emit components; the browser
+   client lowers them to DOM. The Flutter client in glinty-dart
+   lowers the same trees to widgets.
 2. **Bootstrap over the wire.** `welcome` carries the tree; the
    browser keeps pre-rendering and hydrates against `ui_revision`.
 3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
@@ -467,39 +460,27 @@ make it slower.
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Dart client, in its own repo.
 
-### flitR is retrofitted in stage 1, on a strict leash
+### flitR is retired, not retrofitted
 
-Two lowerings land together: component → DOM, and component → flitR
-ops. flitR is a cheap, already-working second frontend, and its only
-job here is to expose DOM-shaped mistakes in the vocabulary while they
-are still free to fix. Finding them from Dart — across a repo
-boundary, a language barrier and a frozen spec — is not free.
+An earlier draft had flitR retrofitted alongside the browser in stage
+1, as a falsifier: a cheap second lowering to catch DOM-shaped
+mistakes before Dart existed to catch them properly.
 
-Do not overclaim what it buys. flitR catches **browser bias**, not
-Flutter readiness — see "The Flutter column". It is a falsifier, and
-nothing about its shape may be allowed back into the schema. flitR has
-no live/settle distinction and therefore cannot honour `emit`; `emit`
-stays regardless, because Flutter's `onChanged` and
-`onEditingComplete` need it.
+**Dart exists now.** cornball-ai/glinty-dart renders every fixture as
+real Flutter widgets, in the framework the protocol was designed for.
+Keeping a proxy once you have the thing it stood in for is just a
+third lowering to maintain, and Flutter desktop covers Linux, macOS
+and Windows with real widgets, real text input and an accessibility
+tree flitR cannot offer.
 
-The scope is deliberately narrow:
+So there are two lowerings, not three: component → DOM here, and
+component → Flutter widgets in glinty-dart. `run_app_native()` and
+`native_scene.R` stay on protocol 2 and stop working when stage 1
+switches the builders over. flitR is archived.
 
-- **Direct lowering only.** No bridge through legacy tag trees. A
-  bridge would validate the DOM model twice and prove nothing, since
-  every component would have already been squeezed through an
-  HTML-shaped intermediate before flitR saw it.
-- **Only flitR's current subset.** Whatever renders natively today
-  keeps rendering. Nothing more.
-- **No new flitR widgets**, and no chasing glinty's feature set.
-- **Unsupported components stay explicit** — named failure or a
-  visible placeholder, never an approximation.
-- **Shared fixtures.** One set of component trees, both lowerings
-  asserted against it. That is the artifact that makes the check real
-  rather than aspirational, and it is the same mechanism stage 6 uses
-  for Dart.
-
-This is what freezing flitR means in practice: **feature freeze, not
-breakage.** It stops growing; it does not stop working.
+The falsifier reasoning was right while Dart was hypothetical. It
+stopped being right the moment the Flutter SDK was installed, which
+is a good reason to change a decision rather than a bad one.
 
 ### The spec stays draft until two clients agree
 

@@ -127,7 +127,7 @@
     },
     {
       "name": "panel-card",
-      "notes": "a titled container; the browser draws a header, flitR may not",
+      "notes": "a titled container; the browser draws a header, Flutter a Card",
       "component": {
         "component": "panel",
         "children": [
@@ -180,7 +180,7 @@
     },
     {
       "name": "audio-output",
-      "notes": "browser has a player element; flitR must refuse by name",
+      "notes": "browser has a player element; Flutter needs a package outside the SDK",
       "component": {
         "component": "audio_output",
         "id": "player",
@@ -190,7 +190,7 @@
     },
     {
       "name": "text-input",
-      "notes": "emit defaults to live; the browser debounces, flitR cannot",
+      "notes": "emit defaults to live; browser debounces, Flutter uses onChanged",
       "component": {
         "component": "text_input",
         "id": "name",
@@ -222,7 +222,7 @@
     },
     {
       "name": "slider-input",
-      "notes": "numbers, not CSS strings, so a frontend can compute with them",
+      "notes": "numbers, not CSS strings: Flutter derives Slider divisions from step",
       "component": {
         "component": "slider_input",
         "id": "speed",
@@ -256,7 +256,7 @@
     },
     {
       "name": "tabset",
-      "notes": "Flutter retains hidden panel state; flitR never emits it",
+      "notes": "Flutter and the browser both retain hidden panel state",
       "component": {
         "component": "tabset",
         "id": "tabs",
