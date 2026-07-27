@@ -65,8 +65,20 @@ jobs:
           sudo apt-get install -y /tmp/rapt/rapt_*.deb
           Rscript -e 'print(rapt::manager())'
 
+      # Read from DESCRIPTION rather than a hardcoded list: a
+      # hardcoded one drifts the moment a dependency is added, and
+      # then fails here as a missing-package error that looks like a
+      # CI bug rather than the omission it is.
       - name: Dependencies (install.packages -> rapt -> apt -> r2u)
-        run: Rscript -e 'install.packages(c("digest", "jsonlite", "tinytest"))'
+        run: |
+          Rscript -e '
+            d <- read.dcf("DESCRIPTION", c("Depends", "Imports", "Suggests"))
+            pkgs <- trimws(unlist(strsplit(
+              gsub("\\s*\\([^)]*\\)", "", d[!is.na(d)]), ",")))
+            pkgs <- setdiff(pkgs, c("R", "", rownames(installed.packages())))
+            cat("installing:", paste(pkgs, collapse = ", "), "\n")
+            if (length(pkgs)) install.packages(pkgs)
+          '
 
       - name: Build and check
         run: |
