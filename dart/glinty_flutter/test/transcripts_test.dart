@@ -471,6 +471,25 @@ void main() {
           reason: 'no token, no field');
     });
 
+    testWidgets('a refused connection is visible, not a spinner',
+        (tester) async {
+      final s = GlintySession(token: 'expired.or.wrong');
+      s.hello();
+      s.receive(serverFrame('hello-refused', 'error'));
+
+      expect(s.refused, isTrue);
+      expect(s.ui, isNull);
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      expect(s.sessionId, isNull,
+          reason: 'nothing after a refusal is meaningful');
+
+      await tester.pumpWidget(
+          MaterialApp(home: Scaffold(body: GlintyView(session: s))));
+      expect(find.text('Connection refused'), findsOneWidget);
+      expect(find.textContaining('authentication failed'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
     test('a ticket request matches the transcript, and the grant lands',
         () {
       final t = transcript('ticket-grant');

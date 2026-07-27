@@ -222,6 +222,15 @@ f <- read_frame()
 expect_equal(f$opcode, 8L)
 close(con)
 
+# --- 8b. a first frame that is not a hello is refused outright ---
+con <- ws_handshake()
+writeBin(text_frame('{"type":"input","id":"x","value":1}', mask = TRUE),
+    con)
+msg <- next_json()
+expect_equal(msg$type, "error")
+expect_true(grepl("hello", msg$message))
+close(con)
+
 # --- 9. resume with a bogus id gets an honest resumed=false ---
 con <- ws_handshake()
 writeBin(text_frame(
@@ -325,6 +334,7 @@ writeLines(c(
         "run_app(a, port = %dL, quiet = TRUE,\n",
         "        auth = function(token) {\n",
         '            if (identical(token, "letmein")) list(id = "u_42")\n',
+        '            else if (identical(token, "letmein2")) list(id = "u_43")\n',
         "        })"), auth_port)
 ), auth_script)
 system2(file.path(R.home("bin"), "Rscript"),
@@ -425,10 +435,39 @@ writeBin(text_frame(
     mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$type, "welcome")
+a_sid <- msg$session
 msg <- next_json()
 expect_equal(msg$type, "output")
 expect_equal(msg$id, "who")
 expect_equal(msg$value, "u_42")
+# cut the socket so user A's session detaches with state to steal
+close(con)
+Sys.sleep(0.5)
+
+# resume is principal-bound: user B's valid token plus user A's
+# session id gets a fresh session, never A's replay
+con <- ws_handshake_auth()
+writeBin(text_frame(sprintf(
+    paste0('{"type":"hello","protocol":3,"client":"e2e/1",',
+           '"token":"letmein2","resume":"%s"}'), a_sid),
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$type, "welcome")
+expect_false(msg$resumed)
+expect_true(msg$session != a_sid)
+close(con)
+Sys.sleep(0.3)
+
+# while A's own refreshed token resumes A's session
+con <- ws_handshake_auth()
+writeBin(text_frame(sprintf(
+    paste0('{"type":"hello","protocol":3,"client":"e2e/1",',
+           '"token":"letmein","resume":"%s"}'), a_sid),
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$type, "welcome")
+expect_true(msg$resumed)
+expect_equal(msg$session, a_sid)
 close(con)
 
 kill_auth()

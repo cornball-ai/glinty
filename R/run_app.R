@@ -178,6 +178,13 @@ run_app <- function(app_obj, port = NULL, auth = NULL, static_dir = "www",
         }
         first <- tryCatch(jsonlite::fromJSON(txt, simplifyVector = FALSE),
                           error = function(e) NULL)
+        # The first frame must be a well-formed hello before anything
+        # else happens: no verifier run, no session created, for a
+        # frame that is not the opening the protocol defines.
+        if (!well_formed_hello(first)) {
+            refuse_conn(sid, "expected a protocol 3 hello")
+            return(invisible(NULL))
+        }
         # The gate sits before any session exists, resume included: a
         # token that no longer verifies does not get its old session
         # back.
@@ -186,22 +193,22 @@ run_app <- function(app_obj, port = NULL, auth = NULL, static_dir = "www",
             refuse_conn(sid, "authentication failed")
             return(invisible(NULL))
         }
-        resume_id <- if (!is.null(first) && identical(first$type, "hello")) {
-            first$resume
-        } else {
-            NULL
-        }
+        resume_id <- first$resume
         if (is.character(resume_id) && nzchar(resume_id)) {
             old <- .globals$sessions[[resume_id]]
+            # Resume is principal-bound: a valid token for user B
+            # plus user A's session id must not replay A's outputs.
             if (!is.null(old) && isTRUE(old$detached) &&
+                     resume_allowed(old, gate$principal, auth) &&
                      transport_rebind(sid, resume_id)) {
                 old$principal <- gate$principal
                 resume_session(old)
                 # the reconnecting client redeclares its capabilities
                 dispatch_client_message(old, txt)
             } else {
-                # unknown or expired: honest fresh session; the
-                # client reloads since its DOM holds dead state
+                # unknown, expired, or someone else's: honest fresh
+                # session; the client reloads since its DOM holds
+                # dead state
                 s <- start_session(sid, resumed = FALSE,
                                    principal = gate$principal)
                 dispatch_client_message(s, txt)

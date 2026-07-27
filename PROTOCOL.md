@@ -479,12 +479,26 @@ frictionless.
 A refused hello (verifier returned NULL, or threw — failing open on
 an exception would make a bug in the verifier a bypass of it) gets
 one id-less `error` frame naming the reason, and the socket closes.
-Clients draw that refusal; the browser shows it the way it shows a
-protocol mismatch. The gate sits before any session exists, resume
-included: a token that no longer verifies does not get its old
-session back. In the browser, an app script sets
-`window.GLINTY_AUTH` to the token its login flow produced before
-`DOMContentLoaded`, and hello carries it.
+Every client draws that refusal the way it draws a protocol
+mismatch. The gate sits before any session exists, resume included:
+a token that no longer verifies does not get its old session back.
+In the browser, an app script sets `window.GLINTY_AUTH` to the token
+its login flow produced before `DOMContentLoaded`, and hello carries
+it.
+
+The first frame on a socket must be a well-formed `hello` (type and
+a numeric protocol). Anything else is refused the same way, before
+the verifier runs and before any session exists.
+
+**Resume is principal-bound.** Authentication ties a session to an
+identity, and resume honours the tie: the freshly verified
+principal's `id` must be non-NULL and identical to the session's.
+A valid token for user B plus user A's session id gets B a fresh
+session, never A's replayed outputs. A verifier that returns
+principals without `id`s gives resume nothing to bind to, so
+authenticated resume is refused for them rather than cross-linked.
+Without auth configured there is no identity to bind, and the
+session id alone remains the documented, weak resume credential.
 
 That shape is deliberately format-agnostic, because the account model
 it has to serve is still a draft. It is not, however, meant to leave
@@ -533,6 +547,13 @@ and a store it can consult beats cryptography it could get wrong.
 Signing would buy verification by a process that did not mint the
 ticket, which is not this architecture. (An earlier draft said
 "signed"; this is the honest replacement.)
+
+Tokens are bearer credentials, so they come from a real CSPRNG
+(openssl when present, the kernel's /dev/urandom otherwise) — hashed
+process state is unique, not unpredictable. Session ids get the same
+source, for the same reason. The store is bounded: live tickets are
+capped per session even inside the TTL window, and a request at the
+cap is dropped rather than granted.
 
 ### Binding and TLS
 

@@ -13,14 +13,30 @@
 
 #' Issue a transfer ticket for one resource
 #'
+#' Bounded per session even within the TTL: pruning expired tickets
+#' does not stop a client minting thousands inside one TTL window,
+#' and no real page runs dozens of simultaneous transfers. At the cap
+#' the request is dropped; a legitimate client retries after its
+#' in-flight transfers finish.
+#'
 #' @param session a glinty_session
 #' @param id character resource id (an input id for uploads, a
 #'   download id for downloads)
 #' @param purpose "upload" or "download"
-#' @return list(token, expires) where expires is the TTL in seconds
+#' @return list(token, expires) where expires is the TTL in seconds,
+#'   or NULL at the session's live-ticket cap
 #' @keywords internal
 issue_ticket <- function(session, id, purpose) {
     prune_tickets()
+    live <- 0L
+    for (tk in ls(.globals$tickets, all.names = TRUE)) {
+        if (identical(.globals$tickets[[tk]]$session_id, session$id)) {
+            live <- live + 1L
+        }
+    }
+    if (live >= 64L) {
+        return(NULL)
+    }
     ttl <- getOption("glinty.ticket_ttl", 30)
     token <- new_ticket_token()
     .globals$tickets[[token]] <- list(session_id = session$id, id = id,
@@ -80,22 +96,45 @@ prune_tickets <- function() {
     invisible(NULL)
 }
 
-#' Mint an unguessable ticket token
+#' Mint a ticket token
 #'
-#' Same recipe as session ids: process, clock, counter and a
-#' tempfile name through sha1. Unguessable at the "seconds-lived,
-#' single-use, LAN tool" scope this serves.
+#' A ticket is a bearer credential, so the token comes from a real
+#' CSPRNG, never from hashed process state a peer could reconstruct.
 #'
 #' @return character token
 #' @keywords internal
 new_ticket_token <- function() {
-    if (is.null(.globals$ticket_counter)) {
-        .globals$ticket_counter <- 0L
+    paste0("tk_", raw_to_hex(random_bytes(16L)))
+}
+
+#' Cryptographically random bytes
+#'
+#' openssl's CSPRNG when the package is present, the kernel's
+#' /dev/urandom otherwise -- which covers every platform glinty
+#' serves from. A platform with neither gets an error naming the fix
+#' rather than silently weaker credentials.
+#'
+#' @param n integer byte count
+#' @return raw vector of length n
+#' @keywords internal
+random_bytes <- function(n) {
+    if (requireNamespace("openssl", quietly = TRUE)) {
+        return(openssl::rand_bytes(n))
     }
-    .globals$ticket_counter <- .globals$ticket_counter + 1L
-    material <- paste("ticket", Sys.getpid(),
-                      sprintf("%.9f", as.numeric(Sys.time())),
-                      .globals$ticket_counter, tempfile(), sep = "|")
-    paste0("tk_", substr(digest::digest(material, algo = "sha1",
-                                        serialize = FALSE), 1L, 32L))
+    if (file.exists("/dev/urandom")) {
+        con <- file("/dev/urandom", open = "rb", raw = TRUE)
+        on.exit(close(con))
+        return(readBin(con, "raw", n))
+    }
+    stop("no cryptographic randomness source; install the openssl ",
+         "package", call. = FALSE)
+}
+
+#' Lowercase hex of a raw vector
+#'
+#' @param x raw vector
+#' @return character
+#' @keywords internal
+raw_to_hex <- function(x) {
+    paste(sprintf("%02x", as.integer(x)), collapse = "")
 }

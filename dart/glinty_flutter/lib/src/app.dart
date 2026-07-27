@@ -21,6 +21,11 @@ class GlintyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final err = session.error;
     if (err != null) return GlintyProtocolErrorView(error: err);
+    final refusal = session.refusalMessage;
+    if (refusal != null) {
+      return GlintyRefusalView(
+          title: 'Connection refused', message: refusal);
+    }
 
     final ui = session.ui;
     if (ui == null) return const Center(child: CircularProgressIndicator());
@@ -52,6 +57,22 @@ class GlintyProtocolErrorView extends StatelessWidget {
   final GlintyProtocolError error;
 
   @override
+  Widget build(BuildContext context) => GlintyRefusalView(
+      title: 'Incompatible glinty server', message: error.message);
+}
+
+/// Any fatal refusal, drawn: protocol mismatch, authentication, or
+/// whatever the server named. Replaces the content rather than
+/// sitting on top of it, because there is no content this client can
+/// be trusted to show.
+class GlintyRefusalView extends StatelessWidget {
+  const GlintyRefusalView(
+      {super.key, required this.title, required this.message});
+
+  final String title;
+  final String message;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
@@ -64,15 +85,14 @@ class GlintyProtocolErrorView extends StatelessWidget {
           Icon(Icons.error_outline, color: scheme.onErrorContainer, size: 32),
           const SizedBox(height: 12),
           Text(
-            'Incompatible glinty server',
+            title,
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
                 ?.copyWith(color: scheme.onErrorContainer),
           ),
           const SizedBox(height: 8),
-          Text(error.message,
-              style: TextStyle(color: scheme.onErrorContainer)),
+          Text(message, style: TextStyle(color: scheme.onErrorContainer)),
         ],
       ),
     );

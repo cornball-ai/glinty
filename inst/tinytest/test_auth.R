@@ -158,6 +158,72 @@ for (nm in names(old)) {
     }
 }
 
+# --- the first frame must be a well-formed hello ---
+well_formed_hello <- glinty:::well_formed_hello
+expect_true(well_formed_hello(list(type = "hello", protocol = 3L)))
+expect_true(well_formed_hello(list(type = "hello", protocol = 3,
+                                   token = "x", resume = "y")))
+expect_false(well_formed_hello(NULL))
+expect_false(well_formed_hello(list(type = "init", inputs = list())))
+expect_false(well_formed_hello(list(type = "hello")))
+expect_false(well_formed_hello(list(type = "hello", protocol = "three")))
+expect_false(well_formed_hello("hello"))
+
+# --- resume is principal-bound under auth ---
+resume_allowed <- glinty:::resume_allowed
+old <- new.env()
+old$principal <- list(id = "u_1", email = "a@x")
+same <- list(id = "u_1", exp = 999)
+other <- list(id = "u_2")
+anon <- list(email = "no-id@x")
+verifier <- function(token) NULL
+# without auth there is no identity to bind: session id remains the
+# (documented, weak) resume credential
+expect_true(resume_allowed(old, NULL, NULL))
+# with auth, only the same identity resumes -- a valid token for
+# user B plus user A's session id must not replay A's outputs
+expect_true(resume_allowed(old, same, verifier))
+expect_false(resume_allowed(old, other, verifier))
+# principals without ids give resume nothing to bind to: refuse
+expect_false(resume_allowed(old, anon, verifier))
+anon_old <- new.env()
+anon_old$principal <- list(email = "no-id@x")
+expect_false(resume_allowed(anon_old, same, verifier))
+
+# --- ticket tokens come from a CSPRNG and never repeat ---
+random_bytes <- glinty:::random_bytes
+b <- random_bytes(16L)
+expect_true(is.raw(b) && length(b) == 16L)
+expect_false(identical(random_bytes(16L), random_bytes(16L)))
+toks <- replicate(200L, glinty:::new_ticket_token())
+expect_equal(anyDuplicated(toks), 0L)
+expect_true(all(grepl("^tk_[0-9a-f]{32}$", toks)))
+
+# --- live tickets are capped per session, within the TTL ---
+sc <- glinty:::new_session("cap1")
+sc2 <- glinty:::new_session("cap2")
+issue_ticket <- glinty:::issue_ticket
+granted <- 0L
+for (i in seq_len(80L)) {
+    if (!is.null(issue_ticket(sc, paste0("r", i), "upload"))) {
+        granted <- granted + 1L
+    }
+}
+expect_equal(granted, 64L)
+# the cap is per session: another session still mints
+expect_false(is.null(issue_ticket(sc2, "r", "upload")))
+# and redemption frees a slot
+tks <- ls(getFromNamespace(".globals", "glinty")$tickets,
+          all.names = TRUE)
+mine <- Filter(function(tk) {
+    identical(getFromNamespace(".globals", "glinty")$tickets[[tk]]$session_id,
+              "cap1")
+}, tks)
+glinty:::redeem_ticket(mine[[1L]], "upload")
+expect_false(is.null(issue_ticket(sc, "again", "upload")))
+glinty:::session_end(sc)
+glinty:::session_end(sc2)
+
 # --- run_app validates auth ---
 a <- app(ui = page(txt("x"), title = "T"),
          server = function(input, output) NULL)

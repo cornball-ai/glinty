@@ -10,6 +10,24 @@ patch. See PROTOCOL.md.
 
 Stage 5, authentication and deployment surface:
 
+- Resume is principal-bound under auth: the re-verified principal's
+  `id` must match the detached session's, so a valid token for user
+  B plus user A's session id gets B a fresh session, never A's
+  replayed outputs. Verifiers that return principals without ids
+  give resume nothing to bind to and authenticated resume is refused
+  for them.
+- Ticket tokens and session ids come from a real CSPRNG (openssl
+  when present, /dev/urandom otherwise) -- hashed process state is
+  unique, not unpredictable, and both are bearer credentials. Live
+  tickets are capped per session even within the TTL, so rapid
+  requests cannot grow memory.
+- The first frame on a socket must be a well-formed `hello`;
+  anything else is refused before authentication runs or a session
+  exists.
+- A refused connection is visible in Flutter too
+  (`GlintyRefusalView`), and the shared transcripts carry the
+  refusal exchange all three clients replay.
+
 - New: `run_app(auth = )` takes a verifier for the opaque token a
   client sends in `hello`; its return becomes `session$principal`,
   NULL refuses the connection with one visible error frame and a

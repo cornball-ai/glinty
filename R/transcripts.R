@@ -114,6 +114,26 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "hello-refused",
+              notes = paste("a hello whose token the verifier rejected:",
+                            "one id-less error frame naming the reason,",
+                            "then the server closes the socket. Every",
+                            "client draws this; a refusal nobody sees is",
+                            "the failure mode the visible-refusal rule",
+                            "exists to prevent"),
+              frames = list(
+                            list(dir = "in", message = list(
+                        type = "hello", protocol = PROTOCOL_VERSION,
+                        client = "glinty-js/0.5.0",
+                        token = "expired.or.wrong"
+                    )),
+                            list(dir = "out", message = list(
+                        type = "error", id = NULL,
+                        message = "authentication failed"
+                    ))
+            )
+        ),
+         list(
               name = "ticket-grant",
               notes = paste("a transfer credential: the client asks over",
                             "the socket, the grant is scoped to one session,",

@@ -164,6 +164,29 @@
       ]
     },
     {
+      "name": "hello-refused",
+      "notes": "a hello whose token the verifier rejected: one id-less error frame naming the reason, then the server closes the socket. Every client draws this; a refusal nobody sees is the failure mode the visible-refusal rule exists to prevent",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "hello",
+            "protocol": 3,
+            "client": "glinty-js/0.5.0",
+            "token": "expired.or.wrong"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "error",
+            "id": null,
+            "message": "authentication failed"
+          }
+        }
+      ]
+    },
+    {
       "name": "ticket-grant",
       "notes": "a transfer credential: the client asks over the socket, the grant is scoped to one session, one resource, one purpose, and expires seconds (relative TTL) later. Single use: redeeming it consumes it, success or not",
       "frames": [

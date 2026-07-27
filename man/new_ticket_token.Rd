@@ -1,7 +1,7 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{new_ticket_token}
 \alias{new_ticket_token}
-\title{Mint an unguessable ticket token}
+\title{Mint a ticket token}
 \usage{
 new_ticket_token()
 }
@@ -9,8 +9,7 @@ new_ticket_token()
 character token
 }
 \description{
-Same recipe as session ids: process, clock, counter and a
-tempfile name through sha1. Unguessable at the "seconds-lived,
-single-use, LAN tool" scope this serves.
+A ticket is a bearer credential, so the token comes from a real
+CSPRNG, never from hashed process state a peer could reconstruct.
 }
 \keyword{internal}

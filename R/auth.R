@@ -142,6 +142,47 @@ authenticate_hello <- function(auth, msg) {
     list(ok = !is.null(principal), principal = principal)
 }
 
+#' Is this first frame a hello worth authenticating?
+#'
+#' The first frame must be a well-formed hello before anything else
+#' happens -- before the verifier runs, before a session exists.
+#' Anything else is refused outright, which also gives a protocol 2
+#' client's init frame an answer instead of a silently dead app.
+#'
+#' @param msg decoded first frame, or NULL when it failed to parse
+#' @return logical
+#' @keywords internal
+well_formed_hello <- function(msg) {
+    is.list(msg) && identical(msg$type, "hello") &&
+    length(msg$protocol) == 1L && is.numeric(msg$protocol)
+}
+
+#' May this principal resume that session?
+#'
+#' Authentication binds a session to an identity, and resume must
+#' honour the binding: holding a valid token for user B plus user A's
+#' session id must not replay A's outputs. The stable identity is
+#' principal$id (jwt_auth() puts sub there); a verifier that returns
+#' principals without ids gives resume nothing to bind to, so an
+#' authenticated resume is refused rather than cross-linked.
+#'
+#' Without auth configured there is no identity to bind: the session
+#' id alone remains the (documented, weak) resume credential.
+#'
+#' @param old the detached glinty_session
+#' @param principal the freshly verified principal
+#' @param auth the configured verifier, or NULL
+#' @return logical
+#' @keywords internal
+resume_allowed <- function(old, principal, auth) {
+    if (is.null(auth)) {
+        return(TRUE)
+    }
+    old_id <- old$principal$id
+    new_id <- principal$id
+    !is.null(old_id) && !is.null(new_id) && identical(old_id, new_id)
+}
+
 #' Decode one base64url segment
 #'
 #' @param x character segment

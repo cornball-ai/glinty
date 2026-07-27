@@ -197,7 +197,12 @@ dispatch_client_message <- function(session, txt) {
             nzchar(msg$id) && is.character(msg$purpose) &&
             msg$purpose %in% c("upload", "download")) {
             t <- issue_ticket(session, msg$id, msg$purpose)
-            session$send(ticket_msg(msg$id, msg$purpose, t$token, t$expires))
+            # NULL at the live-ticket cap: the request is dropped and
+            # a legitimate client retries once transfers finish
+            if (!is.null(t)) {
+                session$send(ticket_msg(msg$id, msg$purpose, t$token,
+                                        t$expires))
+            }
         }
     } else {
         session$send(error_msg(NULL,

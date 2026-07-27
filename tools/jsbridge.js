@@ -1281,9 +1281,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         bare.ws().open();
         check("no token, no field", !("token" in bare.sent[0]));
 
-        /* a refused connection says so on screen and goes quiet */
-        bare.ws().deliver({ type: "error", id: null,
-                            message: "authentication failed" });
+        /* a refused connection says so on screen and goes quiet --
+           replayed from the shared transcript, same as Dart */
+        bare.ws().deliver(frames(transcript("hello-refused"), "out")[0]);
         const box = bare.document.getElementById("g-protocol-error");
         check("the refusal is visible",
               box !== null &&

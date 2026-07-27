@@ -93,6 +93,14 @@ class GlintySession {
   Map<String, dynamic>? theme;
 
   GlintyProtocolError? error;
+
+  /// The server's reason for refusing this connection (an id-less
+  /// error before any welcome -- authentication, most likely), or
+  /// null. A refusal nobody sees is the failure mode the
+  /// visible-refusal rule exists to prevent, so [GlintyView] draws
+  /// it the way it draws a protocol mismatch.
+  String? refusalMessage;
+
   GlintyTreeSource source = GlintyTreeSource.none;
 
   /// Every frame this client has sent, in order. The record is the
@@ -110,10 +118,10 @@ class GlintySession {
       <String, Map<String, dynamic>>{};
 
   /// The tree to render, or null when there is nothing to draw yet.
-  GlintyComponent? get ui => error == null ? _ui : null;
+  GlintyComponent? get ui => refused ? null : _ui;
 
   /// True once the server has spoken a protocol we cannot read.
-  bool get refused => error != null;
+  bool get refused => error != null || refusalMessage != null;
 
   /// The opening frame: what this client can draw.
   ///
@@ -140,7 +148,7 @@ class GlintySession {
 
   /// Handle one server frame.
   void receive(Map<String, dynamic> msg) {
-    if (error != null) return; // refused; nothing further is meaningful
+    if (refused) return; // nothing after a refusal is meaningful
     switch (msg['type']) {
       case 'welcome':
         _welcome(msg);
@@ -155,7 +163,14 @@ class GlintySession {
         }
       case 'error':
         final id = msg['id'];
-        if (id is String) values[id] = null;
+        if (id is String) {
+          values[id] = null;
+        } else if (sessionId == null) {
+          // a refused connection: the server says why once and
+          // closes; nothing after it is meaningful
+          refusalMessage =
+              msg['message']?.toString() ?? 'connection refused';
+        }
       default:
         // Unknown message types are ignored on purpose: the protocol
         // grows by adding them, and a client that throws here cannot
