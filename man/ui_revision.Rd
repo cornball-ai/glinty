@@ -14,8 +14,14 @@ character lowercase hex sha256
 \description{
 Sent in `welcome` and embedded in any pre-rendered document, so a
 client can tell whether markup it was handed describes the tree it
-has just been sent. Canonical means the serializer that produces
-the wire form, so the hash is over exactly the bytes a client
-parses.
+has just been sent.
+}
+\details{
+The value is opaque to clients: they compare it for string
+equality and never compute, parse, or shape-check it. The hash
+algorithm and the canonical serialization (the same one that
+produces the wire form) bind this server alone, which is what
+keeps R's JSON habits out of every other language.
+
 }
 \keyword{internal}

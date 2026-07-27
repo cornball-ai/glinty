@@ -47,7 +47,7 @@ is a translation of the other.
 |---|---|---|
 | `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
 | `input` | `id`, `value` | an input changed |
-| `event` | `id`, `kind`, `value?` | a click or other discrete event |
+| `event` | `id` | a button press or other discrete event |
 | `measure` | `id`, `width`, `height` | a client-sized output's rendered box |
 | `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
 | `ack` | `seq` | optional flow control, reserved |
@@ -78,13 +78,21 @@ A transport **may** deliver the tree ahead of time as an
 optimisation. The browser keeps server-rendering the initial markup
 into the HTTP response and adopts it when `welcome` arrives.
 
-`ui_revision` is **the SHA-256 of the canonical JSON serialization of
-`welcome.ui`**, lowercase hex. The server computes it once, embeds it
+`ui_revision` is **opaque to clients**: a token to compare for string
+equality against the one in the pre-rendered document, nothing more.
+A client never computes it, parses it, or checks its shape --
+reproducing the server's serialization in a second language is
+exactly the kind of cross-language agreement this protocol exists to
+avoid needing.
+
+Server-side it is the SHA-256 of the canonical JSON serialization of
+`welcome.ui`, lowercase hex. The server computes it once, embeds it
 in the pre-rendered document as
 `<meta name="g-ui-revision" content="...">`, and repeats it in
 `welcome`. Canonical means the same serializer that produces the wire
 form: field order as the schema declares, absent optionals omitted,
-no insignificant whitespace.
+no insignificant whitespace. All of that binds the server alone; a
+future server could switch algorithms without any client noticing.
 
 Hydration has four invariants. They exist because the failure modes
 are silent, and each is asserted rather than assumed:
@@ -97,7 +105,9 @@ are silent, and each is asserted rather than assumed:
    A hydrating client sends nothing on adoption -- the server built
    the tree and already knows every default. Protocol 2 harvested
    inputs at init; v3 must not, or every reload writes the whole
-   form back.
+   form back. Measurements of client-sized outputs are the one thing
+   a client still reports after adopting, because a rendered box is
+   the one thing the server cannot know from the tree.
 3. **A revision mismatch rebuilds.** If the meta tag and `welcome`
    disagree, the pre-render is from a different tree: discard it and
    build from `welcome`. Patching a stale DOM is how a hydration bug
@@ -510,6 +520,11 @@ make it slower.
    browser keeps pre-rendering and hydrates against `ui_revision`.
    The four hydration invariants become browser tests here; the
    Flutter half of them is already asserted against the transcripts.
+   **Gate:** stage 2 is not complete until the two browser-side
+   hydration tests exist and pass -- one press producing one frame
+   across adoption, and adoption emitting nothing. They are the two
+   invariants Flutter cannot stand in for, because only the browser
+   adopts pre-rendered markup.
 3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
    `..clientdata_output_*` reserved inputs.
 4. **Theme and variants.**

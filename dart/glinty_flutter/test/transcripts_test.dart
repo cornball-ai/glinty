@@ -92,7 +92,10 @@ void main() {
       expect(s.ui, isNotNull);
       expect(s.ui!.type, 'page');
       expect(s.sessionId, isNotEmpty);
-      expect(s.uiRevision, hasLength(64));
+      // The revision is opaque: present, compared for equality, never
+      // shape-checked. Asserting its length here would teach this
+      // client something the protocol says it must not know.
+      expect(s.uiRevision, isNotEmpty);
       expect(s.source, GlintyTreeSource.rebuilt);
       expect(s.sent.length, before,
           reason: 'invariant 2: receiving a tree emits nothing');
@@ -292,6 +295,14 @@ void main() {
           MaterialApp(home: Scaffold(body: GlintyView(session: s))));
 
       expect(find.text('Hello, Troy'), findsOneWidget);
+    });
+
+    test('an event frame matches the transcript shape', () {
+      final expected = frames(transcript('button-event'), 'in').first;
+      final s = GlintySession();
+      s.sendEvent(expected['id'] as String);
+
+      expect(s.sent.single.body, expected);
     });
 
     test('a measure frame matches the transcript shape', () {

@@ -113,8 +113,9 @@ mis <- by_name("revision-mismatch")
 expect_true(!is.null(mis))
 expect_true(mis$frames[[1L]]$message$prerendered !=
                 mis$frames[[2L]]$message$ui_revision)
-# the mismatching value is still a well-formed revision, so a client
-# cannot pass by rejecting it on shape
+# The mismatching value is realistic (revisions are opaque to
+# clients, so a client must not shape-check its way past this case;
+# the fixture being hash-shaped keeps that temptation unrewarded).
 expect_true(grepl("^[0-9a-f]{64}$", mis$frames[[1L]]$message$prerendered))
 
 pm <- by_name("protocol-mismatch")
@@ -131,6 +132,13 @@ expect_true(!is.null(io))
 expect_equal(io$frames[[1L]]$message$type, "input")
 expect_equal(io$frames[[2L]]$message$type, "output")
 expect_true(io$frames[[2L]]$message$kind %in% unlist(glinty:::OUTPUT_KINDS))
+
+ev <- by_name("button-event")
+expect_true(!is.null(ev))
+expect_equal(ev$frames[[1L]]$message$type, "event")
+expect_true(is.character(ev$frames[[1L]]$message$id))
+# an event carries no value field at all
+expect_null(ev$frames[[1L]]$message$value)
 
 ms <- by_name("measure-then-image")
 expect_true(!is.null(ms))

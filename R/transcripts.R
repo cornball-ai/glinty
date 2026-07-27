@@ -12,9 +12,13 @@
 #'
 #' Sent in `welcome` and embedded in any pre-rendered document, so a
 #' client can tell whether markup it was handed describes the tree it
-#' has just been sent. Canonical means the serializer that produces
-#' the wire form, so the hash is over exactly the bytes a client
-#' parses.
+#' has just been sent.
+#'
+#' The value is opaque to clients: they compare it for string
+#' equality and never compute, parse, or shape-check it. The hash
+#' algorithm and the canonical serialization (the same one that
+#' produces the wire form) bind this server alone, which is what
+#' keeps R's JSON habits out of every other language.
 #'
 #' @param ui a page component
 #' @return character lowercase hex sha256
@@ -131,6 +135,21 @@ wire_transcripts <- function() {
                             list(dir = "out", message = list(
                         type = "output", id = "greeting", kind = "text",
                         value = "Hello, Troy"
+                    ))
+            )
+        ),
+         list(
+              name = "button-event",
+              notes = paste("a button press; an event carries no value",
+                            "because there is no state the server keeps,",
+                            "only the fact that it happened"),
+              frames = list(
+                            list(dir = "in", message = list(
+                        type = "event", id = "go"
+                    )),
+                            list(dir = "out", message = list(
+                        type = "output", id = "count", kind = "text",
+                        value = "1"
                     ))
             )
         ),
