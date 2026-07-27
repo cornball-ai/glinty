@@ -33,13 +33,28 @@ double glintySpacing(Map<String, dynamic>? theme) {
   return v is num && v >= 0 ? v.toDouble() : 4;
 }
 
+/// Font tokens that name a platform role rather than a family. CSS
+/// resolves these itself; Flutter has no registry for them, so they
+/// mean "use the platform's own" here -- passing one through as a
+/// fontFamily would silently miss and land on the default *sans*
+/// face, which for the mono token is exactly wrong.
+const _genericFonts = <String>{
+  'system-ui', 'sans-serif', 'serif', 'monospace',
+  'ui-monospace', 'ui-sans-serif', 'ui-serif',
+};
+
+String? _familyOrNull(dynamic v) {
+  if (v is! String || v.isEmpty || _genericFonts.contains(v)) return null;
+  return v;
+}
+
 /// The theme's mono font family, for verbatim output. Null when the
-/// theme (or the token) is absent: the renderer's platform monospace
-/// applies then.
+/// theme is absent or the token names a generic role: the renderer's
+/// platform monospace applies then. A custom family only takes
+/// effect if the app bundled that font asset.
 String? glintyMonoFamily(Map<String, dynamic>? theme) {
   final font = theme?['font'];
-  final v = font is Map ? font['mono'] : null;
-  return v is String && v.isNotEmpty ? v : null;
+  return _familyOrNull(font is Map ? font['mono'] : null);
 }
 
 /// Build ThemeData from a welcome's theme tokens.
@@ -81,7 +96,7 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
   return ThemeData(
     colorScheme: scheme,
     scaffoldBackgroundColor: background,
-    fontFamily: font['body'] is String ? font['body'] as String : null,
+    fontFamily: _familyOrNull(font['body']),
     cardTheme: shape == null ? null : CardThemeData(shape: shape),
     filledButtonTheme: shape == null
         ? null
@@ -94,6 +109,11 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
         ? null
         : OutlinedButtonThemeData(
             style: OutlinedButton.styleFrom(shape: shape)),
+    // ghost buttons are TextButtons; without this they were the one
+    // family the radius token missed
+    textButtonTheme: shape == null
+        ? null
+        : TextButtonThemeData(style: TextButton.styleFrom(shape: shape)),
     textTheme: size == null
         ? null
         // Partial: unset styles keep the typography defaults.

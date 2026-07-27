@@ -79,9 +79,17 @@ app_theme <- function(colors = list(), spacing = NULL, radius = NULL,
     check_named_subset(font, c("body", "mono", "size"), "font")
     for (nm in intersect(names(font), c("body", "mono"))) {
         val <- font[[nm]]
-        if (!is.character(val) || length(val) != 1L || !nzchar(val)) {
+        # One family name (or a CSS generic like system-ui), and
+        # nothing that could carry CSS syntax: these tokens are
+        # interpolated into the served style block, so the character
+        # set is the injection surface. The client refuses the same
+        # characters, and validating here keeps the first paint and
+        # the hydrated state identical.
+        if (!is.character(val) || length(val) != 1L || !nzchar(val) ||
+                !grepl("^[A-Za-z0-9][A-Za-z0-9 _-]*$", val)) {
             stop("app_theme() font$", nm,
-                 " must be a font family name", call. = FALSE)
+                 " must be a single font family name ",
+                 "(letters, digits, spaces, hyphens)", call. = FALSE)
         }
         base$font[[nm]] <- val
     }

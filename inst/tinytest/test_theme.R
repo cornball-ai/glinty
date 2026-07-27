@@ -30,6 +30,16 @@ expect_error(app_theme(spacing = 1000), "spacing")
 expect_error(app_theme(font = list(face = "x")), "unknown token")
 expect_error(app_theme(font = list(size = 2)), "size")
 expect_error(app_theme(font = list(body = 12)), "font family")
+# font tokens are interpolated into the served style block, so the
+# character set is the injection surface: one family name, no syntax
+expect_error(app_theme(font = list(body = "x;--g-primary:#ff0000")),
+             "font family")
+expect_error(app_theme(font = list(mono = "a}body{display:none")),
+             "font family")
+expect_error(app_theme(font = list(body = "Inter, sans-serif")),
+             "font family")
+expect_equal(app_theme(font = list(body = "JetBrains Mono"))$font$body,
+             "JetBrains Mono")
 # an eight-digit hex (alpha) is allowed
 expect_equal(app_theme(colors = list(border = "#d0d0d580"))$colors$border,
              "#d0d0d580")

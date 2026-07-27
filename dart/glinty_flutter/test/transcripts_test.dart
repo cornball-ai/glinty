@@ -160,6 +160,23 @@ void main() {
           'JetBrains Mono');
       expect(glintyMonoFamily({'font': {'body': 'Inter'}}), isNull);
       expect(glintyMonoFamily(null), isNull);
+
+      // ghost buttons are TextButtons -- the one family radius missed
+      expect(data.textButtonTheme.style?.shape?.resolve({}),
+          isA<RoundedRectangleBorder>());
+    });
+
+    test('CSS generic font roles mean the platform default here', () {
+      // Passing ui-monospace through as a Flutter fontFamily would
+      // miss silently and land verbatim text on the default *sans*
+      // face; a generic role means "the platform's own".
+      expect(glintyMonoFamily({'font': {'mono': 'ui-monospace'}}), isNull);
+      expect(glintyMonoFamily({'font': {'mono': 'monospace'}}), isNull);
+      final data = glintyThemeData({
+        'font': {'body': 'system-ui', 'mono': 'ui-monospace'}
+      });
+      expect(data.textTheme.bodyMedium?.fontFamily,
+          isNot('system-ui'));
     });
 
     test('spacing zero is a unit, not an absence', () {
