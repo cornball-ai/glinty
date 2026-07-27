@@ -67,9 +67,20 @@ the server sent the tree, so it already knows the defaults.
 | `custom` | `handler`, `value` | app-defined channel |
 | `error` | `id?`, `message` | render error, scoped to an output |
 
-The page served over HTTP becomes a shell: charset, viewport, title,
-the client script, and a mount point. No app markup. Everything else
-arrives in `welcome`.
+`welcome.ui` is **canonical**. Every client can rely on receiving the
+tree there, and a client that ignores everything else is correct.
+
+A transport **may** additionally deliver the tree ahead of time as an
+optimisation. The browser can keep server-rendering the initial markup
+into the HTTP response and hydrate it when `welcome` arrives, matching
+on a `ui_revision` the server includes in both; a mismatch means the
+client discards the pre-render and builds from `welcome`.
+
+An earlier draft required server-side rendering to be deleted and
+accepted a round-trip regression on first paint. That was conflating
+"the protocol must be able to carry the UI" with "the protocol must be
+the only way the UI arrives." There is no reason to make the browser
+slower to make Dart possible.
 
 ## Components
 
@@ -95,8 +106,15 @@ Layout nests:
 
 ### The set
 
+**Static content**: `text`, `heading`, `link`, `icon`, `divider`,
+`spacer`
+
+These are what `p()`, `span()`, `h1()`–`h4()` and `a()` become. Without
+them the migration is not mechanical, because today's apps are full of
+them.
+
 **Layout**: `page`, `row`, `column`, `panel`, `tabset` / `tab_panel`,
-`conditional_panel`, `spacer`, `divider`
+`conditional_panel`
 
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
 `number_input`, `select_input`, `checkbox_input`, `radio_buttons`,
@@ -106,11 +124,42 @@ Layout nests:
 **Outputs**: `text_output`, `verbatim_output`, `table_output`,
 `plot_output`, `image_output`, `audio_output`, `ui_output`
 
-**Escape hatch**: `raw_html` — what `tag()` now produces. Rendered by
-the browser client, reported unsupported by everyone else. This is the
-deliberate cost of the redesign: arbitrary markup has no Flutter
-equivalent, so anything that must render on both frontends comes from
-the set above.
+**Escape hatch**: `raw_html` — what `tag()` now produces:
+`{"component": "raw_html", "html": "<details>..."}`, a single opaque
+string. Rendered by the browser client, reported unsupported by
+everyone else. This is the deliberate cost of the redesign: arbitrary
+markup has no Flutter equivalent, so anything that must render on both
+frontends comes from the set above.
+
+### Field schemas
+
+Every component has a fixed field set with declared types and
+defaults. Unknown fields are ignored so optional additions stay
+backwards compatible; missing required fields are a client-side error,
+not a silent default.
+
+| component | required | optional |
+|---|---|---|
+| `text` | `value: string` | `variant`, `id` |
+| `heading` | `value: string` | `level: 1..4` (2), `id` |
+| `link` | `value: string`, `href: string` | `external: bool` (false) |
+| `icon` | `name: string` | `size: int` (16) |
+| `divider` | — | `label: string`, `variant` |
+| `spacer` | — | `size: int` (1, in theme spacing units) |
+| `row` / `column` | `children: []` | `gap: int`, `align`, `id` |
+| `panel` | `children: []` | `variant`, `title: string`, `id` |
+| `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
+| `password_input` | `id` | `label`, `placeholder` — **never `value`** |
+| `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
+| `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
+| `button` | `id`, `label` | `variant`, `icon` |
+| `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
+| `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
+| `tabset` | `id`, `panels: [{title, children}]` | `selected` |
+| `conditional_panel` | `condition`, `children: []` | — |
+
+`password_input` has no `value` field **in the schema**, not merely by
+convention. A field that cannot be expressed cannot leak.
 
 ### Output kinds
 
@@ -119,17 +168,45 @@ the set above.
 | kind | value | from |
 |---|---|---|
 | `text` | string | `render_text()` |
-| `verbatim` | string | `render_text()` into a `verbatim_output` |
 | `table` | `{header, rows}` | `render_table()` |
 | `image` | `{src, width, height}` | `render_plot()` |
 | `audio` | `{src, mime, duration?}` | `render_audio()` |
 | `ui` | component tree | `render_ui()` |
 | `html` | string | `render_html()`, browser-only |
 
-`kind` comes from the renderer, not the placeholder, so the client
-never has to infer intent from an element type. Note `image` and
-`audio` carry structure rather than a bare string: a native client
-needs the dimensions and the MIME type that a browser would sniff.
+`kind` describes **the value**, and comes from the renderer. How it is
+displayed belongs to the receiving component.
+
+So there is no `verbatim` kind. `render_text()` always produces
+`text`; `verbatim_output` is the component that chooses to display a
+string in a monospace block, exactly as `text_output` chooses not to.
+An earlier draft had `verbatim` as a kind derived from its placeholder,
+which contradicted the rule this section exists to state.
+
+For the same reason there is no separate `ui` message: `render_ui()`
+is an output like any other, so it travels as `output` with
+`kind: "ui"`. One message type, not two.
+
+`image` and `audio` carry structure rather than a bare string, because
+a native client needs the dimensions and MIME type a browser would
+sniff.
+
+### Client measurement
+
+`plot_output()` with NULL dimensions renders at the size the client
+gives it. Protocol 2 smuggled this through reserved input names
+(`..clientdata_output_<id>_width`), which is DOM-era hackery that a
+native client would have to fake.
+
+v3 makes it a message:
+
+```json
+{"type": "measure", "id": "scatter", "width": 640, "height": 480}
+```
+
+Sent on first layout and on resize, debounced by the client. The
+server exposes it to `render_plot()` and re-renders reactively, same
+as today, without pretending a measurement is an input.
 
 ## Theme
 
@@ -169,43 +246,136 @@ client is free to render `danger` however it likes.
 Unknown variants fall back to the first listed, with a console warning
 rather than an error.
 
-## Capabilities
+## Capability declaration
 
-`hello` carries the component names the client can render:
+Not negotiation. The client states what it can do; the server never
+adapts the wire format in response.
 
 ```json
 {"type": "hello", "protocol": 3, "client": "glinty-js/0.5.0",
- "components": ["text_input", "select_input", "..."]}
+ "components": ["text_input", "select_input", "..."],
+ "kinds": ["text", "table", "image", "audio", "ui", "html"],
+ "features": ["upload", "download", "modal", "progress", "measure"]}
 ```
 
-The server does not negotiate. It exposes the list as
-`session$capabilities` so an app can branch if it wants to, and
-otherwise sends what the app asked for. A client that receives a
-component it cannot render draws a visible placeholder naming it.
+Three lists, not one: a client may render every component and still
+be unable to accept an `html` output kind or perform an upload.
 
-That is deliberately simpler than negotiation, and more honest: the
-failure is visible in the running app rather than silently absent.
+The server exposes them as `session$capabilities`. A client that
+receives something it cannot render draws a visible placeholder naming
+it, rather than omitting it silently.
+
+**A caveat that constrains this more than it first appears:** static
+UI is built before any client connects. `app(ui = ...)` is evaluated
+once, so `session$capabilities` cannot influence it. Only `render_ui()`
+output, which is per-session and reactive, can branch on capabilities.
+
+So capability declaration is useful for dynamic content and for
+diagnostics, and is *not* a mechanism for shipping a different static
+UI to different frontends. An app that needs that writes two `ui`
+functions and picks one at `app()` time.
 
 ## Authentication
 
 Protocol 2 used the session id as the credential, and the README
-called it weak. v3 separates them.
+called it weak. v3 separates identity from session.
 
-`hello` may carry a `token`. `run_app(auth = function(token) ...)`
-gates session creation on it; the default accepts everything, which
-keeps localhost development frictionless. Upload and download
-endpoints are keyed on the token rather than the session id.
+### The seam
 
-**TLS is out of scope for glinty itself.** Base R sockets cannot
-terminate it, and adding `openssl` to Imports is a dependency decision
-against the tinyverse budget. The supported deployment is a reverse
-proxy terminating TLS with glinty bound to loopback. `run_app()`
-should default to loopback and require opting into `0.0.0.0`, which is
-the right default regardless and would have prevented a secret
-exposure on 2026-07-26.
+`hello` may carry an opaque `token`. `run_app(auth = )` takes a
+verifier:
 
-Apple's ATS makes TLS non-negotiable for a mobile client, so this is a
-precondition for the Dart client rather than polish.
+```r
+run_app(app, auth = function(token) {
+    # NULL rejects the connection; anything else becomes the principal
+    list(id = "u_123", email = "troy@cornball.ai")
+})
+```
+
+The return value lands on `session$principal` and is available to the
+app. glinty never parses, stores, or refreshes the token — it holds a
+string, hands it to your function, and keeps what comes back. The
+default verifier accepts everything, so localhost development stays
+frictionless.
+
+That shape is deliberately format-agnostic, because the account model
+it has to serve is still a draft. It is not, however, meant to leave
+you writing a JWT parser.
+
+### The batteries
+
+For the likely case, glinty ships `jwt_auth()`:
+
+```r
+run_app(app, auth = jwt_auth(secret = Sys.getenv("SUPABASE_JWT_SECRET")))
+```
+
+It verifies signature, `exp`, and `aud`, then returns the claims with
+`sub` as `id`. One line, no JWT knowledge required.
+
+Two honest constraints:
+
+- **HS256 is free.** HMAC-SHA256 comes from `digest`, already an
+  Import. No new dependency.
+- **RS256 / JWKS needs `openssl`**, which goes in Suggests, and
+  `jwt_auth()` errors with a clear install message if asked for an
+  asymmetric algorithm without it. Fetching and caching a JWKS is the
+  app's job, not glinty's.
+
+If the account model lands somewhere other than JWTs, the seam is
+unchanged and `jwt_auth()` is simply unused.
+
+### Uploads and downloads
+
+These are plain HTTP, so they cannot ride the WebSocket's
+authentication. Protocol 2 put the session id in the URL, which made
+it a bearer credential in browser history and server logs.
+
+v3 issues a **short-lived signed ticket** per transfer: the server
+mints it over the WebSocket when the client needs one, scoped to one
+session, one resource id, and a few seconds. The bearer token never
+appears in a URL, and a leaked ticket expires before it is useful.
+
+### Binding and TLS
+
+**Neither loopback-only binding nor TLS is implementable in glinty
+itself**, and the spec should not pretend otherwise.
+
+Base R's `serverSocket(port)` takes no bind address and listens on all
+interfaces. There is no argument to pass. A loopback default would
+need native code, another server dependency, or network isolation —
+so "default to loopback" was wrong in the previous draft and is
+withdrawn.
+
+What glinty can do is **say so loudly at startup**, naming the
+interface exposure in the same breath as the URL, rather than burying
+it in `?run_app`.
+
+TLS is the same story: base R sockets cannot terminate it, and
+`openssl` in Imports is a dependency decision against the tinyverse
+budget. The supported deployment is a reverse proxy terminating TLS in
+front of glinty, with the network scoped by firewall or namespace.
+
+Apple's ATS makes TLS non-negotiable for a mobile client, so a
+documented, tested proxy configuration is a precondition for the Dart
+client rather than polish.
+
+## Deployment surface
+
+If glinty apps are scheduled as long-running services — viento models
+exactly this, with `service` jobs, port resources, a health model and
+an authenticated principal — the protocol needs two things it does not
+have:
+
+- **A health endpoint.** `GET /healthz` returning session count and
+  uptime, so a supervisor can distinguish "listening" from "working"
+  without opening a WebSocket.
+- **Port from the environment.** An allocated port arrives at runtime;
+  `run_app()` should read one before falling back to its default
+  rather than requiring the caller to plumb it.
+
+Both are small, and both are much easier to add before a second client
+exists than after.
 
 ## What this costs
 
@@ -223,15 +393,38 @@ precondition for the Dart client rather than polish.
 
 ## Staging
 
-1. Component representation: builders emit components; the browser
-   client lowers them to DOM. Everything else unchanged.
-2. Bootstrap over the wire: the HTTP response becomes a shell,
-   `welcome` carries the tree.
-3. Typed outputs: renderers carry `kind` instead of a DOM property.
-4. Theme and variants.
-5. Auth, loopback default.
-6. Only then: the Dart client, in its own repo, against a frozen spec.
+1. **Component representation.** Builders emit components. Two
+   lowerings land together: component → DOM in the browser client, and
+   component → flitR ops in `native_scene.R`.
+2. **Bootstrap over the wire.** `welcome` carries the tree; the
+   browser keeps pre-rendering and hydrates against `ui_revision`.
+3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
+   `..clientdata_output_*` reserved inputs.
+4. **Theme and variants.**
+5. **Auth, tickets, `/healthz`, port from the environment.**
+6. **Then** the Dart client, in its own repo.
 
-Each stage keeps the browser client working. Stage 6 is the first
-point at which a second frontend is possible, which is the whole
-purpose.
+### flitR is the first consumer, not an afterthought
+
+`run_app_native()` translates tag trees today
+([native_scene.R](R/native_scene.R)), so stage 1 breaks it the moment
+builders stop producing tags. Retrofitting it in the same stage is not
+optional work — it is the only way to find out whether the component
+vocabulary is genuinely frontend-neutral before anyone writes Dart.
+
+Two frontends disagreeing is cheap to fix in R. Discovering the
+disagreement from Dart, across a repo boundary and a language barrier,
+is not.
+
+This does not contradict freezing flitR. Freezing means **not adding
+new widgets** to chase glinty's feature set. Keeping it compiling
+through a refactor of the layer beneath it is maintenance, and it buys
+a design check that would otherwise cost a whole client to obtain.
+
+### The spec stays draft until two clients agree
+
+Freeze after the browser and the Dart MVP both pass shared golden
+fixtures — the same component tree rendering equivalently in each.
+The second implementation always exposes assumptions the first one
+silently satisfied, and a spec frozen before that is a spec frozen
+around the browser's habits.
