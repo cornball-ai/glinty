@@ -1,6 +1,7 @@
 # tinyrox says don't edit this manually, but it can't stop you!
 
 export(app)
+export(app_theme)
 export(audio_output)
 export(button)
 export(checkbox_input)

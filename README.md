@@ -112,6 +112,14 @@ work on every frontend without JavaScript. `tag()` remains for
 browser-only markup, and is trusted HTML: see `?tag` before putting
 anything into it that you did not write.
 
+Styling that should survive the trip to a non-browser frontend goes
+through `app(theme = app_theme(...))`: a closed set of semantic
+tokens (colors, spacing, radius, fonts) that the browser applies as
+CSS custom properties and Flutter maps onto `ThemeData`. Without a
+theme you get each frontend's defaults, including the browser's
+automatic dark mode. App stylesheets still work, and only affect the
+browser.
+
 ## A second frontend (Flutter)
 
 Write a glinty app much like a conventional Shiny app. It runs in

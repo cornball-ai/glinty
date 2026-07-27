@@ -97,6 +97,10 @@ expect_equal(welcome$ui$component, "page")
 # the revision in welcome is the revision of the tree in welcome; a
 # transcript that lies about this teaches every client the wrong thing
 expect_equal(welcome$ui_revision, ui_revision(welcome$ui))
+# the theme is the full default token set, and it does not move the
+# revision: tokens ride beside the tree, like a stylesheet would
+expect_equal(welcome$theme, glinty:::theme_wire(app_theme()))
+expect_equal(welcome$theme$colors$primary, "#2456d6")
 
 # --- hydration cases ---
 hyd <- by_name("hello-welcome-hydrated")

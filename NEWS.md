@@ -1,12 +1,41 @@
 # glinty (development version)
 
-Protocol v3, stages 1 through 3. The wire now carries semantic
+Protocol v3, stages 1 through 4. The wire now carries semantic
 components rather than DOM instructions, which is what lets a
 frontend that is not a browser render a glinty app; the bootstrap
 travels over the wire, with the browser hydrating its pre-rendered
 markup against a tree revision; and outputs are typed by what the
 renderer produced rather than by the DOM property a browser would
 patch. See PROTOCOL.md.
+
+Stage 4, theme and variants:
+
+- New: `app(theme = app_theme(...))` declares a closed token set --
+  nine semantic colors, spacing, radius, fonts -- validated at
+  construction, with partial arguments merging over glinty's
+  defaults. `welcome` carries the tokens, the served page embeds
+  them inline so the first paint is themed, the browser applies them
+  as CSS custom properties and Flutter maps them onto `ThemeData`.
+  A themeless app keeps each frontend's own defaults, browser dark
+  mode included; a supplied theme is exact, with no automatic dark
+  variant. Named `app_theme()` rather than `theme()` for the same
+  reason `text()` became `txt()`: `theme()` would mask
+  `ggplot2::theme()` in the one place glinty most needs plotting to
+  work.
+- The stylesheet is token-driven throughout and now styles the v3
+  class set. This fixes real rot: `--g-space` was referenced but
+  never defined (every `spacer()` collapsed to zero height), and the
+  stage 1 classes (`.g-field`, `.g-panel-card`, text variants, button
+  variants) had no rules at all -- buttons all rendered primary-blue
+  regardless of variant. **Breaking** for app stylesheets: the CSS
+  variables are now named for the tokens (`--g-primary`,
+  `--g-background`, `--g-text`, ...); `--g-accent`, `--g-fg`,
+  `--g-bg` are gone.
+- Unknown variants fall back to the first listed with a console
+  warning, in both lowerings -- a same-protocol server one release
+  newer may know variants a client does not.
+- The Flutter spacer now uses the theme's spacing unit (default 4,
+  matching the browser) instead of a hardcoded 8.
 
 Stage 3, typed outputs and measurement:
 

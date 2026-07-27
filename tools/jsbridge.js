@@ -129,13 +129,18 @@ function makeTextNode(text) {
 }
 
 function makeEl(doc, tag) {
+    const style = {
+        props: {},
+        setProperty(k, v) { this.props[k] = String(v); },
+        getPropertyValue(k) { return this.props[k] || ""; }
+    };
     const elx = {
         nodeType: 1,
         tagName: String(tag).toUpperCase(),
         attrs: {},
         children: [],
         parentNode: null,
-        style: {},
+        style,
         _listeners: {},
         ownerDocument: doc,
 
@@ -666,6 +671,61 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("and does not stack a disconnect overlay",
               page.document.getElementById("g-disconnected") === null);
         check("and never reloads the page", page.reloads === 0);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("theme tokens become CSS custom properties");
+    {
+        const hw = transcript("hello-welcome");
+        const welcome = frames(hw, "out")[0];
+        const page = freshPage({ setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(welcome);
+
+        const vars = page.document.documentElement.style.props;
+        check("color tokens land under their var names",
+              vars["--g-primary"] === welcome.theme.colors.primary &&
+              vars["--g-on-primary"] === welcome.theme.colors.on_primary &&
+              vars["--g-danger"] === welcome.theme.colors.danger);
+        check("spacing, radius and font sizes land as pixel lengths",
+              vars["--g-space"] === welcome.theme.spacing + "px" &&
+              vars["--g-radius"] === welcome.theme.radius + "px" &&
+              vars["--g-font-size"] === welcome.theme.font.size + "px");
+        check("font families land as-is",
+              vars["--g-font-body"] === welcome.theme.font.body &&
+              vars["--g-font-mono"] === welcome.theme.font.mono);
+
+        /* A themeless welcome touches nothing: the stylesheet's own
+           defaults (including dark mode) stay in charge. */
+        const bare = freshPage({ setup: prerenderDemo });
+        bare.ws().open();
+        bare.ws().deliver({ type: "welcome", session: "s0", protocol: 3 });
+        check("no theme, no properties set",
+              Object.keys(bare.document.documentElement.style.props)
+                  .length === 0);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("unknown variants fall back, visibly in the console");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        const before = page.warnings.length;
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "text", value: "hi", variant: "sparkly" }
+        });
+        const host = page.document.getElementById("panel");
+        check("an unknown variant renders as the first listed",
+              host.children[0].classList.contains("g-text") &&
+              !host.children[0].className.includes("sparkly"));
+        check("and warns rather than erroring",
+              page.warnings.length === before + 1 &&
+              page.warnings[before].includes("sparkly"));
     }
 
     /* ---------------------------------------------------------- */

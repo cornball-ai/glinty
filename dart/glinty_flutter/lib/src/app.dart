@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import 'render.dart';
 import 'session.dart';
+import 'theme.dart';
 
 class GlintyView extends StatelessWidget {
   const GlintyView({super.key, required this.session, this.renderer});
@@ -29,8 +30,13 @@ class GlintyView extends StatelessWidget {
           onInput: session.sendInput,
           onEvent: session.sendEvent,
           values: session.values,
+          spacing: glintySpacing(session.theme),
         );
-    return r.build(context, ui);
+    final built = Builder(builder: (context) => r.build(context, ui));
+    final tokens = session.theme;
+    return tokens == null
+        ? built
+        : Theme(data: glintyThemeData(tokens), child: built);
   }
 }
 

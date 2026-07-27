@@ -52,10 +52,16 @@ typedef GlintySink = void Function(String id, dynamic value);
 typedef GlintyEventSink = void Function(String id);
 
 class GlintyRenderer {
-  GlintyRenderer({this.onInput, this.onEvent, this.values = const {}});
+  GlintyRenderer(
+      {this.onInput, this.onEvent, this.values = const {}, this.spacing = 4});
 
   final GlintySink? onInput;
   final GlintyEventSink? onEvent;
+
+  /// The theme's base spacing unit in logical pixels. spacer() sizes
+  /// are multiples of it -- the same rule the browser applies through
+  /// --g-space, and the same default when no theme was set.
+  final double spacing;
 
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
@@ -73,7 +79,7 @@ class GlintyRenderer {
       case 'divider':
         return _divider(c);
       case 'spacer':
-        return SizedBox(height: (c.number('size') ?? 1) * 8);
+        return SizedBox(height: (c.number('size') ?? 1) * spacing);
       case 'page':
       case 'column':
         return _column(context, c);

@@ -394,6 +394,18 @@
         return node;
     }
 
+    /* Variant lookup with the spec's fallback: unknown variants take
+       the first listed, with a warning rather than an error, because
+       a same-protocol server one release newer may know variants
+       this client does not. */
+    function variantClass(table, variant, fallback) {
+        if (variant && !(variant in table)) {
+            console.warn("glinty: unknown variant", variant,
+                         "- falling back to", fallback);
+        }
+        return table[variant] || table[fallback];
+    }
+
     /* emit becomes a DOM event name here and nowhere else. */
     function emitEvent(emit) {
         return emit === "live" ? "input" : "change";
@@ -599,7 +611,7 @@
         switch (c.component) {
         case "text":
             node = el("span", {
-                "class": TEXT_CLASSES[c.variant] || TEXT_CLASSES.normal,
+                "class": variantClass(TEXT_CLASSES, c.variant, "normal"),
                 id: c.id
             });
             node.textContent = c.value;
@@ -710,7 +722,7 @@
             return buildButton(c, ["g-download"]);
         case "text_output":
             return el("span", assign(slotAttrs(c), {
-                "class": OUTPUT_CLASSES[c.variant] || OUTPUT_CLASSES.normal
+                "class": variantClass(OUTPUT_CLASSES, c.variant, "normal")
             }));
         case "verbatim_output":
             return el("pre", assign(slotAttrs(c), {
@@ -1043,6 +1055,43 @@
         root.appendChild(box);
     }
 
+    /* Theme tokens land as CSS custom properties on the root element,
+       overriding both the stylesheet's defaults and the inline block
+       the served page carried -- same names, same values, so on a
+       fresh page this is a no-op, and on a cached page it heals the
+       palette without a reload. */
+    var THEME_COLOR_NAMES = ["primary", "on_primary", "surface",
+                             "background", "text", "muted", "border",
+                             "danger", "success"];
+
+    function applyTheme(theme) {
+        if (!theme || typeof theme !== "object") return;
+        var root = document.documentElement;
+        var colors = theme.colors || {};
+        THEME_COLOR_NAMES.forEach(function (name) {
+            if (typeof colors[name] === "string") {
+                root.style.setProperty(
+                    "--g-" + name.replace(/_/g, "-"), colors[name]);
+            }
+        });
+        if (typeof theme.spacing === "number") {
+            root.style.setProperty("--g-space", theme.spacing + "px");
+        }
+        if (typeof theme.radius === "number") {
+            root.style.setProperty("--g-radius", theme.radius + "px");
+        }
+        var font = theme.font || {};
+        if (typeof font.body === "string") {
+            root.style.setProperty("--g-font-body", font.body);
+        }
+        if (typeof font.mono === "string") {
+            root.style.setProperty("--g-font-mono", font.mono);
+        }
+        if (typeof font.size === "number") {
+            root.style.setProperty("--g-font-size", font.size + "px");
+        }
+    }
+
     function handleWelcome(msg) {
         if (msg.protocol !== PROTOCOL) {
             /* Refuse before touching the DOM state: a mismatched
@@ -1056,6 +1105,7 @@
             location.reload();
             return;
         }
+        applyTheme(msg.theme);
         var resumedNow = msg.resumed === true;
         sessionId = msg.session;
         retries = 0;

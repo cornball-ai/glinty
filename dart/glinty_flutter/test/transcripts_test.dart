@@ -100,6 +100,60 @@ void main() {
       expect(s.sent.length, before,
           reason: 'invariant 2: receiving a tree emits nothing');
     });
+
+    test('welcome carries the theme tokens, when the app set one', () {
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      expect(s.theme, isNotNull);
+      expect((s.theme!['colors'] as Map)['primary'], '#2456d6');
+
+      final bare = GlintySession();
+      bare.receive({'type': 'welcome', 'session': 's0', 'protocol': 3});
+      expect(bare.theme, isNull,
+          reason: 'a themeless app leaves the platform defaults alone');
+    });
+  });
+
+  group('theme tokens map onto ThemeData', () {
+    test('hex parsing is strict and fallback-friendly', () {
+      expect(glintyColor('#2456d6'), const Color(0xff2456d6));
+      expect(glintyColor('#2456d680'), const Color(0x802456d6));
+      expect(glintyColor('red'), isNull);
+      expect(glintyColor('#12345'), isNull);
+      expect(glintyColor(12), isNull);
+    });
+
+    test('the transcript theme builds the declared palette', () {
+      final theme = serverFrame('hello-welcome', 'welcome')['theme']
+          as Map<String, dynamic>;
+      final data = glintyThemeData(theme);
+
+      expect(data.colorScheme.primary, const Color(0xff2456d6));
+      expect(data.colorScheme.onPrimary, const Color(0xffffffff));
+      expect(data.colorScheme.error, const Color(0xffb3261e));
+      expect(data.scaffoldBackgroundColor, const Color(0xffffffff));
+      expect(data.colorScheme.brightness, Brightness.light);
+      expect(glintySpacing(theme), 4);
+    });
+
+    test('a dark background makes a dark scheme', () {
+      final data = glintyThemeData({
+        'colors': {'background': '#16181d', 'text': '#e6e6e6'}
+      });
+      expect(data.colorScheme.brightness, Brightness.dark);
+    });
+
+    testWidgets('GlintyView applies the theme to what it renders',
+        (tester) async {
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+
+      await tester.pumpWidget(
+          MaterialApp(home: Scaffold(body: GlintyView(session: s))));
+
+      final ctx = tester.element(find.text('Demo'));
+      expect(Theme.of(ctx).colorScheme.primary, const Color(0xff2456d6));
+    });
   });
 
   group('hydration', () {

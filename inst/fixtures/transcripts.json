@@ -3,7 +3,7 @@
   "transcripts": [
     {
       "name": "hello-welcome",
-      "notes": "the opening exchange; the client declares what it can render, the server answers with the tree and its revision",
+      "notes": "the opening exchange; the client declares what it can render, the server answers with the theme, the tree and its revision. The theme here is glinty's default token set; a themeless app omits the field and each frontend's own defaults apply",
       "frames": [
         {
           "dir": "in",
@@ -22,6 +22,26 @@
             "type": "welcome",
             "session": "s1",
             "protocol": 3,
+            "theme": {
+              "colors": {
+                "primary": "#2456d6",
+                "on_primary": "#ffffff",
+                "surface": "#ffffff",
+                "background": "#ffffff",
+                "text": "#1a1a1a",
+                "muted": "#6a6a6a",
+                "border": "#d0d0d5",
+                "danger": "#b3261e",
+                "success": "#177245"
+              },
+              "spacing": 4,
+              "radius": 6,
+              "font": {
+                "body": "system-ui",
+                "mono": "ui-monospace",
+                "size": 16
+              }
+            },
             "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
             "ui": {
               "component": "page",

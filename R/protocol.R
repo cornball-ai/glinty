@@ -124,6 +124,9 @@ error_msg <- function(id, message) {
 welcome_msg <- function(session_id, resumed = NULL) {
     msg <- list(type = "welcome", session = session_id,
                 protocol = PROTOCOL_VERSION)
+    if (!is.null(.globals$welcome_theme)) {
+        msg$theme <- .globals$welcome_theme
+    }
     if (!is.null(.globals$welcome_revision)) {
         msg$ui_revision <- .globals$welcome_revision
     }

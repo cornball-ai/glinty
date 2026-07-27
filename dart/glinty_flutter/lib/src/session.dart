@@ -80,6 +80,11 @@ class GlintySession {
 
   String? sessionId;
   String? uiRevision;
+
+  /// Theme tokens from welcome, or null when the app set none (each
+  /// frontend's defaults apply then).
+  Map<String, dynamic>? theme;
+
   GlintyProtocolError? error;
   GlintyTreeSource source = GlintyTreeSource.none;
 
@@ -152,6 +157,9 @@ class GlintySession {
     }
 
     sessionId = msg['session']?.toString();
+    theme = msg['theme'] is Map
+        ? (msg['theme'] as Map).cast<String, dynamic>()
+        : null;
     final revision = msg['ui_revision']?.toString();
     uiRevision = revision;
 

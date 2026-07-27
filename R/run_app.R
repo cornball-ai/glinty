@@ -5,6 +5,9 @@
 #'   function(input, output, session) defining reactive logic; it is
 #'   called once per connecting browser tab, each with its own
 #'   session-scoped state
+#' @param theme an app_theme(), or NULL for each frontend's own
+#'   defaults (in the browser that includes automatic dark mode,
+#'   which a supplied theme replaces with exactly its tokens)
 #' @return A glinty_app object
 #' @examples
 #' app_obj <- app(
@@ -19,11 +22,15 @@
 #'     }
 #' )
 #' @export
-app <- function(ui, server) {
+app <- function(ui, server, theme = NULL) {
     if (!is.function(server)) {
         stop("server must be a function", call. = FALSE)
     }
-    structure(list(ui = ui, server = server), class = "glinty_app")
+    if (!is.null(theme) && !inherits(theme, "glinty_theme")) {
+        stop("theme must come from app_theme(), or be NULL", call. = FALSE)
+    }
+    structure(list(ui = ui, server = server, theme = theme),
+              class = "glinty_app")
 }
 
 #' Run a glinty application
@@ -87,12 +94,24 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     # it was just sent.
     .globals$welcome_ui <- unclass_recursive(app_obj$ui)
     .globals$welcome_revision <- ui_revision(app_obj$ui)
+    # Theme tokens ride beside the tree, not in it: a palette change
+    # must not invalidate hydration, any more than a stylesheet would.
+    .globals$welcome_theme <- if (is.null(app_obj$theme)) {
+        NULL
+    } else {
+        theme_wire(app_obj$theme)
+    }
 
     page_html <- full_page_html(
                                 component_to_html(app_obj$ui),
         if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app",
                                 attr(app_obj$ui, "assets"),
-                                ui_revision = .globals$welcome_revision
+                                ui_revision = .globals$welcome_revision,
+                                theme_css = if (is.null(app_obj$theme)) {
+            NULL
+        } else {
+            theme_css(app_obj$theme)
+        }
     )
     # Before a single byte is served, not after.
     if (isTRUE(check_secrets)) {

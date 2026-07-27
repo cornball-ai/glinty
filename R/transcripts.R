@@ -49,8 +49,11 @@ wire_transcripts <- function() {
          list(
               name = "hello-welcome",
               notes = paste("the opening exchange; the client declares what",
-                            "it can render, the server answers with the tree",
-                            "and its revision"),
+                            "it can render, the server answers with the",
+                            "theme, the tree and its revision. The theme",
+                            "here is glinty's default token set; a",
+                            "themeless app omits the field and each",
+                            "frontend's own defaults apply"),
               frames = list(
                             list(dir = "in", message = list(
                         type = "hello", protocol = PROTOCOL_VERSION,
@@ -63,6 +66,7 @@ wire_transcripts <- function() {
                             list(dir = "out", message = list(
                         type = "welcome", session = "s1",
                         protocol = PROTOCOL_VERSION,
+                        theme = theme_wire(app_theme()),
                         ui_revision = rev,
                         ui = unclass_recursive(simple_ui)
                     ))

@@ -60,7 +60,7 @@ the server sent the tree, so it already knows the defaults.
 
 | type | fields | meaning |
 |---|---|---|
-| `welcome` | `session`, `protocol`, `theme`, `ui`, `ui_revision`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
+| `welcome` | `session`, `protocol`, `theme?`, `ui`, `ui_revision`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
 | `output` | `id`, `kind`, `value` | an output's current value, including `kind: "ui"` |
 | `input_update` | `id`, fields | server-driven input change |
 | `ticket` | `id`, `purpose`, `token`, `expires` | short-lived credential for one transfer |
@@ -378,9 +378,18 @@ Sent once in `welcome`. A closed set of tokens, not a stylesheet.
 }
 ```
 
-The browser client emits these as CSS custom properties. A Flutter
-client maps them onto `ThemeData`. Apps that want more can still ship
-a stylesheet — it just only affects the browser.
+The browser client emits these as CSS custom properties (and the
+served page carries the same tokens inline, so the first paint is
+themed before any socket work). A Flutter client maps them onto
+`ThemeData`. Apps that want more can still ship a stylesheet — it
+just only affects the browser.
+
+`theme` is omitted when the app never set one, and each frontend's
+own defaults apply — in the browser that includes the stylesheet's
+automatic dark mode. A supplied theme is exact: one token set, no
+automatic dark variant, because the server cannot know which the
+user prefers and silently restyling a declared palette would be
+inference magic.
 
 ## Variants
 
@@ -392,7 +401,8 @@ client is free to render `danger` however it likes.
 |---|---|
 | `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost` |
 | `panel` | `plain`, `card`, `sidebar` |
-| `text_output` | `normal`, `muted`, `strong`, `heading` |
+| `text` | `normal`, `muted`, `strong`, `heading` |
+| `text_output` | `normal`, `muted`, `strong` |
 | `divider` | `line`, `labelled` |
 
 Unknown variants fall back to the first listed, with a console warning
@@ -590,7 +600,18 @@ make it slower.
    and the zero-box guard are mutation-tested; the browser layers
    `ResizeObserver` over the manual re-measure triggers where it
    exists.
-4. **Theme and variants.**
+4. **Theme and variants.** *(done)* `app(theme = app_theme(...))`
+   declares a token set; `welcome` carries it, the served page
+   embeds the same tokens inline so the first paint is themed, the
+   browser applies them as CSS custom properties and Flutter maps
+   them onto `ThemeData`, with the spacing unit feeding spacer()
+   on both sides. A themeless app keeps each frontend's own
+   defaults, browser dark mode included. The stylesheet was rewired
+   to the token set and to the v3 class inventory while there --
+   `--g-space` had never been defined (spacers collapsed to zero)
+   and several stage 1 classes had no rules. Unknown variants fall
+   back to the first listed with a console warning, in both
+   lowerings.
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Flutter client grows a transport and becomes an app
    rather than a renderer.

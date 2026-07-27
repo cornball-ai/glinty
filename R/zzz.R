@@ -12,5 +12,6 @@
     .globals$progress <- list()
     .globals$welcome_ui <- NULL
     .globals$welcome_revision <- NULL
+    .globals$welcome_theme <- NULL
     reg_reset()
 }

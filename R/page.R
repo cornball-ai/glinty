@@ -15,15 +15,26 @@
 #'   rendered from, embedded as a meta tag so the client can tell
 #'   whether this markup describes the tree welcome sends it; NULL
 #'   omits the tag (a client without one rebuilds from welcome)
+#' @param theme_css character :root block of theme tokens (see
+#'   theme_css()), so the first paint is themed before any socket
+#'   work; NULL omits it and the stylesheet's defaults apply
 #' @return character complete HTML document
 #' @keywords internal
 full_page_html <- function(body_html, title = "glinty app", head = NULL,
-                           ui_revision = NULL) {
+                           ui_revision = NULL, theme_css = NULL) {
     revision_meta <- if (is.null(ui_revision)) {
         ""
     } else {
         paste0("<meta name=\"g-ui-revision\" content=\"",
                html_escape(ui_revision), "\">\n")
+    }
+    theme_block <- if (is.null(theme_css)) {
+        ""
+    } else {
+        # After the stylesheet link, so token values win over the
+        # stylesheet's :root defaults (and its dark-mode block: a
+        # supplied theme is exact).
+        paste0("<style id=\"g-theme\">", theme_css, "</style>\n")
     }
     paste0(
            "<!DOCTYPE html>\n<html>\n<head>\n",
@@ -32,6 +43,7 @@ full_page_html <- function(body_html, title = "glinty app", head = NULL,
            revision_meta,
            "<title>", html_escape(title), "</title>\n",
            "<link rel=\"stylesheet\" href=\"/glinty/glinty.css\">\n",
+           theme_block,
            head_html(head),
            "</head>\n<body>\n",
            "<div id=\"glinty-root\">", body_html, "</div>\n",
