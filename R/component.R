@@ -101,6 +101,20 @@ component <- function(type, ...) {
     }
     fields <- list(...)
 
+    if (length(fields) > 0L) {
+        nms <- names(fields)
+        if (is.null(nms) || any(!nzchar(nms))) {
+            stop(type, "() fields must all be named", call. = FALSE)
+        }
+        # list(value = "a", value = "b") keeps both, and [[ returns the
+        # first, so the second would be silently discarded.
+        if (anyDuplicated(nms) > 0L) {
+            stop(type, "() got duplicate field(s): ",
+                 paste(unique(nms[duplicated(nms)]), collapse = ", "),
+                 call. = FALSE)
+        }
+    }
+
     unknown <- setdiff(names(fields), names(schema))
     if (length(unknown) > 0L) {
         stop(type, "() got unknown field(s): ",

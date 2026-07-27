@@ -119,7 +119,17 @@ expect_true(grepl('"children":[{',
                   as.character(jsonlite::toJSON(one, auto_unbox = TRUE)),
                   fixed = TRUE))
 
+# --- duplicate and unnamed fields ---
+# list(value = "a", value = "b") keeps both and [[ returns the first,
+# so the second would vanish without a word.
+expect_error(component("text", value = "a", value = "b"), "duplicate field")
+expect_error(component("heading", value = "x", level = 1L, level = 2L),
+             "duplicate field")
+expect_error(component("text", "hello"), "must all be named")
+expect_error(component("link", value = "a", "https://x"), "must all be named")
+
 # --- schema shape ---
+check_field <- glinty:::check_field
 expect_true(is.list(COMPONENT_SCHEMA))
 for (nm in names(COMPONENT_SCHEMA)) {
     for (fname in names(COMPONENT_SCHEMA[[nm]])) {
@@ -130,14 +140,18 @@ for (nm in names(COMPONENT_SCHEMA)) {
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)
-            # and its default, if any, must be one of them
-            if (!is.null(spec$default)) {
-                expect_true(spec$default %in% spec$values)
-            }
         }
         # a required field with a default is a contradiction
         if (isTRUE(spec$required)) {
             expect_null(spec$default)
+        }
+        # every default must satisfy its own field spec. A schema that
+        # cannot pass its own validator is a bug that would otherwise
+        # only surface for whoever first omits that field.
+        if (!is.null(spec$default)) {
+            expect_silent(check_field(spec$default, spec, nm, fname))
+            expect_equal(check_field(spec$default, spec, nm, fname),
+                         spec$default)
         }
     }
 }
