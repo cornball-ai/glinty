@@ -14,9 +14,11 @@ dispatch_client_message(session, txt)
 invisible(NULL)
 }
 \description{
-Parses the JSON text frame and routes by type: init seeds the
-input environment with the client's harvested DOM values, input
-applies a single input change, click bumps a click counter.
+Parses the JSON text frame and routes by type: hello records the
+client's declared capabilities, input applies a single input
+change, event bumps an event counter. hello no longer carries
+input values -- under v3 the server built the tree, so it seeded
+the defaults itself before the client ever connected.
 Malformed or unknown messages queue an error message instead of
 raising. Does not flush; the caller flushes after dispatch.
 }

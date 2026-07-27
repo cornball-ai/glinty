@@ -50,3 +50,13 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+
+  # The browser client, driven through the same transcripts and
+  # fixtures. This is the stage 2 gate: adoption emitting nothing and
+  # one-press-one-frame can only be proven here, because only the
+  # browser adopts pre-rendered markup.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: node tools/jsbridge.js inst/www/glinty.js

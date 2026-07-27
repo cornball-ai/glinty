@@ -10,5 +10,7 @@
     .globals$timers <- list()
     .globals$timer_id_counter <- 0L
     .globals$progress <- list()
+    .globals$welcome_ui <- NULL
+    .globals$welcome_revision <- NULL
     reg_reset()
 }

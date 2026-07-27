@@ -1,9 +1,9 @@
 % tinyrox says don't edit this manually, but it can't stop you!
-\name{handle_click}
-\alias{handle_click}
-\title{Process a button click for a session}
+\name{handle_event}
+\alias{handle_event}
+\title{Process a discrete event for a session}
 \usage{
-handle_click(session, id)
+handle_event(session, id)
 }
 \arguments{
 \item{session}{a glinty_session}
@@ -11,8 +11,8 @@ handle_click(session, id)
 \item{id}{character input ID}
 }
 \description{
-Click counters follow action-button semantics: the input starts at
-NULL (treated as 0) and each click increments it, so every click
+Event counters follow action-button semantics: the input starts at
+NULL (treated as 0) and each event increments it, so every press
 invalidates dependents even though the "value" is monotonic.
 }
 \keyword{internal}

@@ -11,13 +11,25 @@
 #' @param body_html character HTML for the page body
 #' @param title character page title
 #' @param head a page head spec (see page_head()), or NULL
+#' @param ui_revision character revision of the tree body_html was
+#'   rendered from, embedded as a meta tag so the client can tell
+#'   whether this markup describes the tree welcome sends it; NULL
+#'   omits the tag (a client without one rebuilds from welcome)
 #' @return character complete HTML document
 #' @keywords internal
-full_page_html <- function(body_html, title = "glinty app", head = NULL) {
+full_page_html <- function(body_html, title = "glinty app", head = NULL,
+                           ui_revision = NULL) {
+    revision_meta <- if (is.null(ui_revision)) {
+        ""
+    } else {
+        paste0("<meta name=\"g-ui-revision\" content=\"",
+               html_escape(ui_revision), "\">\n")
+    }
     paste0(
            "<!DOCTYPE html>\n<html>\n<head>\n",
            "<meta charset=\"utf-8\">\n",
            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
+           revision_meta,
            "<title>", html_escape(title), "</title>\n",
            "<link rel=\"stylesheet\" href=\"/glinty/glinty.css\">\n",
            head_html(head),

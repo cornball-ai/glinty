@@ -54,16 +54,16 @@ handle_input <- function(session, id, value) {
     invisible(NULL)
 }
 
-#' Process a button click for a session
+#' Process a discrete event for a session
 #'
-#' Click counters follow action-button semantics: the input starts at
-#' NULL (treated as 0) and each click increments it, so every click
+#' Event counters follow action-button semantics: the input starts at
+#' NULL (treated as 0) and each event increments it, so every press
 #' invalidates dependents even though the "value" is monotonic.
 #'
 #' @param session a glinty_session
 #' @param id character input ID
 #' @keywords internal
-handle_click <- function(session, id) {
+handle_event <- function(session, id) {
     env <- session$input_env
     if (!exists(id, envir = env)) {
         env[[id]] <- reactive_val(1L)

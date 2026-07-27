@@ -102,27 +102,45 @@ error_msg <- function(id, message) {
         ))
 }
 
-#' Create the session config message
+#' Create the welcome message
 #'
-#' The first and only greeting a client receives after the WebSocket
-#' opens.
+#' The bootstrap, and the first frame a client receives: the session
+#' id, the protocol version, and the canonical component tree with
+#' its revision. A client that ignores everything else and renders
+#' welcome.ui is correct.
+#'
+#' The tree and revision come from .globals, set once by run_app().
+#' Both are omitted when unset (bare test sessions), never in a
+#' served app.
 #'
 #' @param session_id character session ID
+#' @param resumed logical TRUE when a detached session was resumed,
+#'   FALSE when a resume was refused (the client reloads), NULL for a
+#'   fresh session
 #' @return character JSON string
 #' @keywords internal
-config_msg <- function(session_id, resumed = NULL) {
-    msg <- list(type = "config", session_id = session_id, protocol = 2L)
+welcome_msg <- function(session_id, resumed = NULL) {
+    msg <- list(type = "welcome", session = session_id,
+                protocol = PROTOCOL_VERSION)
+    if (!is.null(.globals$welcome_revision)) {
+        msg$ui_revision <- .globals$welcome_revision
+    }
+    if (!is.null(.globals$welcome_ui)) {
+        msg$ui <- .globals$welcome_ui
+    }
     if (!is.null(resumed)) {
         msg$resumed <- resumed
     }
-    as.character(jsonlite::toJSON(msg, auto_unbox = TRUE))
+    as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
 }
 
 #' Dispatch one client message to a session
 #'
-#' Parses the JSON text frame and routes by type: init seeds the
-#' input environment with the client's harvested DOM values, input
-#' applies a single input change, click bumps a click counter.
+#' Parses the JSON text frame and routes by type: hello records the
+#' client's declared capabilities, input applies a single input
+#' change, event bumps an event counter. hello no longer carries
+#' input values -- under v3 the server built the tree, so it seeded
+#' the defaults itself before the client ever connected.
 #' Malformed or unknown messages queue an error message instead of
 #' raising. Does not flush; the caller flushes after dispatch.
 #'
@@ -137,22 +155,47 @@ dispatch_client_message <- function(session, txt) {
         session$send(error_msg(NULL, "malformed message"))
         return(invisible(NULL))
     }
-    if (identical(msg$type, "init")) {
-        for (id in names(msg$inputs)) {
-            handle_input(session, id, normalize_value(msg$inputs[[id]]))
-        }
+    if (identical(msg$type, "hello")) {
+        handle_hello(session, msg)
     } else if (identical(msg$type, "input")) {
         if (is.character(msg$id)) {
             handle_input(session, msg$id, normalize_value(msg$value))
         }
-    } else if (identical(msg$type, "click")) {
+    } else if (identical(msg$type, "event")) {
         if (is.character(msg$id)) {
-            handle_click(session, msg$id)
+            handle_event(session, msg$id)
         }
     } else {
         session$send(error_msg(NULL,
                                paste0("unknown message type: ", msg$type)))
     }
+    invisible(NULL)
+}
+
+#' Record what a client declared in hello
+#'
+#' A declaration, not a negotiation: the server sends the whole tree
+#' regardless and the client draws placeholders for what it cannot
+#' render. Recording it lets render_ui() branch per session and makes
+#' the gap diagnosable. The welcome is sent by the session-start
+#' path, never from here, so a redeclaring reconnect cannot trigger a
+#' second bootstrap.
+#'
+#' @param session a glinty_session
+#' @param msg decoded hello message
+#' @return invisible(NULL)
+#' @keywords internal
+handle_hello <- function(session, msg) {
+    if (is.character(msg$client)) {
+        session$client <- msg$client
+    } else {
+        session$client <- NULL
+    }
+    session$capabilities <- list(
+                                 components = as.character(unlist(msg$components)),
+                                 kinds = as.character(unlist(msg$kinds)),
+                                 features = as.character(unlist(msg$features))
+    )
     invisible(NULL)
 }
 

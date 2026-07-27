@@ -9,9 +9,12 @@ session_end <- glinty:::session_end
 dispatch <- glinty:::dispatch_client_message
 update_msg <- glinty:::update_msg
 error_msg <- glinty:::error_msg
-config_msg <- glinty:::config_msg
+welcome_msg <- glinty:::welcome_msg
 update_input_msg <- glinty:::update_input_msg
 normalize_value <- glinty:::normalize_value
+component <- glinty:::component
+ui_revision <- glinty:::ui_revision
+unclass_recursive <- glinty:::unclass_recursive
 
 # --- message builders produce exact JSON ---
 expect_equal(
@@ -27,13 +30,40 @@ expect_equal(
     '{"type":"error","id":null,"message":"bad"}'
 )
 expect_equal(
-    config_msg("abc123"),
-    '{"type":"config","session_id":"abc123","protocol":2}'
-)
-expect_equal(
     update_input_msg("name", list(value = "x")),
     '{"type":"update_input","id":"name","value":"x"}'
 )
+
+# --- welcome carries the session, the protocol, the tree and its ---
+# --- revision, exactly as the transcripts promise ---
+.g$welcome_ui <- NULL
+.g$welcome_revision <- NULL
+expect_equal(
+    welcome_msg("abc123"),
+    '{"type":"welcome","session":"abc123","protocol":3}'
+)
+expect_equal(
+    welcome_msg("abc123", resumed = TRUE),
+    '{"type":"welcome","session":"abc123","protocol":3,"resumed":true}'
+)
+
+wui <- component("page", title = "T", children = list(
+    component("heading", value = "T", level = 1L)
+))
+.g$welcome_ui <- unclass_recursive(wui)
+.g$welcome_revision <- ui_revision(wui)
+w <- jsonlite::fromJSON(welcome_msg("s9"), simplifyVector = FALSE)
+expect_equal(w$type, "welcome")
+expect_equal(w$session, "s9")
+expect_equal(w$protocol, 3L)
+expect_equal(w$ui$component, "page")
+expect_equal(w$ui_revision, ui_revision(wui))
+# a refused resume says so
+wf <- jsonlite::fromJSON(welcome_msg("s10", resumed = FALSE),
+                         simplifyVector = FALSE)
+expect_false(wf$resumed)
+.g$welcome_ui <- NULL
+.g$welcome_revision <- NULL
 
 # --- normalize_value collapses homogeneous lists ---
 expect_equal(normalize_value(list("a", "b")), c("a", "b"))
@@ -42,13 +72,19 @@ expect_equal(normalize_value(list(1L, 2L)), c(1L, 2L))
 mixed <- list("a", list(b = 1))
 expect_equal(normalize_value(mixed), mixed)
 
-# --- dispatch: init seeds inputs ---
+# --- dispatch: hello records capabilities and answers nothing ---
 s <- new_session("p1")
-dispatch(s, '{"type":"init","inputs":{"name":"troy","n":3,"tags":["a","b"]}}')
-flush_reactions()
-expect_equal(isolate(s$input$name()), "troy")
-expect_equal(isolate(s$input$n()), 3L)
-expect_equal(isolate(s$input$tags()), c("a", "b"))
+s$outgoing <- list()
+dispatch(s, paste0('{"type":"hello","protocol":3,"client":"glinty-js/0.5.0",',
+                   '"components":["page","button"],"kinds":["text"],',
+                   '"features":["modal"]}'))
+expect_equal(s$client, "glinty-js/0.5.0")
+expect_equal(s$capabilities$components, c("page", "button"))
+expect_equal(s$capabilities$kinds, "text")
+expect_equal(s$capabilities$features, "modal")
+# hello is a declaration; the welcome comes from session start, so a
+# redeclaring reconnect must not trigger a second bootstrap
+expect_equal(length(s$outgoing), 0L)
 
 # --- dispatch: input change reaches observers ---
 seen <- NULL
@@ -57,10 +93,22 @@ dispatch(s, '{"type":"input","id":"name","value":"jorge"}')
 flush_reactions()
 expect_equal(seen, "jorge")
 
-# --- dispatch: clicks count up ---
-dispatch(s, '{"type":"click","id":"go"}')
-dispatch(s, '{"type":"click","id":"go"}')
+# --- dispatch: events count up ---
+dispatch(s, '{"type":"event","id":"go"}')
+dispatch(s, '{"type":"event","id":"go"}')
 flush_reactions()
+expect_equal(isolate(s$input$go()), 2L)
+
+# --- dispatch: protocol 2 frames are unknown types now ---
+s$outgoing <- list()
+dispatch(s, '{"type":"init","inputs":{"name":"troy"}}')
+m <- jsonlite::fromJSON(s$outgoing[[1L]])
+expect_equal(m$type, "error")
+
+s$outgoing <- list()
+dispatch(s, '{"type":"click","id":"go"}')
+m <- jsonlite::fromJSON(s$outgoing[[1L]])
+expect_equal(m$type, "error")
 expect_equal(isolate(s$input$go()), 2L)
 
 # --- dispatch: malformed JSON and unknown types answer with errors ---

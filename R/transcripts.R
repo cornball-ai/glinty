@@ -144,9 +144,7 @@ wire_transcripts <- function() {
                             "because there is no state the server keeps,",
                             "only the fact that it happened"),
               frames = list(
-                            list(dir = "in", message = list(
-                        type = "event", id = "go"
-                    )),
+                            list(dir = "in", message = list(type = "event", id = "go")),
                             list(dir = "out", message = list(
                         type = "output", id = "count", kind = "text",
                         value = "1"

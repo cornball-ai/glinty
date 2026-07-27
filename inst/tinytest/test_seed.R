@@ -1,0 +1,154 @@
+# Server-side input seeding: the tree is the source of truth.
+#
+# Protocol 2 asked the client what the initial values were. The
+# server built the tree, so v3 answers its own question before the
+# client connects: reactives read defaults on their first run, and
+# nothing spurious crosses the wire.
+
+.g <- getFromNamespace(".globals", "glinty")
+.g$current_context <- NULL
+.g$pending_flush <- list()
+.g$current_session <- NULL
+
+new_session <- glinty:::new_session
+session_end <- glinty:::session_end
+seed_session_inputs <- glinty:::seed_session_inputs
+collect_input_seeds <- glinty:::collect_input_seeds
+component <- glinty:::component
+
+ui <- page(
+    text_input("name", "Name:", value = "seeded"),
+    text_input("blank", "Blank:"),
+    password_input("secret", "Key:"),
+    textarea_input("notes", "Notes:", value = "line1"),
+    number_input("n", "N:", value = 7),
+    number_input("n_empty", "N2:"),
+    checkbox_input("save", "Save", value = TRUE),
+    checkbox_input("off", "Off"),
+    radio_buttons("mode", "Mode:", c(Fast = "fast", Slow = "slow")),
+    slider_input("sl", "S:", min = 0, max = 100, value = 25),
+    slider_input("sl_default", "S2:", min = 10, max = 20),
+    select_input("engine", "E:", c(A = "a", B = "b")),
+    select_input("engine_sel", "E2:", c(A = "a", B = "b"), selected = "b"),
+    select_input("multi", "M:", c(A = "a", B = "b"), multiple = TRUE),
+    date_input("when", "When:", value = "2026-07-27"),
+    date_input("when_empty", "When2:"),
+    file_input("upload", "File:"),
+    button("go", "Go"),
+    row(text_input("nested", "In a row:", value = "deep")),
+    conditional_panel(
+        text_input("hidden_field", "Hidden:", value = "still-seeds"),
+        condition = input_is("mode", "slow")
+    ),
+    tabset(
+        id = "tabs",
+        tab_panel("First", text_input("in_tab", "T:", value = "tabbed")),
+        tab_panel("Second", txt("nothing here"))
+    ),
+    title = "Seed test"
+)
+
+s <- new_session("seed1")
+seed_session_inputs(s, ui)
+
+# text-like inputs: value, or "" -- what an empty rendered field shows
+expect_equal(isolate(s$input$name()), "seeded")
+expect_equal(isolate(s$input$blank()), "")
+expect_equal(isolate(s$input$secret()), "")
+expect_equal(isolate(s$input$notes()), "line1")
+expect_equal(isolate(s$input$when()), "2026-07-27")
+expect_equal(isolate(s$input$when_empty()), "")
+
+# a number field can be empty; the input stays NULL then
+expect_equal(isolate(s$input$n()), 7)
+expect_null(isolate(s$input$n_empty()))
+
+# logicals
+expect_true(isolate(s$input$save()))
+expect_false(isolate(s$input$off()))
+
+# radio_buttons() guarantees a selection: the first choice
+expect_equal(isolate(s$input$mode()), "fast")
+
+# sliders always have a position; the builder default is the HTML
+# midpoint, so every frontend starts the thumb in the same place
+expect_equal(isolate(s$input$sl()), 25)
+expect_equal(isolate(s$input$sl_default()), 15)
+
+# a single select shows its first choice; multiple shows nothing
+expect_equal(isolate(s$input$engine()), "a")
+expect_equal(isolate(s$input$engine_sel()), "b")
+expect_null(isolate(s$input$multi()))
+
+# no state to seed: files and events
+expect_null(isolate(s$input$upload()))
+expect_null(isolate(s$input$go()))
+
+# nesting: rows, hidden conditional panels and tab panels all seed --
+# hiding is display, not existence
+expect_equal(isolate(s$input$nested()), "deep")
+expect_equal(isolate(s$input$hidden_field()), "still-seeds")
+expect_equal(isolate(s$input$in_tab()), "tabbed")
+
+# a tabset with an id seeds its selection with the shown panel
+expect_equal(isolate(s$input$tabs()), "First")
+
+session_end(s)
+
+# --- tabset selected wins when it names a real panel ---
+ts <- tabset(id = "t2", selected = "B",
+             tab_panel("A", txt("a")), tab_panel("B", txt("b")))
+seeds <- collect_input_seeds(ts)
+expect_equal(seeds$t2, "B")
+# and falls back to the first panel when it does not
+ts_bad <- component("tabset", id = "t3", selected = "Nope",
+                    panels = list(list(title = "A", children = list()),
+                                  list(title = "B", children = list())))
+expect_equal(collect_input_seeds(ts_bad)$t3, "A")
+# a tree node with panels but no id (not constructible through
+# tabset(), which requires one) seeds nothing rather than erroring
+expect_equal(collect_input_seeds(list(component = "tabset",
+    panels = list(list(title = "A", children = list())))), list())
+
+# --- seeding runs before the server function, so observe_event with ---
+# --- ignore_init stays quiet: init state is not a change ---
+s2 <- new_session("seed2")
+seed_session_inputs(s2, page(
+    select_input("backend", "B:", c(X = "x", Y = "y")),
+    checkbox_input("chk", "C", value = TRUE),
+    title = "quiet"
+))
+fired <- 0L
+glinty:::with_session(s2, {
+    observe_event(s2$input$backend, function() fired <<- fired + 1L)
+    observe_event(s2$input$chk, function() fired <<- fired + 1L)
+})
+flush_reactions()
+expect_equal(fired, 0L)
+
+# and a real change still fires
+glinty:::handle_input(s2, "backend", "y")
+flush_reactions()
+expect_equal(fired, 1L)
+
+# while a plain reactive sees the seeded default on its first run,
+# not NULL followed by a re-render
+seen_first <- NULL
+glinty:::with_session(s2, {
+    observe(function() {
+        if (is.null(seen_first)) seen_first <<- s2$input$chk()
+    })
+})
+flush_reactions()
+expect_true(seen_first)
+
+session_end(s2)
+
+# --- duplicate ids: first wins, deterministically ---
+dup <- page(text_input("x", "A:", value = "first"),
+            text_input("x", "B:", value = "second"),
+            title = "dup")
+s3 <- new_session("seed3")
+seed_session_inputs(s3, dup)
+expect_equal(isolate(s3$input$x()), "first")
+session_end(s3)

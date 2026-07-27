@@ -1,6 +1,29 @@
-/* glinty client: WebSocket transport + DOM patching. No dependencies. */
+/* glinty client: WebSocket transport + component rendering + DOM
+   patching. No dependencies. Speaks protocol 3: it opens with hello,
+   receives the canonical component tree in welcome, and hydrates
+   against the pre-rendered markup by comparing ui_revision. */
 (function () {
     "use strict";
+
+    var PROTOCOL = 3;
+    var CLIENT_ID = "glinty-js/0.5.0";
+
+    /* What this client declares in hello. A declaration, not a
+       negotiation: the server sends the whole tree regardless, and a
+       component missing from this list still renders here -- the list
+       exists so the server can log what a lesser client will show as
+       a placeholder. The browser renders the full set. */
+    var SUPPORTED_COMPONENTS = [
+        "audio_output", "button", "checkbox_input", "column",
+        "conditional_panel", "date_input", "divider", "download_button",
+        "file_input", "heading", "html_output", "icon", "image_output",
+        "link", "number_input", "page", "panel", "password_input",
+        "plot_output", "radio_buttons", "raw_html", "row", "select_input",
+        "slider_input", "spacer", "tabset", "text", "text_input",
+        "text_output", "textarea_input", "ui_output", "verbatim_output"
+    ];
+    var SUPPORTED_KINDS = ["text", "html", "table", "image", "audio", "ui"];
+    var SUPPORTED_FEATURES = ["upload", "download", "modal", "progress"];
 
     var ws = null;
     var sessionId = null;
@@ -9,6 +32,14 @@
     var customHandlers = {};
     var pending = [];
     var connectedFired = false;
+    /* Revision of the markup this page was served with, read from the
+       meta tag before connecting. Null when the document carries no
+       revision, in which case welcome's tree is built from scratch. */
+    var prerendered = null;
+    /* Set once the server speaks a protocol this client cannot read.
+       A refused session ignores everything and never reconnects: no
+       message after the refusal is meaningful. */
+    var refused = false;
     /* The client's view of every input it knows about. Conditional
        panels are evaluated against this rather than re-read from the
        DOM, so server-pushed updates and Glinty.setInputValue() count
@@ -36,29 +67,26 @@
         return el.value;
     }
 
-    function harvestInputs() {
-        var inputs = {};
+    /* Seed inputValues from the DOM so conditional panels can settle
+       before (and without) any server round trip. Local state only:
+       nothing here is sent. Protocol 2 shipped this harvest to the
+       server at init; under v3 the server seeds itself from the tree
+       it built, and a client that echoed the form back would write
+       every default on every reload. */
+    function harvestLocal() {
         document.querySelectorAll("[data-g-target]").forEach(function (el) {
-            if (el.dataset.gEvent === "click") {
-                /* Clicks are events, not state -- except the open tab
-                   of a tabset, which is state the server should know
-                   from the start. */
+            if (el.dataset.gMessage === "event") return; /* buttons: no state */
+            if (el.dataset.gValue !== undefined) {
+                /* click-selected state (tab buttons): the active one
+                   holds the group's value */
                 if (el.classList.contains("g-tab-active")) {
-                    inputs[el.dataset.gTarget] = el.dataset.gValue;
+                    inputValues[el.dataset.gTarget] = el.dataset.gValue;
                 }
                 return;
             }
-            /* radios: one value per group, from the checked member */
             if (el.type === "radio" && !el.checked) return;
-            inputs[el.dataset.gTarget] = extractValue(el);
+            inputValues[el.dataset.gTarget] = extractValue(el);
         });
-        Object.keys(inputs).forEach(function (id) {
-            inputValues[id] = inputs[id];
-        });
-        measurePlots(function (id, dim, value) {
-            inputs["..clientdata_output_" + id + "_" + dim] = value;
-        });
-        return inputs;
     }
 
     /* ---------- conditional panels ---------- */
@@ -151,18 +179,24 @@
         });
     }
 
+    /* A rendered box is the one thing the server cannot know from the
+       tree, so it is the one thing a client still reports after
+       adopting. (Stage 3 turns these reserved inputs into `measure`
+       messages.) */
+    function reportPlotDims() {
+        measurePlots(function (id, dim, value) {
+            send({
+                type: "input",
+                id: "..clientdata_output_" + id + "_" + dim,
+                value: value
+            });
+        });
+    }
+
     var resizeTimer = null;
     window.addEventListener("resize", function () {
         if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(function () {
-            measurePlots(function (id, dim, value) {
-                send({
-                    type: "input",
-                    id: "..clientdata_output_" + id + "_" + dim,
-                    value: value
-                });
-            });
-        }, 250);
+        resizeTimer = setTimeout(reportPlotDims, 250);
     });
 
     /* ---------- outgoing ---------- */
@@ -204,12 +238,24 @@
 
     /* ---------- event delegation ---------- */
 
+    /* Listeners attach to the root exactly once, at page load. That
+       is what makes "adopting pre-rendered markup never duplicates
+       handlers" structural: hydration touches the DOM, never the
+       listeners, so there is no second registration to forget to
+       skip. */
     function bindEvents(root) {
         root.addEventListener("click", function (ev) {
-            var el = ev.target.closest('[data-g-event="click"]');
+            var el = ev.target.closest("[data-g-target]");
             if (!el) return;
-            /* A bind carrying a value is an event input (which item
-               was clicked), not an action-button counter. */
+            /* data-g-message says what the element emits. Buttons are
+               events: no value, just the fact of the press. An element
+               carrying data-g-value is click-selected state (a tab):
+               that is an input. Anything else reports through its own
+               input/change events, not through clicks. */
+            if (el.dataset.gMessage === "event") {
+                send({ type: "event", id: el.dataset.gTarget });
+                return;
+            }
             if (el.dataset.gValue !== undefined) {
                 noteInput(el.dataset.gTarget, el.dataset.gValue);
                 send({
@@ -217,8 +263,6 @@
                     id: el.dataset.gTarget,
                     value: el.dataset.gValue
                 });
-            } else {
-                send({ type: "click", id: el.dataset.gTarget });
             }
         });
 
@@ -242,10 +286,6 @@
         root.addEventListener("input", function (ev) {
             var el = ev.target;
             if (el.dataset.gEvent !== "input") return;
-            if (el.type === "range") {
-                var echo = document.getElementById(el.id + "_val");
-                if (echo) echo.textContent = el.value;
-            }
             sendInputDebounced(el);
         });
 
@@ -283,6 +323,432 @@
         });
     }
 
+    /* ---------- component rendering ---------- */
+
+    /* The JS twin of R's component_to_html(). The server renders the
+       initial page; this builds the same DOM for everything that
+       arrives at runtime: welcome.ui on a revision mismatch,
+       render_ui() output, modal bodies. The two lowerings must agree,
+       and the shared fixtures pin this one the same way the R tests
+       pin that one. Anything reached for here that the tree does not
+       supply is a schema finding, not a workaround. */
+
+    var TEXT_CLASSES = {
+        normal: "g-text",
+        muted: "g-text g-muted",
+        strong: "g-text g-strong",
+        heading: "g-text g-text-heading"
+    };
+    var OUTPUT_CLASSES = {
+        normal: "g-output",
+        muted: "g-output g-muted",
+        strong: "g-output g-strong"
+    };
+    var OUTPUT_KIND_OF = {
+        text_output: "text",
+        verbatim_output: "text",
+        table_output: "table",
+        plot_output: "image",
+        image_output: "image",
+        audio_output: "audio",
+        html_output: "html",
+        ui_output: "ui"
+    };
+
+    function el(tag, attrs) {
+        var node = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+            var v = attrs[k];
+            if (v !== null && v !== undefined) node.setAttribute(k, v);
+        });
+        return node;
+    }
+
+    /* emit becomes a DOM event name here and nowhere else. */
+    function emitEvent(emit) {
+        return emit === "live" ? "input" : "change";
+    }
+
+    function bindAttrs(c, message) {
+        var attrs = { id: c.id };
+        attrs["data-g-target"] = c.id;
+        attrs["data-g-message"] = message;
+        if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
+        return attrs;
+    }
+
+    function slotAttrs(c) {
+        var attrs = { id: c.id };
+        attrs["data-g-output"] = c.id;
+        attrs["data-g-kind"] = OUTPUT_KIND_OF[c.component];
+        return attrs;
+    }
+
+    function assign(target, extra) {
+        Object.keys(extra || {}).forEach(function (k) {
+            target[k] = extra[k];
+        });
+        return target;
+    }
+
+    function fieldGroup(c, control) {
+        var wrap = el("div", { "class": "g-field" });
+        if (c.label) {
+            var lab = el("label", { "for": c.id });
+            lab.textContent = c.label;
+            wrap.appendChild(lab);
+        }
+        wrap.appendChild(control);
+        return wrap;
+    }
+
+    function appendChildren(node, children) {
+        (children || []).forEach(function (ch) {
+            var built = buildComponent(ch);
+            if (built) node.appendChild(built);
+        });
+    }
+
+    function buildLayout(c, cls) {
+        var style = [];
+        if (c.gap !== null && c.gap !== undefined) {
+            style.push("gap:" + c.gap + "px");
+        }
+        if (c.align) {
+            var map = { start: "flex-start", center: "center",
+                        end: "flex-end" };
+            style.push("align-items:" + map[c.align]);
+        }
+        var node = el("div", {
+            "class": cls,
+            id: c.id,
+            style: style.length ? style.join(";") : null
+        });
+        appendChildren(node, c.children);
+        return node;
+    }
+
+    function buildTextLike(c, type) {
+        var attrs = assign(bindAttrs(c, "input"), {
+            type: type,
+            "class": "g-input",
+            value: c.value === null || c.value === undefined ? "" : c.value,
+            placeholder: c.placeholder
+        });
+        return fieldGroup(c, el("input", attrs));
+    }
+
+    function buildSelect(c) {
+        var attrs = assign(bindAttrs(c, "input"), { "class": "g-select" });
+        if (c.multiple) attrs.multiple = "multiple";
+        var sel = el("select", attrs);
+        (c.choices || []).forEach(function (ch) {
+            var opt = el("option", {
+                value: ch.value,
+                selected: ch.value === c.selected ? "selected" : null
+            });
+            opt.textContent = ch.label;
+            sel.appendChild(opt);
+        });
+        return fieldGroup(c, sel);
+    }
+
+    function buildCheckbox(c) {
+        var attrs = assign(bindAttrs(c, "input"), {
+            type: "checkbox",
+            "class": "g-checkbox",
+            checked: c.value === true ? "checked" : null
+        });
+        var wrap = el("div", { "class": "g-check" });
+        wrap.appendChild(el("input", attrs));
+        var lab = el("label", { "for": c.id });
+        lab.textContent = c.label || "";
+        wrap.appendChild(lab);
+        return wrap;
+    }
+
+    function buildRadio(c) {
+        var group = el("div", { id: c.id, "class": "g-radio-group" });
+        var glab = el("label", { "class": "g-radio-group-label" });
+        glab.textContent = c.label || "";
+        group.appendChild(glab);
+        (c.choices || []).forEach(function (ch, i) {
+            var item = el("div", { "class": "g-radio-item" });
+            var itemId = c.id + "_" + (i + 1);
+            var attrs = {
+                id: itemId,
+                type: "radio",
+                name: c.id,
+                value: ch.value,
+                "class": "g-radio",
+                checked: ch.value === c.selected ? "checked" : null
+            };
+            attrs["data-g-target"] = c.id;
+            attrs["data-g-message"] = "input";
+            attrs["data-g-event"] = emitEvent(c.emit);
+            item.appendChild(el("input", attrs));
+            var lab = el("label", { "for": itemId });
+            lab.textContent = ch.label;
+            item.appendChild(lab);
+            group.appendChild(item);
+        });
+        return group;
+    }
+
+    function buildFile(c) {
+        var attrs = assign(bindAttrs(c, "input"), {
+            type: "file",
+            "class": "g-file"
+        });
+        if (c.multiple) attrs.multiple = "multiple";
+        attrs["data-g-upload"] = c.id;
+        if (c.accept) {
+            attrs.accept = [].concat(c.accept).join(",");
+        }
+        return fieldGroup(c, el("input", attrs));
+    }
+
+    function buildButton(c, extraClass) {
+        var attrs = assign(bindAttrs(c, "event"), {
+            type: "button",
+            "class": ["g-btn", "g-btn-" + (c.variant || "default")]
+                .concat(extraClass || []).join(" ")
+        });
+        var btn = el("button", attrs);
+        if (c.icon) {
+            btn.appendChild(buildComponent({
+                component: "icon", name: c.icon, size: 18
+            }));
+        }
+        btn.appendChild(document.createTextNode(c.label || ""));
+        return btn;
+    }
+
+    function buildTabset(c) {
+        var titles = (c.panels || []).map(function (p) { return p.title; });
+        var selected = c.selected;
+        if (selected === null || selected === undefined ||
+                titles.indexOf(selected) === -1) {
+            selected = titles[0];
+        }
+        var set = el("div", { id: c.id, "class": "g-tabset" });
+        var nav = el("div", { "class": "g-tab-nav" });
+        (c.panels || []).forEach(function (p) {
+            var attrs = {
+                type: "button",
+                "class": "g-tab-btn" +
+                    (p.title === selected ? " g-tab-active" : "")
+            };
+            attrs["data-g-tab-panel"] = p.title;
+            attrs["data-g-target"] = c.id;
+            attrs["data-g-message"] = "input";
+            attrs["data-g-value"] = p.title;
+            var btn = el("button", attrs);
+            btn.textContent = p.title;
+            nav.appendChild(btn);
+        });
+        set.appendChild(nav);
+        var bodies = el("div", { "class": "g-tab-bodies" });
+        (c.panels || []).forEach(function (p) {
+            var attrs = {
+                "class": "g-tab-body" +
+                    (p.title === selected ? "" : " g-hidden")
+            };
+            attrs["data-g-tab-panel"] = p.title;
+            var body = el("div", attrs);
+            appendChildren(body, p.children);
+            bodies.appendChild(body);
+        });
+        set.appendChild(bodies);
+        return set;
+    }
+
+    function buildComponent(c) {
+        if (c === null || c === undefined) return null;
+        var node;
+        switch (c.component) {
+        case "text":
+            node = el("span", {
+                "class": TEXT_CLASSES[c.variant] || TEXT_CLASSES.normal,
+                id: c.id
+            });
+            node.textContent = c.value;
+            return node;
+        case "heading":
+            node = el("h" + (c.level || 2), { id: c.id });
+            node.textContent = c.value;
+            return node;
+        case "link":
+            node = el("a", {
+                href: c.href,
+                "class": "g-link",
+                target: c.external ? "_blank" : null,
+                rel: c.external ? "noopener noreferrer" : null
+            });
+            node.textContent = c.value;
+            return node;
+        case "icon":
+            node = el("span", {
+                "class": "g-icon g-icon-" + c.name,
+                style: "width:" + c.size + "px;height:" + c.size + "px"
+            });
+            node.setAttribute("data-g-icon", c.name);
+            node.setAttribute("aria-hidden", "true");
+            return node;
+        case "divider":
+            if (c.variant === "labelled" && c.label) {
+                node = el("div", {
+                    "class": "g-divider g-divider-labelled"
+                });
+                var dl = el("span", { "class": "g-divider-label" });
+                dl.textContent = c.label;
+                node.appendChild(dl);
+                return node;
+            }
+            return el("hr", { "class": "g-divider" });
+        case "spacer":
+            node = el("div", {
+                "class": "g-spacer",
+                style: "height:calc(var(--g-space) * " + c.size + ")"
+            });
+            node.setAttribute("data-g-size", c.size);
+            return node;
+        case "page":
+            node = el("div", { "class": "g-page", id: c.id });
+            appendChildren(node, c.children);
+            return node;
+        case "row":
+            return buildLayout(c, "g-layout-row");
+        case "column":
+            return buildLayout(c, "g-layout-col");
+        case "panel":
+            node = el("div", {
+                "class": "g-panel g-panel-" + (c.variant || "plain"),
+                id: c.id
+            });
+            if (c.title) {
+                var pt = el("div", { "class": "g-panel-title" });
+                pt.textContent = c.title;
+                node.appendChild(pt);
+            }
+            appendChildren(node, c.children);
+            return node;
+        case "text_input":
+            return buildTextLike(c, "text");
+        case "password_input":
+            return buildTextLike(c, "password");
+        case "date_input":
+            return buildTextLike(c, "date");
+        case "textarea_input":
+            node = el("textarea", assign(bindAttrs(c, "input"), {
+                "class": "g-textarea",
+                rows: c.rows,
+                placeholder: c.placeholder
+            }));
+            node.textContent =
+                c.value === null || c.value === undefined ? "" : c.value;
+            return fieldGroup(c, node);
+        case "number_input":
+            return fieldGroup(c, el("input", assign(bindAttrs(c, "input"), {
+                type: "number",
+                "class": "g-input",
+                value: c.value,
+                min: c.min,
+                max: c.max,
+                step: c.step
+            })));
+        case "select_input":
+            return buildSelect(c);
+        case "checkbox_input":
+            return buildCheckbox(c);
+        case "radio_buttons":
+            return buildRadio(c);
+        case "slider_input":
+            return fieldGroup(c, el("input", assign(bindAttrs(c, "input"), {
+                type: "range",
+                "class": "g-slider",
+                min: c.min,
+                max: c.max,
+                value: c.value,
+                step: c.step
+            })));
+        case "file_input":
+            return buildFile(c);
+        case "button":
+            return buildButton(c);
+        case "download_button":
+            return buildButton(c, ["g-download"]);
+        case "text_output":
+            return el("span", assign(slotAttrs(c), {
+                "class": OUTPUT_CLASSES[c.variant] || OUTPUT_CLASSES.normal
+            }));
+        case "verbatim_output":
+            return el("pre", assign(slotAttrs(c), {
+                "class": "g-verbatim-output"
+            }));
+        case "table_output":
+            return el("div", assign(slotAttrs(c), {
+                "class": "g-table-output"
+            }));
+        case "plot_output":
+            return el("img", assign(slotAttrs(c), {
+                "class": "g-plot-output",
+                alt: c.alt,
+                width: c.width,
+                height: c.height,
+                style: (c.width === null || c.width === undefined) &&
+                    (c.height === null || c.height === undefined)
+                    ? "width:100%;aspect-ratio:4 / 3" : null
+            }));
+        case "image_output":
+            return el("img", assign(slotAttrs(c), {
+                "class": "g-image-output",
+                alt: c.alt
+            }));
+        case "audio_output":
+            return el("audio", assign(slotAttrs(c), {
+                "class": "g-audio-output",
+                controls: c.controls ? "controls" : null,
+                autoplay: c.autoplay ? "autoplay" : null
+            }));
+        case "html_output":
+            return el("div", assign(slotAttrs(c), {
+                "class": "g-html-output"
+            }));
+        case "ui_output":
+            return el("div", assign(slotAttrs(c), {
+                "class": "g-ui-output"
+            }));
+        case "tabset":
+            return buildTabset(c);
+        case "conditional_panel":
+            node = el("div", { "class": "g-conditional" });
+            node.setAttribute("data-g-cond", JSON.stringify(c.condition));
+            appendChildren(node, c.children);
+            return node;
+        case "raw_html": {
+            /* The browser-only escape hatch: trusted markup, inserted
+               as-is. A template splices its children inline, keeping
+               the structure identical to the server-rendered page. */
+            var t = document.createElement("template");
+            if (t.content) {
+                t.innerHTML = c.html;
+                return t.content;
+            }
+            node = document.createElement("div");
+            node.innerHTML = c.html;
+            return node;
+        }
+        default:
+            /* Visible and named, never silent. */
+            node = el("div", { "class": "g-unsupported" });
+            node.setAttribute("data-g-component", String(c.component));
+            node.textContent =
+                "[unsupported component: " + c.component + "]";
+            return node;
+        }
+    }
+
     /* ---------- incoming ---------- */
 
     function clearError(el) {
@@ -317,46 +783,6 @@
         el.appendChild(tbl);
     }
 
-    var SVG_NS = "http://www.w3.org/2000/svg";
-
-    function buildTagNode(node, ns) {
-        if (node === null || node === undefined) return null;
-        if (typeof node === "string") {
-            return document.createTextNode(node);
-        }
-        /* SVG lives in its own namespace. createElement() would build an
-           HTMLUnknownElement that parses fine and never renders, so an
-           inline icon inside render_ui() would silently vanish. Static
-           UI escapes this because the HTML parser handles it. Every
-           descendant of <svg> inherits the namespace. */
-        if (node.tag === "svg") {
-            ns = SVG_NS;
-        }
-        var el = ns
-            ? document.createElementNS(ns, node.tag)
-            : document.createElement(node.tag);
-        var attrs = node.attrs || {};
-        Object.keys(attrs).forEach(function (k) {
-            el.setAttribute(k, attrs[k]);
-        });
-        if (node.bind) {
-            el.setAttribute("data-g-event", node.bind.event);
-            el.setAttribute("data-g-target", node.bind.target);
-            if (node.bind.value !== null && node.bind.value !== undefined) {
-                el.setAttribute("data-g-value", node.bind.value);
-            }
-        }
-        if (node.text !== null && node.text !== undefined) {
-            el.textContent = node.text;
-        } else {
-            (node.children || []).forEach(function (c) {
-                var child = buildTagNode(c, ns);
-                if (child) el.appendChild(child);
-            });
-        }
-        return el;
-    }
-
     function applyUpdate(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
@@ -367,7 +793,7 @@
         }
         if (msg.property === "ui") {
             el.textContent = "";
-            var node = buildTagNode(msg.value);
+            var node = buildComponent(msg.value);
             if (node) el.appendChild(node);
             /* the new subtree may contain conditional panels that
                have never been evaluated */
@@ -457,10 +883,6 @@
                     el.checked = !!msg.value;
                 } else {
                     el.value = msg.value;
-                    if (el.type === "range") {
-                        var echo = document.getElementById(el.id + "_val");
-                        if (echo) echo.textContent = el.value;
-                    }
                 }
             }
         }
@@ -479,7 +901,93 @@
         el.title = msg.message;
     }
 
+    /* ---------- hydration ---------- */
+
+    /* Replace the pre-rendered markup with DOM built from welcome.ui.
+       The mismatch path: whatever this page was served describes a
+       different tree, and patching a stale DOM is how a hydration bug
+       becomes a data bug. Delegated listeners live on the root and
+       survive; local input state re-seeds from the new DOM. */
+    function rebuildRoot(ui) {
+        var root = document.getElementById("glinty-root");
+        if (!root) return;
+        root.textContent = "";
+        var built = buildComponent(ui);
+        if (built) root.appendChild(built);
+        inputValues = {};
+        harvestLocal();
+        refreshConditionals();
+    }
+
+    /* The refusal, drawn. It replaces the content rather than sitting
+       on top of it, because there is no content this client can be
+       trusted to have understood. Styled inline so it renders even if
+       the stylesheet never loaded. */
+    function showProtocolError(got) {
+        var advice = got > PROTOCOL ? "Update the app." : "Update the server.";
+        var root = document.getElementById("glinty-root") || document.body;
+        root.textContent = "";
+        var box = document.createElement("div");
+        box.id = "g-protocol-error";
+        box.setAttribute("style",
+            "margin:24px;padding:20px 24px;border:2px solid #b3261e;" +
+            "border-radius:8px;background:#fdecea;color:#4a1210;" +
+            "font-family:system-ui,sans-serif");
+        var h = document.createElement("h2");
+        h.textContent = "Incompatible glinty server";
+        var p = document.createElement("p");
+        p.textContent = "This app speaks glinty protocol " + PROTOCOL +
+            ", but the server sent protocol " + got + ". " + advice;
+        box.appendChild(h);
+        box.appendChild(p);
+        root.appendChild(box);
+    }
+
+    function handleWelcome(msg) {
+        if (msg.protocol !== PROTOCOL) {
+            /* Refuse before touching the DOM state: a mismatched
+               server must not get a half-rendered tree on screen. */
+            refused = true;
+            showProtocolError(msg.protocol);
+            return;
+        }
+        if (msg.resumed === false) {
+            /* session expired server-side; our DOM holds dead state */
+            location.reload();
+            return;
+        }
+        var resumedNow = msg.resumed === true;
+        sessionId = msg.session;
+        retries = 0;
+        hideBanner();
+        if (!resumedNow) {
+            if (prerendered && msg.ui_revision &&
+                    msg.ui_revision === prerendered) {
+                /* Adopt: the markup we were served describes exactly
+                   this tree. Nothing to build, nothing to send -- the
+                   server built the tree and knows every default. */
+            } else if (msg.ui) {
+                rebuildRoot(msg.ui);
+            }
+            reportPlotDims();
+        }
+        /* On resume the DOM is live client state, not the initial
+           tree; the welcome's ui rides along and is ignored. */
+        flushPending();
+        /* Once per page load, not once per socket: a successful
+           resume keeps the DOM and the app's JS state, and a failed
+           one reloads above. Re-firing would make apps
+           double-register their listeners. */
+        if (!connectedFired) {
+            connectedFired = true;
+            document.dispatchEvent(new CustomEvent("glinty:connected", {
+                detail: { sessionId: sessionId }
+            }));
+        }
+    }
+
     function onMessage(ev) {
+        if (refused) return;
         var msg;
         try {
             msg = JSON.parse(ev.data);
@@ -488,26 +996,8 @@
             return;
         }
         switch (msg.type) {
-        case "config":
-            if (msg.resumed === false) {
-                /* session expired server-side; our DOM is stale */
-                location.reload();
-                return;
-            }
-            sessionId = msg.session_id;
-            retries = 0;
-            hideBanner();
-            flushPending();
-            /* Once per page load, not once per socket: a successful
-               resume keeps the DOM and the app's JS state, and a
-               failed one reloads above. Re-firing would make apps
-               double-register their listeners. */
-            if (!connectedFired) {
-                connectedFired = true;
-                document.dispatchEvent(new CustomEvent("glinty:connected", {
-                    detail: { sessionId: sessionId }
-                }));
-            }
+        case "welcome":
+            handleWelcome(msg);
             break;
         case "custom":
             if (Object.prototype.hasOwnProperty.call(
@@ -574,7 +1064,7 @@
         var body = document.createElement("div");
         body.className = "g-modal-body";
         (msg.body || []).forEach(function (node) {
-            var el = buildTagNode(node);
+            var el = buildComponent(node);
             if (el) body.appendChild(el);
         });
         box.appendChild(body);
@@ -582,7 +1072,7 @@
         if (msg.footer) {
             var foot = document.createElement("div");
             foot.className = "g-modal-footer";
-            var f = buildTagNode(msg.footer);
+            var f = buildComponent(msg.footer);
             if (f) foot.appendChild(f);
             box.appendChild(foot);
         }
@@ -708,6 +1198,7 @@
     }
 
     function handleClose() {
+        if (refused) return; /* a refused session has nothing to resume */
         if (!sessionId) {
             /* never had a session: nothing to resume */
             showDisconnected();
@@ -730,11 +1221,24 @@
         var proto = location.protocol === "https:" ? "wss://" : "ws://";
         ws = new WebSocket(proto + location.host + "/ws");
         ws.addEventListener("open", function () {
+            /* hello goes out directly, ahead of anything queued: it
+               must be the first frame the server sees. It carries no
+               input values -- the server seeded itself from the tree
+               it built. */
+            var hello = {
+                type: "hello",
+                protocol: PROTOCOL,
+                client: CLIENT_ID,
+                components: SUPPORTED_COMPONENTS,
+                kinds: SUPPORTED_KINDS,
+                features: SUPPORTED_FEATURES
+            };
             if (sessionId) {
-                send({ type: "resume", session_id: sessionId });
-            } else {
-                send({ type: "init", inputs: harvestInputs() });
+                hello.resume = sessionId;
+            } else if (prerendered) {
+                hello.prerendered = prerendered;
             }
+            ws.send(JSON.stringify(hello));
         });
         ws.addEventListener("message", onMessage);
         ws.addEventListener("close", handleClose);
@@ -762,7 +1266,7 @@
             }
             customHandlers[name] = fn;
         },
-        /* Current session id, or null before the first config. */
+        /* Current session id, or null before the first welcome. */
         sessionId: function () {
             return sessionId;
         }
@@ -771,11 +1275,13 @@
     document.addEventListener("DOMContentLoaded", function () {
         var root = document.getElementById("glinty-root");
         if (!root) return;
+        var meta = document.querySelector('meta[name="g-ui-revision"]');
+        prerendered = meta ? meta.getAttribute("content") : null;
         bindEvents(root);
         /* Seed inputValues and settle conditional panels before the
            socket work starts, so the page never flashes content that
-           its condition says to hide. */
-        harvestInputs();
+           its condition says to hide. Local only; nothing is sent. */
+        harvestLocal();
         refreshConditionals();
         connect();
     });

@@ -81,7 +81,13 @@ page_txt <- rawToChar(buf)
 expect_true(grepl("200 OK", page_txt))
 expect_true(grepl("glinty-root", page_txt))
 expect_true(grepl("glinty counter", page_txt))
-expect_true(grepl('data-g-event="click"', page_txt))
+# buttons declare themselves as event emitters
+expect_true(grepl('data-g-message="event"', page_txt))
+# and the served page carries the revision the welcome will repeat
+rev_meta <- regmatches(page_txt,
+    regexpr('name="g-ui-revision" content="[0-9a-f]{64}"', page_txt))
+expect_equal(length(rev_meta), 1L)
+page_rev <- sub('.*content="([0-9a-f]{64})".*', "\\1", rev_meta)
 
 # --- WebSocket helpers (used for the initial and resumed sockets) ---
 buf <- raw(0L)
@@ -134,14 +140,17 @@ next_json <- function(timeout = 5) {
 
 # --- 2. handshake; sessions start on the first client message ---
 con <- ws_handshake()
-writeBin(text_frame('{"type":"init","inputs":{}}', mask = TRUE), con)
+writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}', mask = TRUE), con)
 
-# --- 3. config first (protocol 2), then the initial count update ---
+# --- 3. welcome first (protocol 3), then the initial count update ---
 msg <- next_json()
-expect_equal(msg$type, "config")
-expect_equal(msg$protocol, 2L)
-expect_true(nchar(msg$session_id) == 32L)
-sid <- msg$session_id
+expect_equal(msg$type, "welcome")
+expect_equal(msg$protocol, 3L)
+expect_true(nchar(msg$session) == 32L)
+sid <- msg$session
+# the welcome carries the tree and repeats the served revision
+expect_equal(msg$ui$component, "page")
+expect_equal(msg$ui_revision, page_rev)
 
 msg <- next_json()
 expect_equal(msg$type, "update")
@@ -149,12 +158,12 @@ expect_equal(msg$id, "count")
 expect_equal(msg$value, "0")
 
 # --- 4. clicks bump the counter ---
-writeBin(text_frame('{"type":"click","id":"inc"}', mask = TRUE), con)
+writeBin(text_frame('{"type":"event","id":"inc"}', mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$id, "count")
 expect_equal(msg$value, "1")
 
-writeBin(text_frame('{"type":"click","id":"inc"}', mask = TRUE), con)
+writeBin(text_frame('{"type":"event","id":"inc"}', mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$value, "2")
 
@@ -168,16 +177,17 @@ expect_equal(rawToChar(f$payload), "marco")
 close(con)
 Sys.sleep(0.5)
 
-# --- 7. reconnect and resume: state survived ---
+# --- 7. reconnect and resume: hello carries the old session id ---
 con <- ws_handshake()
 writeBin(text_frame(
-    sprintf('{"type":"resume","session_id":"%s"}', sid),
+    sprintf('{"type":"hello","protocol":3,"client":"e2e/1","resume":"%s"}',
+            sid),
     mask = TRUE
 ), con)
 msg <- next_json()
-expect_equal(msg$type, "config")
+expect_equal(msg$type, "welcome")
 expect_true(msg$resumed)
-expect_equal(msg$session_id, sid)
+expect_equal(msg$session, sid)
 
 # replayed output state: count is still 2, no clicks needed
 msg <- next_json()
@@ -186,7 +196,7 @@ expect_equal(msg$id, "count")
 expect_equal(msg$value, "2")
 
 # and the session is live: another click lands on the same counter
-writeBin(text_frame('{"type":"click","id":"inc"}', mask = TRUE), con)
+writeBin(text_frame('{"type":"event","id":"inc"}', mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$value, "3")
 
@@ -199,21 +209,21 @@ close(con)
 # --- 9. resume with a bogus id gets an honest resumed=false ---
 con <- ws_handshake()
 writeBin(text_frame(
-    '{"type":"resume","session_id":"deadbeefdeadbeefdeadbeefdeadbeef"}',
+    paste0('{"type":"hello","protocol":3,"client":"e2e/1",',
+           '"resume":"deadbeefdeadbeefdeadbeefdeadbeef"}'),
     mask = TRUE
 ), con)
 msg <- next_json()
-expect_equal(msg$type, "config")
+expect_equal(msg$type, "welcome")
 expect_false(msg$resumed)
-bogus_sid <- msg$session_id
 close(con)
 
 # --- 10. multipart upload over a raw POST reaches the session ---
 # fresh WS session for the upload test
 con <- ws_handshake()
-writeBin(text_frame('{"type":"init","inputs":{}}', mask = TRUE), con)
+writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}', mask = TRUE), con)
 msg <- next_json()
-up_sid <- msg$session_id
+up_sid <- msg$session
 next_json() # initial count update, ignore
 
 payload <- as.raw(c(137, 80, 78, 71, 13, 10, 26, 10, 0:63))

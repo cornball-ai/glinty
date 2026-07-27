@@ -516,15 +516,20 @@ make it slower.
    suites read `components.json`; the wire transcripts and
    `ui_revision` land here too, so stage 2 has something to conform
    to before it is written.
-2. **Bootstrap over the wire.** `welcome` carries the tree; the
-   browser keeps pre-rendering and hydrates against `ui_revision`.
-   The four hydration invariants become browser tests here; the
-   Flutter half of them is already asserted against the transcripts.
-   **Gate:** stage 2 is not complete until the two browser-side
-   hydration tests exist and pass -- one press producing one frame
-   across adoption, and adoption emitting nothing. They are the two
+2. **Bootstrap over the wire.** *(done)* `welcome` carries the tree;
+   the browser keeps pre-rendering and hydrates against
+   `ui_revision`. The server seeds each session's inputs from the
+   tree it built, so `hello` carries no values and adoption sends
+   nothing. The browser grew the component renderer this required
+   (welcome rebuilds, `render_ui()`, modal bodies all build from
+   component trees now).
+   **Gate, met:** the two browser-side hydration tests -- one press
+   producing one frame across adoption, and adoption emitting
+   nothing -- run in `tools/jsbridge.js` against the shared
+   transcripts, wired into CI as the `browser` job. They are the two
    invariants Flutter cannot stand in for, because only the browser
-   adopts pre-rendered markup.
+   adopts pre-rendered markup. All four invariants are
+   mutation-tested: breaking any one of them fails its check.
 3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
    `..clientdata_output_*` reserved inputs.
 4. **Theme and variants.**

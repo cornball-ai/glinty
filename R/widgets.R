@@ -144,7 +144,11 @@ radio_buttons <- function(id, label = "", choices = character(0),
 #' @param id character input ID
 #' @param label character label text
 #' @param min,max numeric bounds
-#' @param value numeric initial value
+#' @param value numeric initial value; defaults to the midpoint, which
+#'   is where an HTML range input sits when given no value. Filling it
+#'   in here puts the position on the wire, so every frontend starts
+#'   the thumb in the same place instead of each applying its own
+#'   default.
 #' @param step numeric step size; a frontend may derive its own
 #'   division count from it, which is why it is a number
 #' @param emit character "live" or "settle"
@@ -154,6 +158,9 @@ radio_buttons <- function(id, label = "", choices = character(0),
 #' @export
 slider_input <- function(id, label = "", min = 0, max = 1, value = NULL,
                          step = NULL, emit = "live") {
+    if (is.null(value)) {
+        value <- slider_default(min, max)
+    }
     component("slider_input", id = id, label = label, min = min, max = max,
               value = value, step = step, emit = emit)
 }

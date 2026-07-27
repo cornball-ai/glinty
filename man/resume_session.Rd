@@ -12,8 +12,10 @@ resume_session(session)
 invisible(NULL)
 }
 \description{
-Cancels the grace timer and queues, in order: the resumed config,
-the last message of every output (current state, no re-render),
-then whatever non-output messages buffered while detached.
+Cancels the grace timer and queues, in order: a welcome with
+resumed = TRUE, the last message of every output (current state,
+no re-render), then whatever non-output messages buffered while
+detached. The client keeps its live DOM on a resumed welcome, so
+the tree riding along is ignored there.
 }
 \keyword{internal}

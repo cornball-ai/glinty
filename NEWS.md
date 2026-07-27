@@ -1,8 +1,43 @@
 # glinty (development version)
 
-Protocol v3, stage 1. The wire now carries semantic components rather
-than DOM instructions, which is what lets a frontend that is not a
-browser render a glinty app. See PROTOCOL.md.
+Protocol v3, stages 1 and 2. The wire now carries semantic components
+rather than DOM instructions, which is what lets a frontend that is
+not a browser render a glinty app; and the bootstrap travels over the
+wire, with the browser hydrating its pre-rendered markup against a
+tree revision. See PROTOCOL.md.
+
+Stage 2, bootstrap over the wire:
+
+- **Breaking**: the wire protocol is now v3 end to end. `welcome`
+  (session, protocol, `ui`, `ui_revision`) replaces `config`;
+  clients open with `hello`, which also carries `resume` on
+  reconnect; buttons send `event` frames instead of `click`; `init`
+  is gone. A page cached from 0.4.x should be hard-refreshed once
+  after upgrading.
+- Sessions seed their inputs from the component tree before the
+  server function runs. Reactives read defaults on their very first
+  run instead of NULL-then-rerender, nothing is harvested from the
+  client, and `observe_event()`'s `ignore_init` now means what it
+  says: a seeded default is init state, not a change, so handlers no
+  longer fire once at connect for prefilled inputs. An app that
+  relied on that accidental startup fire should call the handler
+  directly at server start.
+- The served page embeds `<meta name="g-ui-revision">`. A client
+  whose markup matches the welcome's revision adopts it; a mismatch
+  rebuilds from `welcome.ui`; a protocol mismatch draws a visible
+  refusal naming both versions.
+- The browser client gained a full component renderer. This also
+  fixes a stage 1 regression: `render_ui()` output and modal bodies
+  travel as component trees, which the client could not build (and
+  stage 1's buttons carried no `data-g-event`, so clicks never
+  bound). Dynamic UI, modals and buttons work again, and
+  `tools/jsbridge.js` now replays the shared transcripts against the
+  real client in CI so a gap like that cannot reopen silently.
+- `slider_input()` fills in its value when not given: the midpoint,
+  which is where an HTML range input sits anyway. The position is on
+  the wire, so every frontend starts the thumb in the same place.
+
+Stage 1, semantic components:
 
 - **Breaking**: every UI builder returns a component, not an HTML tag.
   `div()`, `span()`, `p()` and `h1()`-`h4()` are removed; use

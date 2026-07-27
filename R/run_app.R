@@ -80,10 +80,19 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     .globals$timers <- list()
     .globals$progress <- list()
 
+    # The tree and its revision are computed once: the same wire form
+    # goes into every welcome, and the revision goes into both the
+    # pre-rendered document and the welcome, which is what lets a
+    # client tell whether the markup it was handed matches the tree
+    # it was just sent.
+    .globals$welcome_ui <- unclass_recursive(app_obj$ui)
+    .globals$welcome_revision <- ui_revision(app_obj$ui)
+
     page_html <- full_page_html(
                                 component_to_html(app_obj$ui),
         if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app",
-                                attr(app_obj$ui, "assets")
+                                attr(app_obj$ui, "assets"),
+                                ui_revision = .globals$welcome_revision
     )
     # Before a single byte is served, not after.
     if (isTRUE(check_secrets)) {
@@ -101,7 +110,13 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
         s <- new_session(sid, send_fn = function(msg) {
             send_to_session(sid, msg)
         })
-        s$send(config_msg(sid, resumed = resumed))
+        # Inputs seed from the tree before the server function runs:
+        # reactives read defaults on their first run, and
+        # observe_event()'s ignore_init treats them as init state
+        # rather than changes. Protocol 2 waited for the client to
+        # send these back.
+        seed_session_inputs(s, app_obj$ui)
+        s$send(welcome_msg(sid, resumed = resumed))
         with_session(s, {
             if (n_formals >= 3L) {
                 app_obj$server(s$input, s$output, s)
@@ -118,8 +133,8 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
         route_http(req, page_html, pkg_www, static_dir)
     },
                      # Sessions start on the FIRST client message, not at
-                     # upgrade: the first frame decides between a fresh
-                     # init and a resume of a detached session.
+                     # upgrade: the hello decides between a fresh
+                     # session and a resume of a detached one.
                      on_open = function(sid) invisible(NULL),
                      on_message = function(sid, txt) {
         s <- .globals$sessions[[sid]]
@@ -129,20 +144,23 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
         }
         first <- tryCatch(jsonlite::fromJSON(txt, simplifyVector = FALSE),
                           error = function(e) NULL)
-        if (!is.null(first) && identical(first$type, "resume")) {
-            old_id <- first$session_id
-            old <- if (is.character(old_id) && nzchar(old_id)) {
-                .globals$sessions[[old_id]]
-            } else {
-                NULL
-            }
+        resume_id <- if (!is.null(first) && identical(first$type, "hello")) {
+            first$resume
+        } else {
+            NULL
+        }
+        if (is.character(resume_id) && nzchar(resume_id)) {
+            old <- .globals$sessions[[resume_id]]
             if (!is.null(old) && isTRUE(old$detached) &&
-                     transport_rebind(sid, old_id)) {
+                     transport_rebind(sid, resume_id)) {
                 resume_session(old)
+                # the reconnecting client redeclares its capabilities
+                dispatch_client_message(old, txt)
             } else {
                 # unknown or expired: honest fresh session; the
-                # client reloads since its DOM may be stale
-                start_session(sid, resumed = FALSE)
+                # client reloads since its DOM holds dead state
+                s <- start_session(sid, resumed = FALSE)
+                dispatch_client_message(s, txt)
             }
             return(invisible(NULL))
         }

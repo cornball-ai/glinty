@@ -9,7 +9,7 @@ session_end <- glinty:::session_end
 with_session <- glinty:::with_session
 drain_session <- glinty:::drain_session
 handle_input <- glinty:::handle_input
-handle_click <- glinty:::handle_click
+handle_event <- glinty:::handle_event
 
 # --- two sessions with the same output id stay isolated ---
 s1 <- new_session("s1")
@@ -79,9 +79,9 @@ with_session(s4, {
     })
 })
 flush_reactions()
-handle_click(s4, "go")
+handle_event(s4, "go")
 flush_reactions()
-handle_click(s4, "go")
+handle_event(s4, "go")
 flush_reactions()
 expect_equal(clicks, c(1L, 2L))
 session_end(s4)
