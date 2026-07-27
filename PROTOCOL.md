@@ -45,9 +45,11 @@ is a translation of the other.
 
 | type | fields | meaning |
 |---|---|---|
-| `hello` | `protocol`, `client`, `components`, `token?`, `resume?` | opening frame; declares what this client can render |
+| `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
 | `input` | `id`, `value` | an input changed |
 | `event` | `id`, `kind`, `value?` | a click or other discrete event |
+| `measure` | `id`, `width`, `height` | a client-sized output's rendered box |
+| `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
 | `ack` | `seq` | optional flow control, reserved |
 
 `hello` replaces both `init` and `resume`. It carries `resume` when
@@ -58,10 +60,10 @@ the server sent the tree, so it already knows the defaults.
 
 | type | fields | meaning |
 |---|---|---|
-| `welcome` | `session`, `protocol`, `theme`, `ui`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
-| `output` | `id`, `kind`, `value` | an output's current value |
+| `welcome` | `session`, `protocol`, `theme`, `ui`, `ui_revision`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
+| `output` | `id`, `kind`, `value` | an output's current value, including `kind: "ui"` |
 | `input_update` | `id`, fields | server-driven input change |
-| `ui` | `id`, `tree` | replace a `ui_output`'s subtree |
+| `ticket` | `id`, `purpose`, `token`, `expires` | short-lived credential for one transfer |
 | `modal` | `action`, `title?`, `body?`, `footer?` | dialog |
 | `progress` | `action`, `id`, `message?`, `detail?`, `value?` | progress bar |
 | `custom` | `handler`, `value` | app-defined channel |
@@ -351,6 +353,17 @@ What glinty can do is **say so loudly at startup**, naming the
 interface exposure in the same breath as the URL, rather than burying
 it in `?run_app`.
 
+The containment belongs to the layer that can actually enforce it:
+firewall rules, a container network namespace, or viento's own network
+isolation around the allocated port. A reverse proxy alone is not
+enough — if the raw glinty port stays reachable, the proxy is simply
+one of several ways in.
+
+So the deployment contract is: **glinty warns, authentication gates
+the session, and the scheduler isolates the port.** No native code, no
+extra dependency, and the one component that can bind selectively is
+the one doing it.
+
 TLS is the same story: base R sockets cannot terminate it, and
 `openssl` in Imports is a dependency decision against the tinyverse
 budget. The supported deployment is a reverse proxy terminating TLS in
@@ -385,17 +398,19 @@ exists than after.
   being portable.
 - Class-based styling becomes browser-only. `class = "history-item"`
   keeps working in the browser and does nothing elsewhere.
-- The initial paint costs a round trip. The page shell arrives, then
-  the tree. Server-side rendering could be added back later as an
-  optimisation for the browser only.
 - Protocol 2 clients stop working. There is one, and it ships in this
   repo.
+- `run_app_native()` stops working at stage 1 and stays broken until
+  someone retrofits it. See below.
+
+First paint is **not** a cost: the browser keeps pre-rendering and
+hydrating against `ui_revision`, so `welcome` being canonical does not
+make it slower.
 
 ## Staging
 
-1. **Component representation.** Builders emit components. Two
-   lowerings land together: component → DOM in the browser client, and
-   component → flitR ops in `native_scene.R`.
+1. **Component representation.** Builders emit components; the browser
+   client lowers them to DOM.
 2. **Bootstrap over the wire.** `welcome` carries the tree; the
    browser keeps pre-rendering and hydrates against `ui_revision`.
 3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
@@ -404,22 +419,24 @@ exists than after.
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Dart client, in its own repo.
 
-### flitR is the first consumer, not an afterthought
+### flitR breaks, and that is accepted
 
 `run_app_native()` translates tag trees today
 ([native_scene.R](R/native_scene.R)), so stage 1 breaks it the moment
-builders stop producing tags. Retrofitting it in the same stage is not
-optional work — it is the only way to find out whether the component
-vocabulary is genuinely frontend-neutral before anyone writes Dart.
+builders stop producing tags. It is not being retrofitted, bridged, or
+kept compiling.
 
-Two frontends disagreeing is cheap to fix in R. Discovering the
-disagreement from Dart, across a repo boundary and a language barrier,
-is not.
+flitR is shelved and has one user, so the cost of it being broken is
+known and near zero. It stays in the repo as an option; whether a
+component → flitR lowering is worth writing is a decision for after
+the Dart client exists, when there is something to compare against.
 
-This does not contradict freezing flitR. Freezing means **not adding
-new widgets** to chase glinty's feature set. Keeping it compiling
-through a refactor of the layer beneath it is maintenance, and it buys
-a design check that would otherwise cost a whole client to obtain.
+**The risk being accepted:** with only one lowering, the component
+vocabulary is validated against the DOM alone until Dart arrives. Some
+of it will turn out to be DOM-shaped in ways nobody notices from
+inside the browser. Golden fixtures at stage 6 are where that surfaces,
+which is later and more expensive than a second lowering now would
+have been. That trade is deliberate, not overlooked.
 
 ### The spec stays draft until two clients agree
 
