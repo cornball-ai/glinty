@@ -27,7 +27,8 @@ jobs:
   # Python-free, dogfoods cornball's own installer, and the mirror
   # fetch (the part that actually flakes) gets explicit retries.
   ubuntu-rapt:
-    runs-on: ubuntu-latest
+    # pinned, not -latest: the apt sources below hardcode noble
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v6
@@ -44,15 +45,21 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/cran_r.list
           printf 'Package: *\nPin: release o=CRAN-Apt Project\nPin: release l=CRAN-Apt Packages\nPin-Priority: 700\n' \
             | sudo tee /etc/apt/preferences.d/99cranapt
+          ok=0
           for i in 1 2 3 4; do
-            sudo apt-get update -qq && break || { echo "apt update failed, retry $i"; sleep 45; }
+            if sudo apt-get update -qq; then ok=1; break; fi
+            echo "apt update failed, retry $i"; sleep 45
           done
+          test "$ok" = 1 || { echo "apt update failed after 4 attempts"; exit 1; }
           sudo apt-get install -y --no-install-recommends \
             r-base-core r-base-dev debhelper
 
       - name: rapt
+        env:
+          RAPT_REF: fc71e12d8285c02b55d0408126a1be4338ded1d4
         run: |
-          git clone --depth 1 https://github.com/cornball-ai/rapt /tmp/rapt
+          git clone https://github.com/cornball-ai/rapt /tmp/rapt
+          git -C /tmp/rapt checkout --quiet "$RAPT_REF"
           cd /tmp/rapt/pkg
           dpkg-buildpackage -us -uc -b
           sudo apt-get install -y /tmp/rapt/rapt_*.deb
