@@ -1152,6 +1152,8 @@
         overlay.appendChild(box);
         root.appendChild(overlay);
         refreshConditionals();
+        /* a modal body can hold a plot too */
+        observeMeasured();
     }
 
     document.addEventListener("keydown", function (ev) {
