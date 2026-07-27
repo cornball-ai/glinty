@@ -57,7 +57,14 @@ dynamic _seedFor(GlintyComponent c) {
     case 'radio_buttons':
       return c.str('selected');
     case 'slider_input':
-      return c.number('value') ?? c.number('min');
+      // R's slider_default(): the midpoint, which is where an HTML
+      // range input sits with no value. Seeding to min would put the
+      // thumb somewhere the server does not think it is.
+      final v = c.number('value');
+      if (v != null) return v;
+      final min = c.number('min') ?? 0;
+      final max = c.number('max') ?? 1;
+      return min + (max - min) / 2;
     case 'select_input':
       if (c.boolean('multiple')) return null;
       final selected = c.str('selected');

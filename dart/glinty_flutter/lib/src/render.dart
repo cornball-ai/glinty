@@ -62,6 +62,7 @@ class GlintyRenderer {
       this.onTicket,
       this.values = const {},
       this.inputs = const {},
+      this.overrides = const {},
       this.condition,
       this.spacing = 4,
       this.monoStack = const ['monospace', 'Menlo', 'Courier New']});
@@ -126,6 +127,11 @@ class GlintyRenderer {
   /// session so panels actually toggle.
   final bool Function(dynamic condition)? condition;
 
+  /// Server-pushed field changes per input id, preferred over what
+  /// the tree says: update_select_input() changes the choices of a
+  /// control the tree still describes with the old ones.
+  final Map<String, Map<String, dynamic>> overrides;
+
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
 
@@ -183,10 +189,16 @@ class GlintyRenderer {
         // render with no evaluator shows the children, which is what
         // makes the fixture a render test rather than a state test.
         final decide = condition;
-        if (decide != null && !decide(c.fields['condition'])) {
-          return const SizedBox.shrink();
-        }
-        return _column(context, c);
+        final visible = decide == null || decide(c.fields['condition']);
+        // Offstage, not discarded: the documented difference between
+        // conditional_panel and render_ui is that hiding keeps what
+        // is inside alive (?conditional_panel). Destroying the
+        // subtree would drop focus, scroll position and controllers
+        // every time a panel toggled.
+        return Offstage(
+          offstage: !visible,
+          child: _column(context, c),
+        );
       default:
         return _unsupported(c.type);
     }
@@ -351,6 +363,39 @@ class GlintyRenderer {
   dynamic _value(String id, dynamic fallback) =>
       inputs.containsKey(id) ? inputs[id] : fallback;
 
+  /// A field of an input, preferring what the server pushed since.
+  dynamic _field(String id, String name, dynamic fromTree) {
+    final o = overrides[id];
+    return (o != null && o.containsKey(name)) ? o[name] : fromTree;
+  }
+
+  /// A control's label, after any server update.
+  String? _label(GlintyComponent c) {
+    final id = c.str('id');
+    final v = id == null ? c.str('label') : _field(id, 'label', c.str('label'));
+    final s = v?.toString();
+    return (s == null || s.isEmpty) ? null : s;
+  }
+
+  /// A control's choices, after any server update.
+  List<GlintyChoice> _choices(GlintyComponent c) {
+    final id = c.str('id');
+    final pushed = id == null ? null : overrides[id]?['choices'];
+    if (pushed is! List) return c.choices;
+    return pushed
+        .whereType<Map>()
+        .map((m) =>
+            GlintyChoice(m['value'].toString(), m['label'].toString()))
+        .toList();
+  }
+
+  double? _numField(GlintyComponent c, String name) {
+    final id = c.str('id');
+    final v =
+        id == null ? c.number(name) : _field(id, name, c.number(name));
+    return v is num ? v.toDouble() : null;
+  }
+
   Widget _textField(BuildContext context, GlintyComponent c,
       {bool obscure = false, int maxLines = 1, bool numeric = false}) {
     final id = c.str('id')!;
@@ -366,7 +411,7 @@ class GlintyRenderer {
       obscure: obscure,
       maxLines: maxLines,
       numeric: numeric,
-      label: (c.str('label')?.isEmpty ?? true) ? null : c.str('label'),
+      label: _label(c),
       hint: c.str('placeholder'),
       // This is where `emit` is spent, and the only place that knows
       // Flutter calls these onChanged and onSubmitted.
@@ -377,7 +422,7 @@ class GlintyRenderer {
 
   Widget _select(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
-    final choices = c.choices;
+    final choices = _choices(c);
     final current = _value(id, c.str('selected'))?.toString() ??
         (choices.isNotEmpty ? choices.first.value : null);
     return DropdownButton<String>(
@@ -400,7 +445,7 @@ class GlintyRenderer {
     return CheckboxListTile(
       key: Key(id),
       value: _value(id, c.boolean('value')) == true,
-      title: Text(c.str('label') ?? ''),
+      title: Text(_label(c) ?? ""),
       onChanged: (v) => onInput?.call(id, v ?? false),
     );
   }
@@ -415,7 +460,7 @@ class GlintyRenderer {
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: c.choices
+        children: _choices(c)
             .map((ch) => RadioListTile<String>(
                   key: Key('${id}_${ch.value}'),
                   value: ch.value,
@@ -427,9 +472,9 @@ class GlintyRenderer {
 
   Widget _slider(GlintyComponent c) {
     final id = c.str('id')!;
-    final min = c.number('min')?.toDouble() ?? 0;
-    final max = c.number('max')?.toDouble() ?? 1;
-    final step = c.number('step')?.toDouble();
+    final min = _numField(c, "min") ?? 0;
+    final max = _numField(c, "max") ?? 1;
+    final step = _numField(c, "step");
     final raw = _value(id, c.number('value'));
     final current = raw is num ? raw.toDouble() : min;
     return Slider(
@@ -600,10 +645,16 @@ class _GlintyTextField extends StatefulWidget {
 class _GlintyTextFieldState extends State<_GlintyTextField> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.value);
+  final FocusNode _focus = FocusNode();
 
   @override
   void didUpdateWidget(_GlintyTextField old) {
     super.didUpdateWidget(old);
+    // Never while the field has focus. A server push landing
+    // mid-word replaces what someone is in the middle of typing --
+    // the browser client refuses this for the same reason
+    // (`el !== document.activeElement`).
+    if (_focus.hasFocus) return;
     if (widget.value != _controller.text) {
       // Keep the caret where the user left it when the text is the
       // same length or longer; a server push that shortens the value
@@ -628,6 +679,7 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   @override
   Widget build(BuildContext context) => TextField(
         controller: _controller,
+        focusNode: _focus,
         obscureText: widget.obscure,
         maxLines: widget.obscure ? 1 : widget.maxLines,
         keyboardType: widget.numeric ? TextInputType.number : null,

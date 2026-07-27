@@ -71,9 +71,11 @@ class GlintySession {
     GlintyComponent? cachedUi,
     String? cachedRevision,
     void Function(GlintyOutgoing)? onSend,
+    void Function()? onChanged,
   })  : _ui = cachedUi,
         _cachedRevision = cachedRevision,
-        _onSend = onSend;
+        _onSend = onSend,
+        _onChanged = onChanged;
 
   final String client;
 
@@ -89,6 +91,14 @@ class GlintySession {
   final String? token;
 
   final void Function(GlintyOutgoing)? _onSend;
+
+  /// Fires whenever session state changes, including from a local
+  /// edit. Without it a checkbox updates the store and the UI never
+  /// hears -- the control would only redraw when some later server
+  /// frame happened to arrive.
+  final void Function()? _onChanged;
+
+  void _changed() => _onChanged?.call();
 
   GlintyComponent? _ui;
   String? _cachedRevision;
@@ -132,6 +142,12 @@ class GlintySession {
   /// `input_update` frames. The component tree is the shape of the
   /// UI; this is its state.
   final Map<String, dynamic> inputs = <String, dynamic>{};
+
+  /// Server-pushed field changes per input id (label, choices,
+  /// min, max, step). The tree still describes the control as the
+  /// server first built it; these are what changed since.
+  final Map<String, Map<String, dynamic>> overrides =
+      <String, Map<String, dynamic>>{};
 
   /// Bumped whenever the tree is replaced or the state is cleared.
   /// Widgets key off it so Flutter discards controllers and element
@@ -208,9 +224,18 @@ class GlintySession {
           } else if (msg.containsKey('value')) {
             inputs[id] = msg['value'];
           }
-          // choices/min/max/label live in the tree, which this
-          // client rebuilds from welcome; a running app sees the
-          // value change now and the rest on the next tree.
+          // The rest of the update -- label, choices, bounds, step --
+          // is not in the tree either: update_select_input() changes
+          // the choices of a control the tree still describes with
+          // the old ones. Held as overrides the renderer prefers, or
+          // a repopulated dropdown shows yesterday's options until
+          // the next welcome.
+          for (final field in const ['label', 'choices', 'min', 'max',
+            'step']) {
+            if (msg.containsKey(field)) {
+              (overrides[id] ??= <String, dynamic>{})[field] = msg[field];
+            }
+          }
         }
       case 'error':
         final id = msg['id'];
@@ -252,6 +277,7 @@ class GlintySession {
       values.clear();
       inputs.clear();
       tickets.clear();
+      overrides.clear();
       _ui = null;
       _cachedRevision = null;
       generation++;
@@ -301,6 +327,7 @@ class GlintySession {
     // conditional panel keyed on it settles without waiting for a
     // round trip
     inputs[id] = value;
+    _changed();
     _emit(GlintyOutgoing('input', {'type': 'input', 'id': id, 'value': value}));
   }
 

@@ -53,6 +53,7 @@ class GlintyConnection extends ChangeNotifier {
     this.maxRetries = 12,
     this.retryBase = const Duration(milliseconds: 500),
     this.retryCap = const Duration(seconds: 5),
+    this.welcomeTimeout = const Duration(seconds: 15),
     GlintySocketOpener? open,
     this.onDownload,
     this.onLink,
@@ -64,6 +65,10 @@ class GlintyConnection extends ChangeNotifier {
       // Declared only when wired: a feature named in hello that the
       // embedder never supplied is a claim the server would believe.
       features: [if (onDownload != null) 'download'],
+      // A local edit changes what the controls draw; without this
+      // the store updates and the UI never hears until some later
+      // server frame happens to arrive.
+      onChanged: notifyListeners,
     );
   }
 
@@ -79,18 +84,25 @@ class GlintyConnection extends ChangeNotifier {
   final int maxRetries;
   final Duration retryBase;
   final Duration retryCap;
+
+  /// How long a socket may stay open without answering hello. A
+  /// server that accepts the connection and then says nothing is
+  /// indistinguishable from a working one, so the bounded-retry
+  /// promise needs this to be true: without it the app sits on a
+  /// spinner forever and no retry budget is ever spent.
+  final Duration welcomeTimeout;
   final GlintySocketOpener _open;
 
   /// Called with a resolved download URL when a `download_button` is
   /// pressed and the server grants a ticket. Saving or opening it is
   /// platform work this package deliberately leaves to the embedder;
   /// without a callback the grant is logged and dropped.
-  final void Function(Uri url)? onDownload;
+  void Function(Uri url)? onDownload;
 
   /// Called when a link is tapped. Opening a URL needs a platform
   /// plugin, so the embedder decides; without one, links render as
   /// styled text and are not tappable.
-  final void Function(String href, {bool external})? onLink;
+  void Function(String href, {bool external})? onLink;
 
   late final GlintySession session;
 
@@ -104,6 +116,7 @@ class GlintyConnection extends ChangeNotifier {
   WebSocket? _socket;
   StreamSubscription<WebSocketEvent>? _events;
   Timer? _retryTimer;
+  Timer? _welcomeTimer;
   int _retries = 0;
   bool _disposed = false;
 
@@ -127,6 +140,14 @@ class GlintyConnection extends ChangeNotifier {
       // usable app, and saying otherwise would let the UI draw
       // before it has a tree.
       session.hello();
+      _welcomeTimer?.cancel();
+      _welcomeTimer = Timer(welcomeTimeout, () {
+        if (_disposed || _state == GlintyConnectionState.live) return;
+        // silence is a failure, and treating it as one is what
+        // makes the retry bound mean anything
+        unawaited(socket.close().catchError((_) {}));
+        _onClosed();
+      });
     } catch (e) {
       _onClosed();
     }
@@ -146,19 +167,32 @@ class GlintyConnection extends ChangeNotifier {
     // hello is the exception: it belongs to the socket being opened,
     // never to the queue, or a reconnect would replay the previous
     // hello ahead of its own.
-    if (socket == null) {
-      if (frame.type != 'hello' && _pending.length < _pendingCap) {
-        _pending.add(frame);
+    if (frame.type == 'hello') {
+      if (socket == null) return;
+      try {
+        socket.sendText(jsonEncode(frame.body));
+      } on WebSocketConnectionClosed {
+        // the drop arrives as a close event; the retry path owns it
       }
+      return;
+    }
+    // Everything else queues until this socket is live. An open
+    // socket that has not been welcomed yet is mid-handshake:
+    // writing past it would let a new frame overtake the ones
+    // already waiting from the last disconnect.
+    if (socket == null || _state != GlintyConnectionState.live) {
+      _queue(frame);
       return;
     }
     try {
       socket.sendText(jsonEncode(frame.body));
     } on WebSocketConnectionClosed {
-      if (frame.type != 'hello' && _pending.length < _pendingCap) {
-        _pending.add(frame);
-      }
+      _queue(frame);
     }
+  }
+
+  void _queue(GlintyOutgoing frame) {
+    if (_pending.length < _pendingCap) _pending.add(frame);
   }
 
   void _flushPending() {
@@ -181,8 +215,19 @@ class GlintyConnection extends ChangeNotifier {
         final decoded = jsonDecode(text);
         if (decoded is! Map) return;
         final msg = decoded.cast<String, dynamic>();
+        final refusedResume = msg['type'] == 'welcome' &&
+            msg['resumed'] == false;
         session.receive(msg);
         if (msg['type'] == 'welcome' && !session.refused) {
+          _welcomeTimer?.cancel();
+          _welcomeTimer = null;
+          if (refusedResume) {
+            // The session those frames belonged to is gone. Replaying
+            // them into a fresh session would apply one user's
+            // interactions to another's state -- the same reason the
+            // session clears its values here.
+            _pending.clear();
+          }
           // The app is usable now, not when the socket opened. A
           // welcome is also proof this endpoint works, so the retry
           // budget resets -- otherwise a long-lived app that drops
@@ -249,6 +294,15 @@ class GlintyConnection extends ChangeNotifier {
   }
 
   void _stop(String? reason) {
+    // Nothing is coming, so nothing is still owed a timeout: a
+    // refusal arrives with the socket still open, and leaving the
+    // welcome timer armed would fire a retry into a connection that
+    // has already been told no.
+    _welcomeTimer?.cancel();
+    _welcomeTimer = null;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _pending.clear();
     _stoppedReason = reason;
     _setState(GlintyConnectionState.stopped);
   }
@@ -263,6 +317,7 @@ class GlintyConnection extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _retryTimer?.cancel();
+    _welcomeTimer?.cancel();
     _events?.cancel();
     unawaited(_socket?.close().catchError((_) {}));
     _socket = null;

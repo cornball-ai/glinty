@@ -81,10 +81,24 @@ class _GlintyAppState extends State<GlintyApp> {
     // A new endpoint or a new token is a different session: an app
     // that logs a user out and back in, or points at another server,
     // must not keep talking on the old connection.
-    if (old.url != widget.url || old.token != widget.token) {
+    //
+    // Wiring or unwiring onDownload changes what hello declares, so
+    // it needs a new connection too. Compared by nullness rather
+    // than identity: a closure rebuilt each frame is the same
+    // capability, and reconnecting on every build would be worse
+    // than the bug.
+    if (old.url != widget.url ||
+        old.token != widget.token ||
+        (old.onDownload == null) != (widget.onDownload == null)) {
       _conn.dispose();
       _conn = _connect();
+      return;
     }
+    // Same capability, possibly a fresh closure: keep the connection
+    // and point it at the current callbacks, or a download granted
+    // after a rebuild would be handed to a stale one.
+    _conn.onDownload = widget.onDownload;
+    _conn.onLink = widget.onLink;
   }
 
   @override
@@ -145,6 +159,7 @@ class GlintyView extends StatelessWidget {
           onLink: conn?.onLink,
           values: s.values,
           inputs: s.inputs,
+          overrides: s.overrides,
           condition: s.conditionHolds,
           spacing: glintySpacing(s.theme),
           monoStack: glintyMonoStack(s.theme),

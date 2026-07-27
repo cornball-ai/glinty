@@ -49,7 +49,33 @@ Stage 6, the Flutter client becomes an app:
   an `onDownload` is wired, and a link with no `onLink` renders as
   styled text rather than an `InkWell` that looks tappable and does
   nothing.
-- `GlintyApp` reconnects when its `url` or `token` changes.
+- `GlintyApp` reconnects when its `url` or `token` changes, or when
+  wiring `onDownload` changes what `hello` declares. A rebuilt
+  closure is the same capability and does not reconnect; the
+  connection just points at the current callbacks.
+- A local edit notifies the connection, so a tap redraws the app
+  immediately rather than at whatever moment the next server frame
+  happens to arrive. (The tests that were supposed to cover this
+  repainted on the app's behalf and so proved nothing; the new ones
+  pump and expect, and nothing else.)
+- `input_update` carries `label`, `choices`, `min`, `max` and `step`
+  through to the control -- `update_select_input()` changes the
+  choices of a control the tree still describes with the old ones.
+  A focused text field is never overwritten by a server push, the
+  same rule the browser follows.
+- A hidden `conditional_panel` goes offstage rather than being
+  destroyed: hiding is display, not destruction, which is the
+  documented difference from `render_ui()`.
+- The reconnect queue is cleared on a refused resume, so one
+  session's interactions cannot be replayed into another's, and
+  frames queue until `welcome` rather than slipping past a
+  half-open socket ahead of what is already waiting.
+- A socket that opens and then goes silent times out
+  (`welcomeTimeout`, 15s) and counts as a failed attempt. Without
+  it the bounded-retry promise was untrue: an app faced with a
+  silent server span forever.
+- A slider with no value seeds to the midpoint, matching R's
+  `slider_default()`, rather than to `min`.
 
 Stage 5, authentication and deployment surface:
 
