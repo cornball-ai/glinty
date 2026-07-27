@@ -784,6 +784,32 @@
     function clearError(el) {
         el.classList.remove("g-error");
         el.removeAttribute("title");
+        clearKindGap(el);
+    }
+
+    /* The visible refusal for an output kind this client cannot
+       display. Slot elements are not all containers -- an <img>
+       shows no textContent -- so the notice is a sibling node tied
+       to the slot's id, which is visible next to anything. */
+    function showKindGap(el, kind) {
+        clearKindGap(el);
+        el.classList.add("g-unsupported");
+        var note = document.createElement("div");
+        note.className = "g-unsupported g-kind-gap";
+        note.setAttribute("data-g-kind-gap", el.id);
+        note.textContent = "[unsupported output kind: " + kind + "]";
+        if (el.parentNode) {
+            el.parentNode.insertBefore(note, el.nextSibling);
+        }
+    }
+
+    /* A recognised value arriving later means the gap closed; the
+       notice and the marker class go with it. */
+    function clearKindGap(el) {
+        el.classList.remove("g-unsupported");
+        var note = document.querySelector(
+            '[data-g-kind-gap="' + el.id + '"]');
+        if (note) note.remove();
     }
 
     function buildTable(el, data) {
@@ -859,9 +885,12 @@
             /* Visible and named, never silent -- the same rule as an
                unknown component. A kind this client cannot display is
                a version gap the user should see, not a console line
-               nobody reads. */
-            el.textContent = "[unsupported output kind: " + msg.kind + "]";
-            el.classList.add("g-unsupported");
+               nobody reads. The slot empties (stale content shown as
+               current would be a quieter lie) and the notice stands
+               beside it. */
+            el.textContent = "";
+            el.removeAttribute("src");
+            showKindGap(el, msg.kind);
             console.warn("glinty: unknown output kind", msg.kind);
         }
     }
@@ -1104,7 +1133,13 @@
        event delegation reaches buttons and inputs in the dialog. */
     function closeModal() {
         var open = document.getElementById("g-modal");
-        if (open) open.remove();
+        if (open) {
+            open.remove();
+            /* the body may have held plots; re-establish observation
+               from the DOM that remains, or the observer keeps refs
+               into the discarded tree */
+            observeMeasured();
+        }
     }
 
     function showModal(msg) {

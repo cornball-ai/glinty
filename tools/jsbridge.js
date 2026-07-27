@@ -152,6 +152,20 @@ function makeEl(doc, tag) {
             if (c.nodeType === 1) c.parentNode = this;
             return c;
         },
+        insertBefore(c, ref) {
+            if (c.parentNode) c.remove && c.remove();
+            const i = ref ? this.children.indexOf(ref) : -1;
+            if (i === -1) this.children.push(c);
+            else this.children.splice(i, 0, c);
+            if (c.nodeType === 1) c.parentNode = this;
+            return c;
+        },
+        get nextSibling() {
+            if (!this.parentNode) return null;
+            const sib = this.parentNode.children;
+            const i = sib.indexOf(this);
+            return i >= 0 && i + 1 < sib.length ? sib[i + 1] : null;
+        },
         remove() {
             if (!this.parentNode) return;
             const sib = this.parentNode.children;
@@ -201,6 +215,10 @@ function makeEl(doc, tag) {
             return "value" in this.attrs ? this.attrs.value : "";
         },
         set value(v) { this._value = v; },
+        /* src reflects the attribute, as it does on real media
+           elements, so removeAttribute("src") is observable */
+        get src() { return this.attrs.src || ""; },
+        set src(v) { this.attrs.src = String(v); },
         get checked() {
             if (this._checked !== undefined) return this._checked;
             return "checked" in this.attrs;
@@ -738,14 +756,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
                   m.width === 320 && m.height === 240));
 
         /* An output kind this client cannot display is a version gap
-           the user should see -- same rule as an unknown component. */
+           the user should see -- same rule as an unknown component.
+           The notice is a sibling node, because slots are not all
+           containers: an <img> shows no textContent, and plots are
+           exactly where kinds will grow. */
+        const gapFor = (id) => page.document.querySelector(
+            '[data-g-kind-gap="' + id + '"]');
         page.ws().deliver({ type: "output", id: "greeting",
                             kind: "hologram", value: 1 });
         const slot = page.document.getElementById("greeting");
         check("an unknown output kind is visible and named, never silent",
-              slot.textContent.includes(
+              gapFor("greeting") !== null &&
+              gapFor("greeting").textContent.includes(
                   "[unsupported output kind: hologram]") &&
               slot.classList.contains("g-unsupported"));
+
+        page.ws().deliver({ type: "output", id: "scatter",
+                            kind: "sculpture", value: 1 });
+        const img2 = page.document.getElementById("scatter");
+        check("the refusal is visible beside an img slot too",
+              gapFor("scatter") !== null &&
+              img2.getAttribute("src") === null && img2.src === "");
+
+        /* A recognised value arriving later closes the gap. */
+        page.ws().deliver(frames(transcript("measure-then-image"),
+                                 "out")[0]);
+        check("a recognised kind clears the notice and the marker",
+              gapFor("scatter") === null &&
+              !img2.classList.contains("g-unsupported") &&
+              String(img2.src).indexOf("data:image/png") === 0);
+        page.ws().deliver({ type: "output", id: "greeting",
+                            kind: "text", value: "back" });
+        check("text slots recover the same way",
+              gapFor("greeting") === null &&
+              slot.textContent === "back" &&
+              !slot.classList.contains("g-unsupported"));
     }
 
     /* ---------------------------------------------------------- */
@@ -789,6 +834,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         });
         check("plots arriving later are observed too",
               ro.targets.some((t) => t.id === "late_plot"));
+
+        /* A modal can carry a plot; closing it must not leave the
+           observer holding the discarded tree. */
+        page.ws().deliver({
+            type: "modal", action: "show", title: "Plot",
+            body: [{ component: "plot_output", id: "modal_plot" }],
+            easy_close: false
+        });
+        check("a plot inside a modal is observed",
+              ro.targets.some((t) => t.id === "modal_plot"));
+        page.ws().deliver({ type: "modal", action: "hide" });
+        check("closing the modal drops its plots from observation",
+              !ro.targets.some((t) => t.id === "modal_plot") &&
+              ro.targets.some((t) => t.id === "scatter"));
     }
 
     /* ---------------------------------------------------------- */

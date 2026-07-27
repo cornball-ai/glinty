@@ -58,13 +58,17 @@ handle_measure(sm, list(id = "future", width = 100, height = 50))
 expect_equal(isolate(measured_box(sm, "future"))$width, 100)
 
 # ...but bounded: invented ids stop accumulating at the cap, while
-# ids that already have a slot keep updating
-for (i in seq_len(300L)) {
+# ids that already have a slot keep updating. Half the spray is
+# dot-prefixed, because ls() hides dot names by default and a cap
+# that hidden names bypass is not a cap.
+for (i in seq_len(150L)) {
     handle_measure(sm, list(id = paste0("spray", i), width = 10,
                             height = 10))
+    handle_measure(sm, list(id = paste0(".spray", i), width = 10,
+                            height = 10))
 }
-expect_true(length(ls(sm$measures)) <= 256L)
-expect_null(isolate(measured_box(sm, "spray300")))
+expect_true(length(ls(sm$measures, all.names = TRUE)) <= 256L)
+expect_null(isolate(measured_box(sm, "spray150")))
 handle_measure(sm, list(id = "plt", width = 640, height = 480))
 expect_equal(isolate(measured_box(sm, "plt"))$width, 640)
 

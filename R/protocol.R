@@ -260,8 +260,10 @@ handle_measure <- function(session, msg) {
         # Unknown ids are stored because dynamic UI races layout, but
         # storage is bounded: a client inventing ids must not grow
         # session memory without limit. No real page holds hundreds
-        # of measured outputs.
-        if (length(ls(env)) >= 256L) {
+        # of measured outputs. all.names, or every dot-prefixed id
+        # slips past the count while exists() sees it fine -- a cap
+        # that hidden names bypass is not a cap.
+        if (length(ls(env, all.names = TRUE)) >= 256L) {
             return(invisible(NULL))
         }
         env[[msg$id]] <- reactive_val(box)
