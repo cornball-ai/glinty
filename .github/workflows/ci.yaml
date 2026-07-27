@@ -108,9 +108,27 @@ jobs:
         with:
           channel: stable
 
+      # R and glinty, so server_e2e_test.dart drives the real client
+      # against a real server rather than skipping. Without this the
+      # suite still passes -- which is exactly why it is here: a
+      # skipped e2e that reports green is the failure mode this
+      # protocol keeps refusing to ship.
+      - name: R and glinty
+        working-directory: .
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends r-base-core
+          Rscript -e 'install.packages(c("digest","jsonlite","openssl"),
+                        repos = "https://cloud.r-project.org")'
+          R CMD INSTALL .
+
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - name: The e2e actually ran (not skipped)
+        run: flutter test test/server_e2e_test.dart --reporter expanded
+             | tee /tmp/e2e.log
+             && ! grep -qi "skip" /tmp/e2e.log
 
   # The browser client, driven through the same transcripts and
   # fixtures. This is the stage 2 gate: adoption emitting nothing and

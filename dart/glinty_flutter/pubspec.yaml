@@ -10,6 +10,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # dart-lang's own WebSocket abstraction: one transitive dependency
+  # (web), and the same API on the VM and in the browser. The
+  # alternative, web_socket_channel, layers four more packages on top
+  # of this one for stream semantics the client does not need.
+  web_socket: ^1.0.1
 
 dev_dependencies:
   flutter_test:

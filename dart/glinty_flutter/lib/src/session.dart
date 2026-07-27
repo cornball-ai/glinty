@@ -148,7 +148,14 @@ class GlintySession {
       'kinds': const ['text', 'table'],
       'features': const <String>[],
       if (token != null) 'token': token,
-      if (_cachedRevision != null) 'prerendered': _cachedRevision,
+      // resume and prerendered are alternatives, not companions: a
+      // reconnect asks for its session back, a fresh connect says
+      // what markup it already holds. Sending both would ask the
+      // server to answer two different questions at once.
+      if (sessionId != null)
+        'resume': sessionId
+      else if (_cachedRevision != null)
+        'prerendered': _cachedRevision,
     });
     _awaitingWelcome = true;
     _emit(frame);

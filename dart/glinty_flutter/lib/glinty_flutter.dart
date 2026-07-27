@@ -10,3 +10,4 @@ export 'src/component.dart';
 export 'src/render.dart';
 export 'src/session.dart';
 export 'src/theme.dart';
+export 'src/transport.dart';

@@ -51,16 +51,25 @@ typedef GlintySink = void Function(String id, dynamic value);
 /// Reports a discrete event back to the server.
 typedef GlintyEventSink = void Function(String id);
 
+/// Asks the server for a transfer ticket.
+typedef GlintyTicketSink = void Function(String id, String purpose);
+
 class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
       this.onEvent,
+      this.onTicket,
       this.values = const {},
       this.spacing = 4,
       this.monoStack = const ['monospace', 'Menlo', 'Courier New']});
 
   final GlintySink? onInput;
   final GlintyEventSink? onEvent;
+
+  /// Where a download_button's press goes: a ticket request, not an
+  /// event. The press IS the download, and an event frame as well
+  /// would make one press two actions.
+  final GlintyTicketSink? onTicket;
 
   /// The theme's base spacing unit in logical pixels. spacer() sizes
   /// are multiples of it -- the same rule the browser applies through
@@ -399,7 +408,15 @@ class GlintyRenderer {
             const SizedBox(width: 6),
             label,
           ]);
-    void fire() => onEvent?.call(id);
+    final isDownload = c.type == 'download_button';
+    void fire() {
+      if (isDownload) {
+        onTicket?.call(id, 'download');
+      } else {
+        onEvent?.call(id);
+      }
+    }
+
     final scheme = Theme.of(context).colorScheme;
     return switch (_variant(c.type, c.str('variant'))) {
       'primary' => FilledButton(key: Key(id), onPressed: fire, child: child),

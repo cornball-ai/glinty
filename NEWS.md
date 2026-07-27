@@ -8,6 +8,27 @@ markup against a tree revision; and outputs are typed by what the
 renderer produced rather than by the DOM property a browser would
 patch. See PROTOCOL.md.
 
+Stage 6, the Flutter client becomes an app:
+
+- `dart/glinty_flutter` grew a transport. `GlintyApp(url:)` connects,
+  renders whatever the server sends, and keeps the wire open;
+  `GlintyConnection` owns the socket, the hello, and a bounded
+  reconnect that carries `resume`. A refused connection stops
+  retrying and says why; one that exhausts its retries says that
+  instead of spinning.
+- Fixed: the Dart session never put `resume` in its hello, so it
+  could not actually resume -- caught by the first transport test
+  that asked it to.
+- `download_button` presses now request a ticket rather than firing
+  an event, in Flutter as in the browser; the resolved https URL
+  goes to an `onDownload` callback, since saving a file is platform
+  work this package leaves to the embedder.
+- New test: `server_e2e_test.dart` spawns a real R server and drives
+  the real client through bootstrap, seeded inputs, an input round
+  trip, events, a ticket grant, resume with state replay, and an
+  auth refusal. CI installs R for it and then asserts it did not
+  skip.
+
 Stage 5, authentication and deployment surface:
 
 - Resume is principal-bound under auth: the re-verified principal's

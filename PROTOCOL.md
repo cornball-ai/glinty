@@ -702,8 +702,24 @@ make it slower.
    auth gate is proven over a real socket in the e2e suite: no
    token refused and closed, wrong token refused, right token
    welcomed with the principal readable by the app.
-6. **Then** the Flutter client grows a transport and becomes an app
-   rather than a renderer.
+6. **The Flutter client grows a transport.** *(done)*
+   `GlintyConnection` owns a WebSocket (`package:web_socket`, one
+   transitive dependency, same API on the VM and in the browser),
+   sends hello, routes frames into the session, and reconnects with
+   backoff carrying `resume`. `GlintyApp(url:)` is the whole
+   embedding surface. Two rules it exists to keep, both about not
+   lying to the user: a refused connection stops retrying, and one
+   that has given up says so instead of sitting on a spinner.
+   Downloads resolve a ticket into an https URL and hand it to the
+   embedder -- saving a file is platform work this package does not
+   pretend to do.
+
+   The proof is `test/server_e2e_test.dart`: it spawns R, serves a
+   real app, opens a real socket, and drives the real client through
+   the bootstrap, seeded inputs, an input round trip, events, a
+   ticket grant, resume with state replay, and an auth refusal. It
+   skips when R is absent, so CI installs R and then asserts the run
+   was not skipped.
 
 ### flitR is retired, not retrofitted
 

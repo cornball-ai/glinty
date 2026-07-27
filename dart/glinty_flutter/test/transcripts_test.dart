@@ -9,37 +9,13 @@
 // Every transcript here is also asserted by the R suite. The frames
 // are the shared artifact; what each side does with them is not.
 
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glinty_flutter/glinty_flutter.dart';
 
-const transcriptPath = "../../inst/fixtures/transcripts.json";
+import 'transcript_data.dart';
 
-Map<String, dynamic> loadTranscriptFile() =>
-    jsonDecode(File(transcriptPath).readAsStringSync()) as Map<String, dynamic>;
-
-List<Map<String, dynamic>> loadTranscripts() =>
-    (loadTranscriptFile()["transcripts"] as List).cast<Map<String, dynamic>>();
-
-Map<String, dynamic> transcript(String name) => loadTranscripts()
-    .firstWhere((t) => t['name'] == name, orElse: () => throw StateError(
-        'no transcript named $name; the R definition and this suite '
-        'have diverged'));
-
-/// The frames one side sends, in order.
-List<Map<String, dynamic>> frames(Map<String, dynamic> t, String dir) =>
-    (t['frames'] as List)
-        .cast<Map<String, dynamic>>()
-        .where((f) => f['dir'] == dir)
-        .map((f) => (f['message'] as Map).cast<String, dynamic>())
-        .toList();
-
-/// The one server frame of a given type, or the first if there are several.
-Map<String, dynamic> serverFrame(String name, String type) =>
-    frames(transcript(name), 'out').firstWhere((m) => m['type'] == type);
 
 void main() {
   group('the transcript file', () {
