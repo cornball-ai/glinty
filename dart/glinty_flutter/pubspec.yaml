@@ -1,0 +1,19 @@
+name: glinty_flutter
+description: "glinty's Flutter client: connects to a glinty server and renders its component tree as widgets."
+version: 0.0.1
+homepage: https://github.com/cornball-ai/glinty
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:

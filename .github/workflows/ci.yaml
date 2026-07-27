@@ -28,3 +28,24 @@ jobs:
 
       - name: Test
         run: ./run.sh run_tests
+
+  # The second lowering. Separate from the R job because it needs the
+  # Flutter SDK and nothing else here does -- but it reads the same
+  # inst/fixtures/components.json, so a component added on the R side
+  # fails here until this client answers for it.
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dart/glinty_flutter
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
