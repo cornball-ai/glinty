@@ -143,6 +143,82 @@ void main() {
       expect(data.colorScheme.brightness, Brightness.dark);
     });
 
+    test('muted, radius and mono land where the renderer reads them', () {
+      final data = glintyThemeData({
+        'colors': {'muted': '#6a6a6a'},
+        'radius': 6,
+      });
+      expect(data.colorScheme.onSurfaceVariant, const Color(0xff6a6a6a));
+      final shape = data.cardTheme.shape;
+      expect(shape, isA<RoundedRectangleBorder>());
+      expect((shape as RoundedRectangleBorder).borderRadius,
+          BorderRadius.circular(6));
+      expect(data.filledButtonTheme.style?.shape?.resolve({}),
+          isA<RoundedRectangleBorder>());
+
+      expect(glintyMonoFamily({'font': {'mono': 'JetBrains Mono'}}),
+          'JetBrains Mono');
+      expect(glintyMonoFamily({'font': {'body': 'Inter'}}), isNull);
+      expect(glintyMonoFamily(null), isNull);
+    });
+
+    test('spacing zero is a unit, not an absence', () {
+      expect(glintySpacing({'spacing': 0}), 0);
+      expect(glintySpacing({'spacing': 8}), 8);
+      expect(glintySpacing({}), 4);
+      expect(glintySpacing(null), 4);
+    });
+
+    testWidgets('danger buttons take the theme danger token',
+        (tester) async {
+      final data = glintyThemeData({
+        'colors': {'danger': '#b3261e'}
+      });
+      final r = GlintyRenderer();
+      await tester.pumpWidget(MaterialApp(
+        theme: data,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => r.build(
+                context,
+                GlintyComponent.fromJson({
+                  'component': 'button',
+                  'id': 'del',
+                  'label': 'Delete',
+                  'variant': 'danger'
+                })),
+          ),
+        ),
+      ));
+      final btn = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(btn.style?.backgroundColor?.resolve({}),
+          const Color(0xffb3261e));
+    });
+
+    testWidgets('sidebar panels are distinct from plain ones',
+        (tester) async {
+      final r = GlintyRenderer();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => r.build(
+                context,
+                GlintyComponent.fromJson({
+                  'component': 'panel',
+                  'variant': 'sidebar',
+                  'children': [
+                    {'component': 'text', 'value': 'nav'}
+                  ]
+                })),
+          ),
+        ),
+      ));
+      final box = tester.widget<Container>(find.byType(Container).first);
+      final deco = box.decoration as BoxDecoration;
+      expect(deco.border, isNotNull,
+          reason: 'the sidebar edge is what tells it apart from plain');
+    });
+
     testWidgets('GlintyView applies the theme to what it renders',
         (tester) async {
       final s = GlintySession();

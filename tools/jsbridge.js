@@ -674,35 +674,91 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
-    section("theme tokens become CSS custom properties");
+    section("theme tokens live in the g-theme style block");
     {
         const hw = transcript("hello-welcome");
         const welcome = frames(hw, "out")[0];
-        const page = freshPage({ setup: prerenderDemo });
+
+        /* No served block (cached themeless page, themed server):
+           the client creates one, right after the stylesheet link so
+           app stylesheets that follow still win. */
+        const page = freshPage({
+            setup: (doc, root) => {
+                prerenderDemo(doc, root);
+                const link = makeEl(doc, "link");
+                link.setAttribute("rel", "stylesheet");
+                link.setAttribute("href", "/glinty/glinty.css");
+                doc.head.appendChild(link);
+                const appCss = makeEl(doc, "link");
+                appCss.setAttribute("rel", "stylesheet");
+                appCss.setAttribute("href", "/static/app.css");
+                doc.head.appendChild(appCss);
+            }
+        });
         page.ws().open();
         page.ws().deliver(welcome);
 
-        const vars = page.document.documentElement.style.props;
-        check("color tokens land under their var names",
-              vars["--g-primary"] === welcome.theme.colors.primary &&
-              vars["--g-on-primary"] === welcome.theme.colors.on_primary &&
-              vars["--g-danger"] === welcome.theme.colors.danger);
-        check("spacing, radius and font sizes land as pixel lengths",
-              vars["--g-space"] === welcome.theme.spacing + "px" &&
-              vars["--g-radius"] === welcome.theme.radius + "px" &&
-              vars["--g-font-size"] === welcome.theme.font.size + "px");
-        check("font families land as-is",
-              vars["--g-font-body"] === welcome.theme.font.body &&
-              vars["--g-font-mono"] === welcome.theme.font.mono);
+        const node = page.document.getElementById("g-theme");
+        check("the block exists and carries the tokens",
+              node !== null &&
+              node.textContent.includes(
+                  "--g-primary:" + welcome.theme.colors.primary) &&
+              node.textContent.includes(
+                  "--g-space:" + welcome.theme.spacing + "px") &&
+              node.textContent.includes(
+                  "--g-font-mono:" + welcome.theme.font.mono));
+        const head = page.document.head.children;
+        check("it sits after glinty.css and before app stylesheets, so"
+              + " app CSS keeps winning after connect",
+              head.indexOf(node) >
+                  head.findIndex((n) => String(n.getAttribute("href"))
+                      .includes("glinty.css")) &&
+              head.indexOf(node) <
+                  head.findIndex((n) => String(n.getAttribute("href"))
+                      .includes("app.css")));
 
-        /* A themeless welcome touches nothing: the stylesheet's own
-           defaults (including dark mode) stay in charge. */
+        /* A served block is updated in place: same node, same
+           position, fresh tokens -- the cascade never moves. */
+        const served = freshPage({
+            setup: (doc, root) => {
+                prerenderDemo(doc, root);
+                const style = makeEl(doc, "style");
+                style.setAttribute("id", "g-theme");
+                style.textContent = ":root{--g-primary:#stale}";
+                doc.head.appendChild(style);
+            }
+        });
+        served.ws().open();
+        const before = served.document.getElementById("g-theme");
+        served.ws().deliver(welcome);
+        const after = served.document.getElementById("g-theme");
+        check("a served block is rewritten in place",
+              before === after &&
+              after.textContent.includes("--g-primary:#2456d6") &&
+              !after.textContent.includes("#stale"));
+
+        /* A themeless welcome touches nothing. */
         const bare = freshPage({ setup: prerenderDemo });
         bare.ws().open();
         bare.ws().deliver({ type: "welcome", session: "s0", protocol: 3 });
-        check("no theme, no properties set",
-              Object.keys(bare.document.documentElement.style.props)
-                  .length === 0);
+        check("no theme, no block",
+              bare.document.getElementById("g-theme") === null);
+
+        /* Token values are interpolated into CSS text; one that could
+           escape the declaration is dropped, not written. */
+        const hostile = freshPage({ setup: prerenderDemo });
+        hostile.ws().open();
+        hostile.ws().deliver({
+            type: "welcome", session: "sx", protocol: 3,
+            theme: { colors: { primary: "red;}body{display:none",
+                               danger: "#b3261e" },
+                     spacing: 4 }
+        });
+        const hnode = hostile.document.getElementById("g-theme");
+        check("a value that could escape the block is refused",
+              hnode !== null &&
+              !hnode.textContent.includes("display:none") &&
+              hnode.textContent.includes("--g-danger:#b3261e"));
     }
 
     /* ---------------------------------------------------------- */
@@ -720,12 +776,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             value: { component: "text", value: "hi", variant: "sparkly" }
         });
         const host = page.document.getElementById("panel");
-        check("an unknown variant renders as the first listed",
+        check("an unknown text variant renders as the first listed",
               host.children[0].classList.contains("g-text") &&
               !host.children[0].className.includes("sparkly"));
         check("and warns rather than erroring",
               page.warnings.length === before + 1 &&
               page.warnings[before].includes("sparkly"));
+
+        /* the same rule holds for every variant-bearing component,
+           not just the class-mapped text ones */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "button", id: "b1", label: "Go",
+                     variant: "explosive" }
+        });
+        check("an unknown button variant falls back to default",
+              host.children[0].classList.contains("g-btn-default") &&
+              page.warnings.some((w) => w.includes("explosive")));
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "panel", variant: "drawer",
+                     children: [] }
+        });
+        check("an unknown panel variant falls back to plain",
+              host.children[0].classList.contains("g-panel-plain") &&
+              page.warnings.some((w) => w.includes("drawer")));
     }
 
     /* ---------------------------------------------------------- */

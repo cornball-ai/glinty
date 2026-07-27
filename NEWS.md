@@ -31,9 +31,26 @@ Stage 4, theme and variants:
   variables are now named for the tokens (`--g-primary`,
   `--g-background`, `--g-text`, ...); `--g-accent`, `--g-fg`,
   `--g-bg` are gone.
-- Unknown variants fall back to the first listed with a console
-  warning, in both lowerings -- a same-protocol server one release
-  newer may know variants a client does not.
+- Unknown variants fall back to the first listed with a warning, in
+  both lowerings and for every variant-bearing component (buttons,
+  panels and dividers included, not just text) -- a same-protocol
+  server one release newer may know variants a client does not.
+- Theme precedence is stable across the connection: the client
+  updates the same `#g-theme` style block the served page carried
+  (creating one after the stylesheet link if the page had none)
+  rather than writing inline properties on the root, so app
+  stylesheets that out-cascade the tokens at first paint keep doing
+  so after `welcome`.
+- Flutter consumes the full token set: `muted` lands on
+  `onSurfaceVariant`, `radius` shapes cards and the button family,
+  `font$mono` reaches verbatim output, danger buttons take the
+  danger token instead of a hardcoded red, sidebar panels are
+  visually distinct from plain ones, and a spacing of 0 is honoured
+  as a unit rather than replaced with the default.
+- The `success` color is dropped from the token set: no component in
+  any lowering consumed it, and a closed set should not carry tokens
+  nothing renders. It can return alongside the component that uses
+  it, which is a compatible addition.
 - The Flutter spacer now uses the theme's spacing unit (default 4,
   matching the browser) instead of a hardcoded 8.
 

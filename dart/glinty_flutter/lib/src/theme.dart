@@ -25,10 +25,21 @@ Color? glintyColor(dynamic hex) {
 
 /// The theme's base spacing unit in logical pixels, or the glinty
 /// default. spacer() sizes and layout gaps are multiples of it, the
-/// same rule the browser applies through --g-space.
+/// same rule the browser applies through --g-space. Zero is a valid
+/// unit (R allows it, the browser honours it), so only absence and
+/// nonsense fall back.
 double glintySpacing(Map<String, dynamic>? theme) {
   final v = theme?['spacing'];
-  return v is num && v > 0 ? v.toDouble() : 4;
+  return v is num && v >= 0 ? v.toDouble() : 4;
+}
+
+/// The theme's mono font family, for verbatim output. Null when the
+/// theme (or the token) is absent: the renderer's platform monospace
+/// applies then.
+String? glintyMonoFamily(Map<String, dynamic>? theme) {
+  final font = theme?['font'];
+  final v = font is Map ? font['mono'] : null;
+  return v is String && v.isNotEmpty ? v : null;
 }
 
 /// Build ThemeData from a welcome's theme tokens.
@@ -48,6 +59,10 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
     onPrimary: pick('on_primary', base.onPrimary),
     surface: pick('surface', base.surface),
     onSurface: pick('text', base.onSurface),
+    // muted is what the browser spends on secondary text; Material's
+    // slot for that role is onSurfaceVariant, which _textStyleFor
+    // reads for the muted variant.
+    onSurfaceVariant: pick('muted', base.onSurfaceVariant),
     error: pick('danger', base.error),
     outline: pick('border', base.outline),
   );
@@ -55,10 +70,30 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
   final font = (theme['font'] as Map?)?.cast<String, dynamic>() ?? const {};
   final size = font['size'] is num ? (font['size'] as num).toDouble() : null;
 
+  // radius lands where the browser spends --g-radius: cards (panel
+  // variant card) and the button family.
+  final radiusV = theme['radius'];
+  final shape = radiusV is num && radiusV >= 0
+      ? RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusV.toDouble()))
+      : null;
+
   return ThemeData(
     colorScheme: scheme,
     scaffoldBackgroundColor: background,
     fontFamily: font['body'] is String ? font['body'] as String : null,
+    cardTheme: shape == null ? null : CardThemeData(shape: shape),
+    filledButtonTheme: shape == null
+        ? null
+        : FilledButtonThemeData(style: FilledButton.styleFrom(shape: shape)),
+    elevatedButtonTheme: shape == null
+        ? null
+        : ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(shape: shape)),
+    outlinedButtonTheme: shape == null
+        ? null
+        : OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(shape: shape)),
     textTheme: size == null
         ? null
         // Partial: unset styles keep the typography defaults.

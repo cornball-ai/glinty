@@ -53,7 +53,11 @@ typedef GlintyEventSink = void Function(String id);
 
 class GlintyRenderer {
   GlintyRenderer(
-      {this.onInput, this.onEvent, this.values = const {}, this.spacing = 4});
+      {this.onInput,
+      this.onEvent,
+      this.values = const {},
+      this.spacing = 4,
+      this.monoFamily});
 
   final GlintySink? onInput;
   final GlintyEventSink? onEvent;
@@ -62,6 +66,34 @@ class GlintyRenderer {
   /// are multiples of it -- the same rule the browser applies through
   /// --g-space, and the same default when no theme was set.
   final double spacing;
+
+  /// The theme's mono font family for verbatim output, or null for
+  /// the platform monospace -- the same role --g-font-mono plays in
+  /// the browser.
+  final String? monoFamily;
+
+  /// The spec's fallback rule: unknown variants take the first
+  /// listed, with a warning rather than an error, because a
+  /// same-protocol server one release newer may know variants this
+  /// client does not.
+  static const _knownVariants = <String, List<String>>{
+    'text': ['normal', 'muted', 'strong', 'heading'],
+    'text_output': ['normal', 'muted', 'strong'],
+    'button': ['default', 'primary', 'secondary', 'danger', 'ghost'],
+    'download_button': ['default', 'primary', 'secondary', 'danger', 'ghost'],
+    'panel': ['plain', 'card', 'sidebar'],
+    'divider': ['line', 'labelled'],
+  };
+
+  String _variant(String component, String? variant) {
+    final known = _knownVariants[component];
+    if (known == null) return variant ?? '';
+    if (variant == null) return known.first;
+    if (known.contains(variant)) return variant;
+    debugPrint('glinty: unknown $component variant "$variant" '
+        '- falling back to ${known.first}');
+    return known.first;
+  }
 
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
@@ -105,7 +137,7 @@ class GlintyRenderer {
         return _slider(c);
       case 'button':
       case 'download_button':
-        return _button(c);
+        return _button(context, c);
       case 'text_output':
         return Text(_outputText(c), style: _textStyleFor(context, c));
       case 'verbatim_output':
@@ -128,9 +160,11 @@ class GlintyRenderer {
 
   TextStyle? _textStyleFor(BuildContext context, GlintyComponent c) {
     final theme = Theme.of(context).textTheme;
-    switch (c.str('variant')) {
+    switch (_variant(c.type, c.str('variant'))) {
       case 'muted':
-        return theme.bodyMedium?.copyWith(color: Theme.of(context).hintColor);
+        // the muted token lands on onSurfaceVariant in glintyThemeData
+        return theme.bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
       case 'strong':
         return theme.bodyMedium?.copyWith(fontWeight: FontWeight.bold);
       case 'heading':
@@ -167,7 +201,7 @@ class GlintyRenderer {
 
   Widget _divider(GlintyComponent c) {
     final label = c.str('label');
-    if (c.str('variant') == 'labelled' && label != null) {
+    if (_variant('divider', c.str('variant')) == 'labelled' && label != null) {
       return Row(children: [
         const Expanded(child: Divider()),
         Padding(
@@ -245,8 +279,22 @@ class GlintyRenderer {
         ...c.children.map((k) => build(context, k)),
       ],
     );
-    if (c.str('variant') == 'card') {
+    final variant = _variant('panel', c.str('variant'));
+    if (variant == 'card') {
       return Card(child: Padding(padding: const EdgeInsets.all(12), child: body));
+    }
+    if (variant == 'sidebar') {
+      // the CSS twin: surface background, a border on the trailing
+      // edge of the content it sits beside
+      final scheme = Theme.of(context).colorScheme;
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          border: Border(right: BorderSide(color: scheme.outline)),
+        ),
+        child: body,
+      );
     }
     return body;
   }
@@ -339,7 +387,7 @@ class GlintyRenderer {
     );
   }
 
-  Widget _button(GlintyComponent c) {
+  Widget _button(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final label = Text(c.str('label') ?? '');
     final icon = c.str('icon');
@@ -351,14 +399,18 @@ class GlintyRenderer {
             label,
           ]);
     void fire() => onEvent?.call(id);
-    return switch (c.str('variant')) {
+    final scheme = Theme.of(context).colorScheme;
+    return switch (_variant(c.type, c.str('variant'))) {
       'primary' => FilledButton(key: Key(id), onPressed: fire, child: child),
       'secondary' =>
         OutlinedButton(key: Key(id), onPressed: fire, child: child),
+      // danger comes from the theme's danger token, which
+      // glintyThemeData maps onto the scheme's error slot
       'danger' => FilledButton(
           key: Key(id),
           onPressed: fire,
-          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          style: FilledButton.styleFrom(
+              backgroundColor: scheme.error, foregroundColor: scheme.onError),
           child: child),
       'ghost' => TextButton(key: Key(id), onPressed: fire, child: child),
       _ => ElevatedButton(key: Key(id), onPressed: fire, child: child),
@@ -377,7 +429,7 @@ class GlintyRenderer {
         padding: const EdgeInsets.all(8),
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Text(_outputText(c),
-            style: const TextStyle(fontFamily: 'monospace')),
+            style: TextStyle(fontFamily: monoFamily ?? 'monospace')),
       );
 
   Widget _table(GlintyComponent c) {

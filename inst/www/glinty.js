@@ -394,16 +394,28 @@
         return node;
     }
 
-    /* Variant lookup with the spec's fallback: unknown variants take
-       the first listed, with a warning rather than an error, because
-       a same-protocol server one release newer may know variants
-       this client does not. */
-    function variantClass(table, variant, fallback) {
-        if (variant && !(variant in table)) {
-            console.warn("glinty: unknown variant", variant,
-                         "- falling back to", fallback);
-        }
-        return table[variant] || table[fallback];
+    /* The spec's fallback rule, applied to every variant-bearing
+       component: unknown variants take the first listed, with a
+       warning rather than an error, because a same-protocol server
+       one release newer may know variants this client does not. */
+    var KNOWN_VARIANTS = {
+        text: ["normal", "muted", "strong", "heading"],
+        text_output: ["normal", "muted", "strong"],
+        button: ["default", "primary", "secondary", "danger", "ghost"],
+        download_button: ["default", "primary", "secondary", "danger",
+                          "ghost"],
+        panel: ["plain", "card", "sidebar"],
+        divider: ["line", "labelled"]
+    };
+
+    function checkVariant(component, variant) {
+        var known = KNOWN_VARIANTS[component];
+        if (!known) return variant;
+        if (variant === null || variant === undefined) return known[0];
+        if (known.indexOf(variant) !== -1) return variant;
+        console.warn("glinty: unknown", component, "variant", variant,
+                     "- falling back to", known[0]);
+        return known[0];
     }
 
     /* emit becomes a DOM event name here and nowhere else. */
@@ -553,7 +565,7 @@
     function buildButton(c, extraClass) {
         var attrs = assign(bindAttrs(c, "event"), {
             type: "button",
-            "class": ["g-btn", "g-btn-" + (c.variant || "default")]
+            "class": ["g-btn", "g-btn-" + checkVariant(c.component, c.variant)]
                 .concat(extraClass || []).join(" ")
         });
         var btn = el("button", attrs);
@@ -611,7 +623,7 @@
         switch (c.component) {
         case "text":
             node = el("span", {
-                "class": variantClass(TEXT_CLASSES, c.variant, "normal"),
+                "class": TEXT_CLASSES[checkVariant("text", c.variant)],
                 id: c.id
             });
             node.textContent = c.value;
@@ -638,7 +650,7 @@
             node.setAttribute("aria-hidden", "true");
             return node;
         case "divider":
-            if (c.variant === "labelled" && c.label) {
+            if (checkVariant("divider", c.variant) === "labelled" && c.label) {
                 node = el("div", {
                     "class": "g-divider g-divider-labelled"
                 });
@@ -665,7 +677,7 @@
             return buildLayout(c, "g-layout-col");
         case "panel":
             node = el("div", {
-                "class": "g-panel g-panel-" + (c.variant || "plain"),
+                "class": "g-panel g-panel-" + checkVariant("panel", c.variant),
                 id: c.id
             });
             if (c.title) {
@@ -722,7 +734,7 @@
             return buildButton(c, ["g-download"]);
         case "text_output":
             return el("span", assign(slotAttrs(c), {
-                "class": variantClass(OUTPUT_CLASSES, c.variant, "normal")
+                "class": OUTPUT_CLASSES[checkVariant("text_output", c.variant)]
             }));
         case "verbatim_output":
             return el("pre", assign(slotAttrs(c), {
@@ -1055,41 +1067,71 @@
         root.appendChild(box);
     }
 
-    /* Theme tokens land as CSS custom properties on the root element,
-       overriding both the stylesheet's defaults and the inline block
-       the served page carried -- same names, same values, so on a
-       fresh page this is a no-op, and on a cached page it heals the
-       palette without a reload. */
+    /* Theme tokens land in the #g-theme style element -- the same
+       one the served page carried -- never as inline properties on
+       the root. Precedence is the point: the block sits after
+       glinty.css (tokens beat the defaults and the dark-mode block)
+       and before any app stylesheet (apps beat tokens), and writing
+       the element keeps that order identical before and after the
+       socket connects. Inline root properties would beat app CSS and
+       flip the cascade mid-session. On a fresh page this write is a
+       no-op; on a cached page it heals the palette without a
+       reload. */
     var THEME_COLOR_NAMES = ["primary", "on_primary", "surface",
                              "background", "text", "muted", "border",
-                             "danger", "success"];
+                             "danger"];
+
+    /* Token values come from a server this client already trusts for
+       markup, but they are interpolated into CSS text, so anything
+       that could close the declaration or the block is refused. */
+    function cssSafe(value) {
+        return !/[;{}<>]/.test(value);
+    }
+
+    function themeCssText(theme) {
+        var parts = [];
+        var colors = theme.colors || {};
+        THEME_COLOR_NAMES.forEach(function (name) {
+            if (typeof colors[name] === "string" && cssSafe(colors[name])) {
+                parts.push("--g-" + name.replace(/_/g, "-") + ":" +
+                           colors[name]);
+            }
+        });
+        if (typeof theme.spacing === "number" && isFinite(theme.spacing)) {
+            parts.push("--g-space:" + theme.spacing + "px");
+        }
+        if (typeof theme.radius === "number" && isFinite(theme.radius)) {
+            parts.push("--g-radius:" + theme.radius + "px");
+        }
+        var font = theme.font || {};
+        if (typeof font.body === "string" && cssSafe(font.body)) {
+            parts.push("--g-font-body:" + font.body);
+        }
+        if (typeof font.mono === "string" && cssSafe(font.mono)) {
+            parts.push("--g-font-mono:" + font.mono);
+        }
+        if (typeof font.size === "number" && isFinite(font.size)) {
+            parts.push("--g-font-size:" + font.size + "px");
+        }
+        return ":root{" + parts.join(";") + "}";
+    }
 
     function applyTheme(theme) {
         if (!theme || typeof theme !== "object") return;
-        var root = document.documentElement;
-        var colors = theme.colors || {};
-        THEME_COLOR_NAMES.forEach(function (name) {
-            if (typeof colors[name] === "string") {
-                root.style.setProperty(
-                    "--g-" + name.replace(/_/g, "-"), colors[name]);
+        var node = document.getElementById("g-theme");
+        if (!node) {
+            node = document.createElement("style");
+            node.id = "g-theme";
+            /* after the first stylesheet link (glinty.css), so app
+               stylesheets that follow still win */
+            var link = document.querySelector("link");
+            if (link && link.parentNode) {
+                link.parentNode.insertBefore(node, link.nextSibling);
+            } else if (document.head) {
+                document.head.appendChild(node);
             }
-        });
-        if (typeof theme.spacing === "number") {
-            root.style.setProperty("--g-space", theme.spacing + "px");
         }
-        if (typeof theme.radius === "number") {
-            root.style.setProperty("--g-radius", theme.radius + "px");
-        }
-        var font = theme.font || {};
-        if (typeof font.body === "string") {
-            root.style.setProperty("--g-font-body", font.body);
-        }
-        if (typeof font.mono === "string") {
-            root.style.setProperty("--g-font-mono", font.mono);
-        }
-        if (typeof font.size === "number") {
-            root.style.setProperty("--g-font-size", font.size + "px");
-        }
+        node.textContent = themeCssText(theme);
     }
 
     function handleWelcome(msg) {

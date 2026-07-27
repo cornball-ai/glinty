@@ -370,7 +370,7 @@ Sent once in `welcome`. A closed set of tokens, not a stylesheet.
     "primary": "#6366f1", "on_primary": "#ffffff",
     "surface": "#ffffff", "background": "#f8fafc",
     "text": "#1e293b", "muted": "#64748b",
-    "border": "#e2e8f0", "danger": "#f43f5e", "success": "#10b981"
+    "border": "#e2e8f0", "danger": "#f43f5e"
   },
   "spacing": 4,
   "radius": 8,
@@ -602,16 +602,20 @@ make it slower.
    exists.
 4. **Theme and variants.** *(done)* `app(theme = app_theme(...))`
    declares a token set; `welcome` carries it, the served page
-   embeds the same tokens inline so the first paint is themed, the
-   browser applies them as CSS custom properties and Flutter maps
-   them onto `ThemeData`, with the spacing unit feeding spacer()
-   on both sides. A themeless app keeps each frontend's own
-   defaults, browser dark mode included. The stylesheet was rewired
-   to the token set and to the v3 class inventory while there --
-   `--g-space` had never been defined (spacers collapsed to zero)
-   and several stage 1 classes had no rules. Unknown variants fall
-   back to the first listed with a console warning, in both
-   lowerings.
+   embeds the same tokens in a `#g-theme` style block so the first
+   paint is themed, and the client updates that same block on
+   welcome -- never inline root properties, so the cascade (tokens
+   beat glinty.css, app CSS beats tokens) holds identically before
+   and after the socket connects. Flutter consumes every token:
+   colors onto the scheme (`muted` -> `onSurfaceVariant`, `danger`
+   -> `error`), radius onto cards and buttons, fonts including mono,
+   spacing feeding spacer() on both sides. A themeless app keeps
+   each frontend's own defaults, browser dark mode included. The
+   stylesheet was rewired to the token set and the v3 class
+   inventory while there -- `--g-space` had never been defined
+   (spacers collapsed to zero) and several stage 1 classes had no
+   rules. Unknown variants fall back to the first listed with a
+   warning, in both lowerings, for every variant-bearing component.
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Flutter client grows a transport and becomes an app
    rather than a renderer.

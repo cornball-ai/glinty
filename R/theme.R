@@ -4,7 +4,7 @@
 # than tokens ship a stylesheet, which only the browser sees.
 
 THEME_COLOR_NAMES <- c("primary", "on_primary", "surface", "background",
-                       "text", "muted", "border", "danger", "success")
+                       "text", "muted", "border", "danger")
 
 #' glinty's default look, as explicit tokens
 #'
@@ -15,8 +15,8 @@ theme_defaults <- function() {
          colors = list(primary = "#2456d6", on_primary = "#ffffff",
                        surface = "#ffffff", background = "#ffffff",
                        text = "#1a1a1a", muted = "#6a6a6a",
-                       border = "#d0d0d5", danger = "#b3261e",
-                       success = "#177245"),
+                       border = "#d0d0d5", danger = "#b3261e"),
+
          spacing = 4,
          radius = 6,
          font = list(body = "system-ui", mono = "ui-monospace", size = 16)
@@ -42,7 +42,7 @@ theme_defaults <- function() {
 #' glinty must never charge.
 #'
 #' @param colors named list over primary, on_primary, surface,
-#'   background, text, muted, border, danger, success; values are
+#'   background, text, muted, border, danger; values are
 #'   "#rrggbb" (or "#rrggbbaa") strings
 #' @param spacing numeric base spacing unit in logical pixels;
 #'   spacer() sizes are multiples of it

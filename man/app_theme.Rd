@@ -7,7 +7,7 @@ app_theme(colors = list(), spacing = NULL, radius = NULL, font = list())
 }
 \arguments{
 \item{colors}{named list over primary, on_primary, surface,
-background, text, muted, border, danger, success; values are
+background, text, muted, border, danger; values are
 "#rrggbb" (or "#rrggbbaa") strings}
 
 \item{spacing}{numeric base spacing unit in logical pixels;

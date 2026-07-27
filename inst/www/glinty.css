@@ -17,7 +17,6 @@
     --g-muted: #6a6a6a;
     --g-border: #d0d0d5;
     --g-danger: #b3261e;
-    --g-success: #177245;
     --g-space: 4px;
     --g-radius: 6px;
     --g-font-body: system-ui;
@@ -35,7 +34,6 @@
         --g-muted: #9a9aa2;
         --g-border: #3a3d45;
         --g-danger: #e5484d;
-        --g-success: #46a758;
     }
 }
 
