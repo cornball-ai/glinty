@@ -8,7 +8,7 @@ field(type, required = FALSE, default = NULL, values = NULL, min = NULL,
 }
 \arguments{
 \item{type}{character one of "string", "number", "int", "bool",
-"enum", "choices", "children", "any"}
+"enum", "choices", "panels", "condition", "children", "any"}
 
 \item{required}{logical must be supplied}
 

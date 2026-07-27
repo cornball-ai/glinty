@@ -3,7 +3,7 @@
 \alias{component_to_flitr}
 \title{Lower a component tree to flitR ops}
 \usage{
-component_to_flitr(x, session, unsupported)
+component_to_flitr(x, session, values, unsupported)
 }
 \arguments{
 \item{x}{a glinty_component}

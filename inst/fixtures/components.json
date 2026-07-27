@@ -148,6 +148,161 @@
     }
   },
   {
+    "name": "text-output",
+    "notes": "an empty slot; the value arrives later, tagged by kind",
+    "component": {
+      "component": "text_output",
+      "id": "greeting",
+      "variant": "normal"
+    }
+  },
+  {
+    "name": "plot-output-responsive",
+    "notes": "no dimensions: the client reports its box via measure",
+    "component": {
+      "component": "plot_output",
+      "id": "scatter",
+      "alt": ""
+    }
+  },
+  {
+    "name": "plot-output-fixed",
+    "notes": "explicit dimensions, which a native client needs",
+    "component": {
+      "component": "plot_output",
+      "id": "fixed",
+      "width": 400,
+      "height": 300,
+      "alt": ""
+    }
+  },
+  {
+    "name": "audio-output",
+    "notes": "browser has a player element; flitR must refuse by name",
+    "component": {
+      "component": "audio_output",
+      "id": "player",
+      "controls": true,
+      "autoplay": false
+    }
+  },
+  {
+    "name": "text-input",
+    "notes": "emit defaults to live; the browser debounces, flitR cannot",
+    "component": {
+      "component": "text_input",
+      "id": "name",
+      "label": "Name:",
+      "value": "",
+      "emit": "live"
+    }
+  },
+  {
+    "name": "select-input",
+    "notes": "choices normalize to value/label however they were written",
+    "component": {
+      "component": "select_input",
+      "id": "backend",
+      "label": "",
+      "choices": [
+        {
+          "value": "openai",
+          "label": "OpenAI"
+        },
+        {
+          "value": "local",
+          "label": "Local"
+        }
+      ],
+      "multiple": false,
+      "emit": "settle"
+    }
+  },
+  {
+    "name": "slider-input",
+    "notes": "numbers, not CSS strings, so a frontend can compute with them",
+    "component": {
+      "component": "slider_input",
+      "id": "speed",
+      "label": "",
+      "min": 0.5,
+      "max": 2,
+      "value": 1,
+      "step": 0.1,
+      "emit": "live"
+    }
+  },
+  {
+    "name": "button-primary",
+    "notes": "emits an event, not an input: there is no value to keep",
+    "component": {
+      "component": "button",
+      "id": "go",
+      "label": "Run",
+      "variant": "primary"
+    }
+  },
+  {
+    "name": "password-input",
+    "notes": "no value field exists, so no secret can reach the wire",
+    "component": {
+      "component": "password_input",
+      "id": "key",
+      "label": "API Key",
+      "emit": "live"
+    }
+  },
+  {
+    "name": "tabset",
+    "notes": "Flutter retains hidden panel state; flitR never emits it",
+    "component": {
+      "component": "tabset",
+      "id": "tabs",
+      "panels": [
+        {
+          "title": "Text",
+          "children": [
+            {
+              "component": "text_output",
+              "id": "body",
+              "variant": "normal"
+            }
+          ]
+        },
+        {
+          "title": "Raw",
+          "children": [
+            {
+              "component": "verbatim_output",
+              "id": "raw"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "conditional-panel",
+    "notes": "the condition is data, evaluated by whoever renders it",
+    "component": {
+      "component": "conditional_panel",
+      "condition": {
+        "op": "is",
+        "id": "backend",
+        "values": ["openai"]
+      },
+      "children": [
+        {
+          "component": "text_input",
+          "id": "api_base",
+          "label": "API URL",
+          "value": "",
+          "emit": "live"
+        }
+      ]
+    }
+  },
+  {
     "name": "raw_html",
     "notes": "browser renders; every other frontend must refuse by name",
     "component": {

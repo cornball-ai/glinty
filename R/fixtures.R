@@ -98,6 +98,76 @@ component_fixtures <- function() {
               notes = "a lowering must not crash on an empty container"
         ),
          list(
+              name = "text-output",
+              component = component("text_output", id = "greeting"),
+              notes = "an empty slot; the value arrives later, tagged by kind"
+        ),
+         list(
+              name = "plot-output-responsive",
+              component = component("plot_output", id = "scatter"),
+              notes = "no dimensions: the client reports its box via measure"
+        ),
+         list(
+              name = "plot-output-fixed",
+              component = component("plot_output", id = "fixed", width = 400L,
+                                    height = 300L),
+              notes = "explicit dimensions, which a native client needs"
+        ),
+         list(
+              name = "audio-output",
+              component = component("audio_output", id = "player"),
+              notes = "browser has a player element; flitR must refuse by name"
+        ),
+         list(
+              name = "text-input",
+              component = component("text_input", id = "name", label = "Name:"),
+              notes = "emit defaults to live; the browser debounces, flitR cannot"
+        ),
+         list(
+              name = "select-input",
+              component = component("select_input", id = "backend",
+                                    choices = c(OpenAI = "openai", Local = "local")),
+              notes = "choices normalize to value/label however they were written"
+        ),
+         list(
+              name = "slider-input",
+              component = component("slider_input", id = "speed", min = 0.5,
+                                    max = 2, value = 1, step = 0.1),
+              notes = "numbers, not CSS strings, so a frontend can compute with them"
+        ),
+         list(
+              name = "button-primary",
+              component = component("button", id = "go", label = "Run",
+                                    variant = "primary"),
+              notes = "emits an event, not an input: there is no value to keep"
+        ),
+         list(
+              name = "password-input",
+              component = component("password_input", id = "key",
+                                    label = "API Key"),
+              notes = "no value field exists, so no secret can reach the wire"
+        ),
+         list(
+              name = "tabset",
+              component = component("tabset", id = "tabs", panels = list(
+                    list(title = "Text",
+                         children = list(component("text_output", id = "body"))),
+                    list(title = "Raw",
+                         children = list(component("verbatim_output",
+                                id = "raw")))
+                )),
+              notes = "Flutter retains hidden panel state; flitR never emits it"
+        ),
+         list(
+              name = "conditional-panel",
+              component = component("conditional_panel",
+                                    condition = input_is("backend", "openai"),
+                                    children = list(
+                    component("text_input", id = "api_base",
+                              label = "API URL"))),
+              notes = "the condition is data, evaluated by whoever renders it"
+        ),
+         list(
               name = "raw_html",
               component = component("raw_html", html = "<details>x</details>"),
               notes = "browser renders; every other frontend must refuse by name"

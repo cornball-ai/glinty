@@ -3,7 +3,7 @@
 \alias{children_to_flitr}
 \title{Lower a list of children, dropping the ones that contribute nothing}
 \usage{
-children_to_flitr(children, session, unsupported)
+children_to_flitr(children, session, values, unsupported)
 }
 \arguments{
 \item{children}{list of components}

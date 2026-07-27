@@ -29,6 +29,7 @@ new_test_session <- local({
     }
 })
 s <- new_test_session()
+vals <- new.env(parent = emptyenv())
 
 # Every string in a flitR op tree. Walks rather than unlist()ing,
 # because ops carry closures that unlist mangles.
@@ -56,7 +57,7 @@ for (f in component_fixtures()) {
     html <- component_to_html(f$component)
     expect_true(is.character(html) && length(html) == 1L)
     # only the empty container may render to nothing
-    if (!identical(f$name, "empty-column")) {
+    if (!f$name %in% c("empty-column")) {
         expect_true(nzchar(html))
     }
 }
@@ -65,7 +66,7 @@ for (f in component_fixtures()) {
 if (has_flitr) {
     for (f in component_fixtures()) {
         uns <- new_unsupported()
-        expect_silent(component_to_flitr(f$component, s, uns))
+        expect_silent(component_to_flitr(f$component, s, vals, uns))
         # a refusal names the component; it never approximates
         if (length(uns$names) > 0L) {
             expect_true(all(nzchar(uns$names)))
@@ -128,7 +129,7 @@ expect_true(grepl("from_the_future", ghost, fixed = TRUE))
 
 if (has_flitr) {
     uns <- new_unsupported()
-    expect_null(component_to_flitr(bogus, s, uns))
+    expect_null(component_to_flitr(bogus, s, vals, uns))
     expect_true("from_the_future" %in% uns$names)
 }
 
@@ -151,7 +152,7 @@ expect_true(grepl(">y<", html, fixed = TRUE))
 
 if (has_flitr) {
     uns <- new_unsupported()
-    strings <- drawn(component_to_flitr(tree, s, uns))
+    strings <- drawn(component_to_flitr(tree, s, vals, uns))
     expect_true("Section" %in% strings)
     expect_true("x" %in% strings)
     expect_true("y" %in% strings)
@@ -162,8 +163,8 @@ if (has_flitr) {
 expect_silent(component_to_html(component("column", children = list())))
 if (has_flitr) {
     uns <- new_unsupported()
-    expect_null(component_to_flitr(component("column", children = list()),
-                                   s, uns))
+    expect_null(component_to_flitr(component("column", children = list()), s, vals,
+                                   uns))
 }
 
 # --- icon: browser renders a token, flitR refuses by name ---
@@ -172,15 +173,15 @@ expect_true(grepl("g-icon-play", ico, fixed = TRUE))
 expect_true(grepl('data-g-icon="play"', ico, fixed = TRUE))
 if (has_flitr) {
     uns <- new_unsupported()
-    expect_null(component_to_flitr(component("icon", name = "play"), s, uns))
+    expect_null(component_to_flitr(component("icon", name = "play"), s, vals, uns))
     expect_true("icon" %in% uns$names)
 }
 
 # --- raw_html: browser renders, flitR refuses by name ---
 if (has_flitr) {
     uns <- new_unsupported()
-    expect_null(component_to_flitr(component("raw_html", html = "<b>x</b>"),
-                                   s, uns))
+    expect_null(component_to_flitr(component("raw_html", html = "<b>x</b>"), s, vals,
+                                   uns))
     expect_true("raw_html" %in% uns$names)
 }
 
@@ -196,7 +197,7 @@ expect_true(grepl("&quot;",
 expect_error(component_to_html("a bare string"), "expects a component")
 expect_error(component_to_html(list(component = "text")), "expects a component")
 if (has_flitr) {
-    expect_error(component_to_flitr("nope", s, new_unsupported()),
+    expect_error(component_to_flitr("nope", s, vals, new_unsupported()),
                  "expects a component")
 }
 
@@ -281,7 +282,7 @@ for (case in cases) {
     if (has_flitr && !identical(name, "select_input")) {
         sess <- new_test_session()
         uns <- new_unsupported()
-        widget <- component_to_flitr(x, sess, uns)
+        widget <- component_to_flitr(x, sess, vals, uns)
         if (length(uns$names) == 0L) {
             expect_true(!is.null(widget))
             expect_true(poke(widget, case$user))
@@ -338,7 +339,7 @@ if (has_flitr) {
                                       choices = c("a", "b")),
             date_input = component("date_input", id = "d"),
             file_input = component("file_input", id = "f"))
-        expect_null(component_to_flitr(comp, sess, uns))
+        expect_null(component_to_flitr(comp, sess, vals, uns))
         expect_true(nm %in% uns$names)
         session_end(sess)
     }

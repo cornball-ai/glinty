@@ -48,6 +48,19 @@ component_to_html <- function(x) {
            file_input = html_file(x),
            button = html_button(x),
            download_button = html_button(x, "g-download"),
+           text_output = html_text_output(x),
+           verbatim_output = html_el("pre", c(html_slot(x),
+                list(class = "g-verbatim-output"))),
+           table_output = html_el("div", c(html_slot(x),
+                list(class = "g-table-output"))),
+           plot_output = html_plot_output(x),
+           image_output = html_el("img", c(html_slot(x),
+                list(class = "g-image-output", alt = x$alt)), void = TRUE),
+           audio_output = html_audio_output(x),
+           ui_output = html_el("div", c(html_slot(x),
+                                        list(class = "g-ui-output"))),
+           tabset = html_tabset(x),
+           conditional_panel = html_conditional(x),
            raw_html = x$html,
            html_unsupported(x$component)
     )
@@ -322,4 +335,99 @@ html_button <- function(x, extra_class = NULL) {
                     class = paste(c("g-btn", paste0("g-btn-", x$variant),
                                     extra_class), collapse = " ")))
     html_el("button", attrs, inner)
+}
+
+# --- outputs ---
+#
+# An output lowers to an empty slot carrying its id and the value kind
+# it expects. The client fills it when an `output` message arrives;
+# nothing here knows what the value will be.
+
+#' Attributes marking an output slot
+#'
+#' @param x the component
+#' @return named list
+#' @keywords internal
+html_slot <- function(x) {
+    out <- list(id = x$id)
+    out[["data-g-output"]] <- x$id
+    out[["data-g-kind"]] <- OUTPUT_KINDS[[x$component]]
+    out
+}
+
+html_text_output <- function(x) {
+    cls <- c(normal = "g-output", muted = "g-output g-muted",
+             strong = "g-output g-strong")
+    html_el("span", c(html_slot(x), list(class = unname(cls[[x$variant]]))))
+}
+
+html_plot_output <- function(x) {
+    # With no dimensions the element fills its container and the client
+    # reports the box back through a `measure` message, which is how
+    # render_plot() sizes itself.
+    style <- NULL
+    if (is.null(x$width) && is.null(x$height)) {
+        style <- "width:100%;aspect-ratio:4 / 3"
+    }
+    html_el("img", c(html_slot(x),
+                     list(class = "g-plot-output", alt = x$alt, width = x$width,
+                          height = x$height, style = style)),
+            void = TRUE)
+}
+
+html_audio_output <- function(x) {
+    html_el("audio", c(html_slot(x),
+                       list(class = "g-audio-output",
+                            controls = if (isTRUE(x$controls)) {
+                    "controls"
+                } else {
+                    NULL
+                },
+                            autoplay = if (isTRUE(x$autoplay)) {
+                    "autoplay"
+                } else {
+                    NULL
+                })))
+}
+
+# --- composite layout ---
+
+html_tabset <- function(x) {
+    selected <- x$selected
+    titles <- vapply(x$panels, function(p) p$title, character(1L))
+    if (is.null(selected) || !selected %in% titles) {
+        selected <- titles[[1L]]
+    }
+    nav <- paste(vapply(x$panels, function(p) {
+        active <- identical(p$title, selected)
+        attrs <- list(type = "button",
+                      class = paste(c("g-tab-btn", if (active) "g-tab-active"),
+                                    collapse = " "))
+        attrs[["data-g-tab-panel"]] <- p$title
+        attrs[["data-g-target"]] <- x$id
+        attrs[["data-g-message"]] <- "input"
+        attrs[["data-g-value"]] <- p$title
+        html_el("button", attrs, html_escape(p$title))
+    }, character(1L)), collapse = "")
+
+    bodies <- paste(vapply(x$panels, function(p) {
+        attrs <- list(class = paste(c("g-tab-body",
+                    if (!identical(p$title, selected)) {
+                        "g-hidden"
+                    }),
+                                    collapse = " "))
+        attrs[["data-g-tab-panel"]] <- p$title
+        html_el("div", attrs, children_to_html(p$children))
+    }, character(1L)), collapse = "")
+
+    html_el("div", list(id = x$id, class = "g-tabset"),
+            paste0(html_el("div", list(class = "g-tab-nav"), nav),
+                   html_el("div", list(class = "g-tab-bodies"), bodies)))
+}
+
+html_conditional <- function(x) {
+    attrs <- list(class = "g-conditional")
+    attrs[["data-g-cond"]] <- as.character(
+        jsonlite::toJSON(x$condition, auto_unbox = TRUE))
+    html_el("div", attrs, children_to_html(x$children))
 }

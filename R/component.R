@@ -8,7 +8,7 @@
 #' Declare one component field
 #'
 #' @param type character one of "string", "number", "int", "bool",
-#'   "enum", "choices", "children", "any"
+#'   "enum", "choices", "panels", "condition", "children", "any"
 #' @param required logical must be supplied
 #' @param default value filled in when absent; NULL means the field
 #'   stays absent rather than becoming null on the wire
@@ -186,9 +186,62 @@ COMPONENT_SCHEMA <- list(
         icon = field("string")
     ),
 
+                         # outputs
+                         #
+                         # An output component is a slot: it names an id and says how to
+                         # present whatever value arrives for it. What that value *is*
+                         # comes from the renderer, as `kind` on the output message, which
+                         # is why none of these carry a value field.
+                         text_output = list(
+        id = field("string", required = TRUE),
+        variant = field("enum", default = "normal",
+                        values = c("normal", "muted", "strong"))
+    ),
+                         verbatim_output = list(id = field("string", required = TRUE)),
+                         table_output = list(id = field("string", required = TRUE)),
+                         plot_output = list(
+        id = field("string", required = TRUE),
+        width = field("int", min = 1, max = 8192),
+        height = field("int", min = 1, max = 8192),
+        alt = field("string", default = "")
+    ),
+                         image_output = list(
+        id = field("string", required = TRUE),
+        alt = field("string", default = "")
+    ),
+                         audio_output = list(
+        id = field("string", required = TRUE),
+        controls = field("bool", default = TRUE),
+        autoplay = field("bool", default = FALSE)
+    ),
+                         ui_output = list(id = field("string", required = TRUE)),
+
+                         # composite layout
+                         tabset = list(
+                                       id = field("string", required = TRUE),
+                                       panels = field("panels", required = TRUE),
+                                       selected = field("string")
+    ),
+                         conditional_panel = list(
+        condition = field("condition", required = TRUE),
+        children = field("children", required = TRUE)
+    ),
+
                          # escape hatch
                          raw_html = list(html = field("string", required = TRUE))
 )
+
+#' Output components and the value kinds they accept
+#'
+#' A slot that receives a kind it cannot present is a bug worth naming
+#' at render time rather than drawing nothing, so the pairing is data
+#' rather than scattered through the lowerings.
+#'
+#' @keywords internal
+OUTPUT_KINDS <- list(text_output = "text", verbatim_output = "text",
+                     table_output = "table", plot_output = "image",
+                     image_output = "image", audio_output = "audio",
+                     ui_output = "ui")
 
 #' What each input emits, and of what type
 #'
@@ -335,6 +388,41 @@ check_field <- function(value, spec, type, nm) {
                  "')", call. = FALSE)
         }
         return(value)
+    },
+           panels = {
+        # A tabset's panels are titled child lists rather than plain
+        # components, because a tab has a name the frontend shows in
+        # its own nav furniture -- Flutter builds a TabBar from these,
+        # the browser builds buttons.
+        if (!is.list(value) || length(value) == 0L) {
+            stop(where, " must be a non-empty list of panels", call. = FALSE)
+        }
+        titles <- character(0L)
+        out <- lapply(seq_along(value), function(i) {
+            p <- value[[i]]
+            if (!is.list(p) || is.null(p$title) || !nzchar(p$title)) {
+                stop(where, " panel ", i, " needs a non-empty title",
+                     call. = FALSE)
+            }
+            titles <<- c(titles, p$title)
+            list(title = as.character(p$title),
+                 children = check_children(
+                    if (is.null(p$children)) list() else p$children,
+                    paste0(type, " panel ", i)))
+        })
+        if (anyDuplicated(titles) > 0L) {
+            stop(where, " titles must be unique; duplicated: ",
+                 paste(unique(titles[duplicated(titles)]), collapse = ", "),
+                 call. = FALSE)
+        }
+        return(unname(out))
+    },
+           condition = {
+        if (!inherits(value, "glinty_condition")) {
+            stop(where, " must be a condition from input_is(), cond_and(), ",
+                 "cond_or() or cond_not()", call. = FALSE)
+        }
+        return(unclass(value))
     },
            choices = {
         # A named character vector is the R-idiomatic way to write

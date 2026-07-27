@@ -136,7 +136,8 @@ for (nm in names(COMPONENT_SCHEMA)) {
         spec <- COMPONENT_SCHEMA[[nm]][[fname]]
         expect_true(is.character(spec$type))
         expect_true(spec$type %in% c("string", "number", "int", "bool",
-                                     "enum", "choices", "children", "any"))
+                                     "enum", "choices", "panels", "condition",
+                                     "children", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)
@@ -158,7 +159,7 @@ for (nm in names(COMPONENT_SCHEMA)) {
 
 # --- fixtures ---
 fx <- component_fixtures()
-expect_true(length(fx) >= 10L)
+expect_true(length(fx) >= 20L)
 for (f in fx) {
     expect_true(is.character(f$name) && nzchar(f$name))
     expect_true(is_component(f$component))

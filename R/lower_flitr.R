@@ -35,7 +35,7 @@ NATIVE_COLORS <- c(normal = "#111111", muted = "#666666", strong = "#000000",
 #' @param unsupported collector env with a `$names` character vector
 #' @return a flitR item, or NULL to contribute nothing
 #' @keywords internal
-component_to_flitr <- function(x, session, unsupported) {
+component_to_flitr <- function(x, session, values, unsupported) {
     if (is.null(x)) {
         return(NULL)
     }
@@ -51,11 +51,11 @@ component_to_flitr <- function(x, session, unsupported) {
            link = flitR::text(0, 0, x$value, size = 14, color = "#2456D6"),
            divider = flitr_divider(x),
            spacer = flitr_spacer(x),
-           page = flitr_stack(x, session, unsupported, gap = 10),
+           page = flitr_stack(x, session, values, unsupported, gap = 10),
            column = flitr_stack(x, session, unsupported,
                                 gap = if (is.null(x$gap)) 8 else x$gap),
-           row = flitr_row(x, session, unsupported),
-           panel = flitr_panel(x, session, unsupported),
+           row = flitr_row(x, session, values, unsupported),
+           panel = flitr_panel(x, session, values, unsupported),
            text_input =,
            password_input =,
            textarea_input =,
@@ -68,6 +68,15 @@ component_to_flitr <- function(x, session, unsupported) {
            file_input =,
            button =,
            download_button = flitr_input(x, session, unsupported),
+           text_output =,
+           verbatim_output =,
+           table_output =,
+           plot_output =,
+           image_output =,
+           audio_output =,
+           ui_output = flitr_output(x, values, unsupported),
+           tabset = flitr_tabset(x, session, values, unsupported),
+           conditional_panel = flitr_conditional(x, session, values, unsupported),
            {
         # icon and raw_html land here. An icon needs artwork flitR
         # has no library for, and raw markup has no draw-op
@@ -86,10 +95,10 @@ component_to_flitr <- function(x, session, unsupported) {
 #' @param unsupported collector env
 #' @return list of flitR items
 #' @keywords internal
-children_to_flitr <- function(children, session, unsupported) {
+children_to_flitr <- function(children, session, values, unsupported) {
     out <- list()
     for (child in children) {
-        item <- component_to_flitr(child, session, unsupported)
+        item <- component_to_flitr(child, session, values, unsupported)
         if (!is.null(item)) {
             out <- c(out, list(item))
         }
@@ -118,24 +127,24 @@ flitr_spacer <- function(x) {
     flitR::rect(0, 0, 1, x$size * 8, "#00000000")
 }
 
-flitr_stack <- function(x, session, unsupported, gap) {
-    items <- children_to_flitr(x$children, session, unsupported)
+flitr_stack <- function(x, session, values, unsupported, gap) {
+    items <- children_to_flitr(x$children, session, values, unsupported)
     if (length(items) == 0L) {
         return(NULL)
     }
     do.call(flitR::column, c(items, list(gap = gap)))
 }
 
-flitr_row <- function(x, session, unsupported) {
-    items <- children_to_flitr(x$children, session, unsupported)
+flitr_row <- function(x, session, values, unsupported) {
+    items <- children_to_flitr(x$children, session, values, unsupported)
     if (length(items) == 0L) {
         return(NULL)
     }
     do.call(flitR::row, c(items, list(gap = if (is.null(x$gap)) 12 else x$gap)))
 }
 
-flitr_panel <- function(x, session, unsupported) {
-    items <- children_to_flitr(x$children, session, unsupported)
+flitr_panel <- function(x, session, values, unsupported) {
+    items <- children_to_flitr(x$children, session, values, unsupported)
     if (!is.null(x$title)) {
         items <- c(list(flitR::text(0, 0, x$title, size = 13,
                                     color = "#666666")), items)
@@ -214,3 +223,130 @@ flitr_select <- function(x, cur, report) {
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# --- outputs ---
+#
+# An output slot draws whatever value has arrived for its id. flitR has
+# no notion of an empty element waiting to be filled, so a slot with no
+# value yet draws its placeholder rather than nothing -- otherwise the
+# scene silently loses height and everything below it shifts when the
+# first value lands.
+
+#' Lower an output component to a flitR item
+#'
+#' @param x a glinty_component
+#' @param values env of output id -> latest value
+#' @param unsupported collector env
+#' @return a flitR item, or NULL
+#' @keywords internal
+flitr_output <- function(x, values, unsupported) {
+    val <- values[[x$id]]
+
+    switch(x$component,
+           text_output = flitR::text(0, 0, native_text(val),
+                                     size = NATIVE_TEXT_SIZES[[x$variant]],
+                                     color = NATIVE_COLORS[[x$variant]]),
+           verbatim_output = flitR::text(0, 0, native_text(val), size = 13),
+           table_output = flitr_table(val),
+           plot_output =,
+           image_output = flitr_image(x, val),
+           {
+        # audio_output and ui_output. Audio needs a player flitR
+        # does not have; ui_output needs the tree that arrives at
+        # runtime, which stage 2 delivers. Named, not approximated.
+        unsupported$names <- c(unsupported$names, x$component)
+        NULL
+    }
+    )
+}
+
+#' An output value as displayable text
+#'
+#' @param val the value, possibly NULL
+#' @return character
+#' @keywords internal
+native_text <- function(val) {
+    if (is.null(val)) {
+        return("")
+    }
+    paste(as.character(val), collapse = " ")
+}
+
+flitr_table <- function(val) {
+    if (is.null(val) || is.null(val$header)) {
+        return(flitR::text(0, 0, "", size = 13))
+    }
+    rows <- lapply(val$rows, function(r) paste(unlist(r), collapse = "   "))
+    lines <- c(paste(unlist(val$header), collapse = "   "), unlist(rows))
+    items <- lapply(lines, function(l) flitR::text(0, 0, l, size = 12))
+    do.call(flitR::column, c(items, list(gap = 2)))
+}
+
+flitr_image <- function(x, val) {
+    if (is.null(x$width)) {
+        w <- 480
+    } else {
+        w <- x$width
+    }
+    if (is.null(x$height)) {
+        h <- 360
+    } else {
+        h <- x$height
+    }
+    if (is.null(val) || is.null(val$src)) {
+        # Hold the space, so the scene does not reflow on first render.
+        return(flitR::rect(0, 0, w, h, "#F4F4F4"))
+    }
+    if (!is.null(val$width)) {
+        w <- val$width
+    }
+    if (!is.null(val$height)) {
+        h <- val$height
+    }
+    flitR::image(0, 0, w = w, h = h, src = val$src)
+}
+
+# --- composite layout ---
+
+flitr_tabset <- function(x, session, values, unsupported) {
+    titles <- vapply(x$panels, function(p) p$title, character(1L))
+    selected <- isolate(session$input[[x$id]]())
+    if (!is.character(selected) || length(selected) != 1L ||
+        !selected %in% titles) {
+        selected <- if (!is.null(x$selected) && x$selected %in% titles) {
+            x$selected
+        } else {
+            titles[[1L]]
+        }
+    }
+
+    strip <- flitR::tabs(x$id, 0, 0, titles, selected = selected,
+                         on_select = function(label) {
+        handle_input(session, x$id, label)
+    })
+
+    # Only the selected panel is emitted: an unselected tab is not
+    # hidden in immediate mode, it is simply not drawn this frame.
+    body <- Filter(function(p) identical(p$title, selected), x$panels)
+    items <- list(strip)
+    if (length(body) > 0L) {
+        kids <- children_to_flitr(body[[1L]]$children, session, values,
+                                  unsupported)
+        if (length(kids) > 0L) {
+            items <- c(items, list(do.call(flitR::column,
+                        c(kids, list(gap = 8)))))
+        }
+    }
+    do.call(flitR::column, c(items, list(gap = 10)))
+}
+
+flitr_conditional <- function(x, session, values, unsupported) {
+    if (!eval_condition(x$condition, session)) {
+        return(NULL)
+    }
+    items <- children_to_flitr(x$children, session, values, unsupported)
+    if (length(items) == 0L) {
+        return(NULL)
+    }
+    do.call(flitR::column, c(items, list(gap = 4)))
+}
