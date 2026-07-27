@@ -197,9 +197,15 @@ dispatch_client_message <- function(session, txt) {
             nzchar(msg$id) && is.character(msg$purpose) &&
             msg$purpose %in% c("upload", "download")) {
             t <- issue_ticket(session, msg$id, msg$purpose)
-            # NULL at the live-ticket cap: the request is dropped and
-            # a legitimate client retries once transfers finish
-            if (!is.null(t)) {
+            if (is.null(t)) {
+                # At the live-ticket cap. Answer, rather than drop:
+                # a client waiting on a grant that never comes leaves
+                # its upload control disabled forever, which is the
+                # silent failure this protocol keeps refusing to
+                # ship. The error is scoped to the resource so the
+                # client can re-enable exactly that control.
+                session$send(error_msg(msg$id, "too many pending transfers"))
+            } else {
                 session$send(ticket_msg(msg$id, msg$purpose, t$token,
                                         t$expires))
             }

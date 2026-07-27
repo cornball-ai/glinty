@@ -19,10 +19,8 @@
 #' different `alg` is refused without further inspection, which is
 #' what closes the classic algorithm-confusion hole.
 #'
-#' HS256 costs nothing extra (HMAC comes from digest, already an
-#' Import). RS256 needs the openssl package, which is only a
-#' Suggests: asked for RS256 without it, this errors at construction
-#' with an install message. Fetching and caching a JWKS is the app's
+#' HS256 uses digest's HMAC, RS256 uses openssl; both are Imports, so
+#' neither costs an install. Fetching and caching a JWKS is the app's
 #' job; hand the chosen key in as `pubkey`.
 #'
 #' @param secret character HMAC secret, for HS256
@@ -48,10 +46,6 @@ jwt_auth <- function(secret = NULL, pubkey = NULL,
                  call. = FALSE)
         }
     } else {
-        if (!requireNamespace("openssl", quietly = TRUE)) {
-            stop("jwt_auth(algorithm = \"RS256\") needs the openssl ",
-                 "package: install.packages(\"openssl\")", call. = FALSE)
-        }
         if (is.null(pubkey)) {
             stop("jwt_auth() with RS256 needs a pubkey", call. = FALSE)
         }
@@ -162,11 +156,15 @@ well_formed_hello <- function(msg) {
 #' Authentication binds a session to an identity, and resume must
 #' honour the binding: holding a valid token for user B plus user A's
 #' session id must not replay A's outputs. The stable identity is
-#' principal$id (jwt_auth() puts sub there); a verifier that returns
-#' principals without ids gives resume nothing to bind to, so an
-#' authenticated resume is refused rather than cross-linked.
+#' principal$id (jwt_auth() puts sub there).
 #'
-#' Without auth configured there is no identity to bind: the session
+#' A verifier may return anything non-NULL -- a bare string, a
+#' vector, a list without an id -- and glinty keeps it as the
+#' principal either way. Those simply have no identity to bind to, so
+#' resume is disabled for them (a fresh session, not an error): a
+#' principal glinty cannot compare is one it must not gamble on.
+#'
+#' Without auth configured there is no identity at all: the session
 #' id alone remains the (documented, weak) resume credential.
 #'
 #' @param old the detached glinty_session
@@ -178,9 +176,27 @@ resume_allowed <- function(old, principal, auth) {
     if (is.null(auth)) {
         return(TRUE)
     }
-    old_id <- old$principal$id
-    new_id <- principal$id
+    old_id <- principal_id(old$principal)
+    new_id <- principal_id(principal)
     !is.null(old_id) && !is.null(new_id) && identical(old_id, new_id)
+}
+
+#' The comparable identity in a principal, if it has one
+#'
+#' @param principal whatever the verifier returned
+#' @return a length-1 character id, or NULL when there is none to
+#'   compare (including for non-list principals, which cannot carry
+#'   one)
+#' @keywords internal
+principal_id <- function(principal) {
+    if (!is.list(principal)) {
+        return(NULL)
+    }
+    id <- principal[["id"]]
+    if (is.null(id) || length(id) != 1L || is.na(id)) {
+        return(NULL)
+    }
+    as.character(id)
 }
 
 #' Decode one base64url segment

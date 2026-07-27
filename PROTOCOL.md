@@ -490,6 +490,13 @@ The first frame on a socket must be a well-formed `hello` (type and
 a numeric protocol). Anything else is refused the same way, before
 the verifier runs and before any session exists.
 
+A client decides "is this id-less error a refusal?" by whether the
+socket that sent hello is still waiting for its welcome — not by
+whether it has ever connected. Refusals happen on reconnects, where
+a token that worked an hour ago has expired, and a client keyed to
+"first connection only" would read that as an ordinary error and
+retry forever against a server that will never let it in.
+
 **Resume is principal-bound.** Authentication ties a session to an
 identity, and resume honours the tie: the freshly verified
 principal's `id` must be non-NULL and identical to the session's.
@@ -515,14 +522,18 @@ run_app(app, auth = jwt_auth(secret = Sys.getenv("SUPABASE_JWT_SECRET")))
 It verifies signature, `exp`, and `aud`, then returns the claims with
 `sub` as `id`. One line, no JWT knowledge required.
 
-Two honest constraints:
+HS256 uses HMAC-SHA256 from `digest`; RS256 uses `openssl`. Both are
+Imports, so neither costs the app an install. Fetching and caching a
+JWKS is the app's job, not glinty's.
 
-- **HS256 is free.** HMAC-SHA256 comes from `digest`, already an
-  Import. No new dependency.
-- **RS256 / JWKS needs `openssl`**, which goes in Suggests, and
-  `jwt_auth()` errors with a clear install message if asked for an
-  asymmetric algorithm without it. Fetching and caching a JWKS is the
-  app's job, not glinty's.
+**Why `openssl` is an Import and not a Suggests.** Session ids and
+transfer tickets are bearer credentials, minted on every platform
+glinty runs on, and base R has no CSPRNG. An earlier draft had
+`openssl` optional with `/dev/urandom` as the fallback — which is
+not cross-platform, so a Windows server would have had no source at
+all. A dependency that is always required is an Import; hiding it
+behind `requireNamespace()` would only make the list look shorter
+than the truth. RS256 comes along for free.
 
 If the account model lands somewhere other than JWTs, the seam is
 unchanged and `jwt_auth()` is simply unused.
@@ -549,11 +560,14 @@ ticket, which is not this architecture. (An earlier draft said
 "signed"; this is the honest replacement.)
 
 Tokens are bearer credentials, so they come from a real CSPRNG
-(openssl when present, the kernel's /dev/urandom otherwise) — hashed
+(`openssl::rand_bytes`, one source on every platform) — hashed
 process state is unique, not unpredictable. Session ids get the same
 source, for the same reason. The store is bounded: live tickets are
 capped per session even inside the TTL window, and a request at the
-cap is dropped rather than granted.
+cap gets an `error` scoped to the resource rather than silence — a
+client waiting on a grant that never comes leaves its upload control
+disabled forever, which is the same silent failure this protocol
+keeps refusing to ship.
 
 ### Binding and TLS
 
@@ -581,10 +595,11 @@ the session, and the scheduler isolates the port.** No native code, no
 extra dependency, and the one component that can bind selectively is
 the one doing it.
 
-TLS is the same story: base R sockets cannot terminate it, and
-`openssl` in Imports is a dependency decision against the tinyverse
-budget. The supported deployment is a reverse proxy terminating TLS in
-front of glinty, with the network scoped by firewall or namespace.
+TLS is the same story for a different reason: base R sockets cannot
+terminate it, and `openssl` being an Import buys the primitives, not
+a TLS socket. The supported deployment is a reverse proxy
+terminating TLS in front of glinty, with the network scoped by
+firewall or namespace.
 
 Apple's ATS makes TLS non-negotiable for a mobile client, so a
 documented, tested proxy configuration is a precondition for the Dart
@@ -676,7 +691,7 @@ make it slower.
 5. **Auth, tickets, `/healthz`, port from the environment.** *(done)*
    `run_app(auth = )` verifies the hello token and the result becomes
    `session$principal`; `jwt_auth()` ships the HS256 batteries with
-   RS256 behind a Suggests on openssl, alg-pinned against confusion.
+   RS256 through openssl, alg-pinned against confusion.
    Transfers ride single-use tickets minted over the socket -- the
    session id is out of every URL, and the browser's download
    buttons, dead since stage 1 (the lowering never emitted

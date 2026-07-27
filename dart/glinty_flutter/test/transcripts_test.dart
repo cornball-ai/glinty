@@ -490,6 +490,41 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
+    testWidgets('a refusal on RECONNECT is visible too', (tester) async {
+      // The token that worked an hour ago has expired. A client that
+      // keyed "is this a refusal?" on having never connected would
+      // treat this as an ordinary error and retry forever.
+      final s = GlintySession(token: 'was.valid.once');
+      s.hello();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      expect(s.refused, isFalse);
+      expect(s.ui, isNotNull);
+
+      s.hello(); // reconnect
+      s.receive(serverFrame('hello-refused', 'error'));
+
+      expect(s.refused, isTrue);
+      expect(s.refusalMessage, contains('authentication'));
+      expect(s.ui, isNull, reason: 'the stale tree must not stay on screen');
+
+      await tester.pumpWidget(
+          MaterialApp(home: Scaffold(body: GlintyView(session: s))));
+      expect(find.text('Connection refused'), findsOneWidget);
+    });
+
+    test('an output error after welcome is not a refusal', () {
+      // the other half of the window: id-less errors only refuse
+      // while a welcome is outstanding
+      final s = GlintySession();
+      s.hello();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive({'type': 'error', 'id': 'greeting', 'message': 'boom'});
+
+      expect(s.refused, isFalse);
+      expect(s.ui, isNotNull);
+      expect(s.values['greeting'], isNull);
+    });
+
     test('a ticket request matches the transcript, and the grant lands',
         () {
       final t = transcript('ticket-grant');

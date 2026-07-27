@@ -109,25 +109,19 @@ new_ticket_token <- function() {
 
 #' Cryptographically random bytes
 #'
-#' openssl's CSPRNG when the package is present, the kernel's
-#' /dev/urandom otherwise -- which covers every platform glinty
-#' serves from. A platform with neither gets an error naming the fix
-#' rather than silently weaker credentials.
+#' One source, every platform: openssl's CSPRNG. This is why openssl
+#' is an Import rather than a Suggests -- session ids and tickets are
+#' bearer credentials on every platform glinty runs on, base R has no
+#' CSPRNG, and /dev/urandom is not a cross-platform answer (a Windows
+#' server would have silently fallen through to an error, or worse to
+#' something weaker). A dependency that is always needed belongs in
+#' Imports.
 #'
 #' @param n integer byte count
 #' @return raw vector of length n
 #' @keywords internal
 random_bytes <- function(n) {
-    if (requireNamespace("openssl", quietly = TRUE)) {
-        return(openssl::rand_bytes(n))
-    }
-    if (file.exists("/dev/urandom")) {
-        con <- file("/dev/urandom", open = "rb", raw = TRUE)
-        on.exit(close(con))
-        return(readBin(con, "raw", n))
-    }
-    stop("no cryptographic randomness source; install the openssl ",
-         "package", call. = FALSE)
+    openssl::rand_bytes(n)
 }
 
 #' Lowercase hex of a raw vector

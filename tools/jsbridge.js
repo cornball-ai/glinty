@@ -1296,6 +1296,60 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         await sleep(650);
         check("a refused connection does not reconnect",
               bare.sockets.length === 1);
+
+        /* The token that worked an hour ago has expired. A client
+           keying "is this a refusal?" on having never connected would
+           read this as an ordinary error and retry forever. */
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const live = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        live.ws().open();
+        live.ws().deliver(frames(hyd, "out")[0]);
+        check("a normal session is not refused", live.G.sessionId() !== null);
+        /* an output error mid-session is NOT a refusal */
+        live.ws().deliver({ type: "error", id: "greeting",
+                            message: "render failed" });
+        check("an output error after welcome is an output error",
+              live.document.getElementById("g-protocol-error") === null);
+
+        live.ws().close();
+        await sleep(650);
+        check("it reconnected", live.sockets.length === 2);
+        live.ws().open();
+        live.ws().deliver(frames(transcript("hello-refused"), "out")[0]);
+        const box2 = live.document.getElementById("g-protocol-error");
+        check("a refusal on reconnect is visible",
+              box2 !== null &&
+              box2.textContent.includes("Connection refused"));
+        live.ws().close();
+        await sleep(900);
+        check("and it stops retrying", live.sockets.length === 2);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a refused ticket gives the control back");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.sandbox.FormData = class FormData { append() {} };
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "file_input", id: "dataset", label: "CSV:" }
+        });
+        const up = page.document.getElementById("dataset");
+        up.files = [{ name: "a.bin" }];
+        page.fire("change", up);
+        check("the control is disabled while it waits", up.disabled === true);
+
+        /* the server is at its live-ticket cap and says so */
+        page.ws().deliver({ type: "error", id: "dataset",
+                            message: "too many pending transfers" });
+        check("a refused grant re-enables the control rather than "
+              + "leaving it dead", up.disabled === false);
     }
 
     /* ---------------------------------------------------------- */

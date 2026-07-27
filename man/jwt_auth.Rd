@@ -32,10 +32,8 @@ The configured algorithm is the law: a token whose header claims a
 different `alg` is refused without further inspection, which is
 what closes the classic algorithm-confusion hole.
 
-HS256 costs nothing extra (HMAC comes from digest, already an
-Import). RS256 needs the openssl package, which is only a
-Suggests: asked for RS256 without it, this errors at construction
-with an install message. Fetching and caching a JWKS is the app's
+HS256 uses digest's HMAC, RS256 uses openssl; both are Imports, so
+neither costs an install. Fetching and caching a JWKS is the app's
 job; hand the chosen key in as `pubkey`.
 
 }

@@ -19,12 +19,16 @@ logical
 Authentication binds a session to an identity, and resume must
 honour the binding: holding a valid token for user B plus user A's
 session id must not replay A's outputs. The stable identity is
-principal$id (jwt_auth() puts sub there); a verifier that returns
-principals without ids gives resume nothing to bind to, so an
-authenticated resume is refused rather than cross-linked.
+principal$id (jwt_auth() puts sub there).
 }
 \details{
-Without auth configured there is no identity to bind: the session
+A verifier may return anything non-NULL -- a bare string, a
+vector, a list without an id -- and glinty keeps it as the
+principal either way. Those simply have no identity to bind to, so
+resume is disabled for them (a fresh session, not an error): a
+principal glinty cannot compare is one it must not gamble on.
+
+Without auth configured there is no identity at all: the session
 id alone remains the (documented, weak) resume credential.
 
 }

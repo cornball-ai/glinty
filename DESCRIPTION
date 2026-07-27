@@ -20,9 +20,9 @@ Imports:
     digest,
     grDevices,
     jsonlite,
+    openssl,
     tools,
     utils
 Suggests:
-    openssl,
     tinytest
 Encoding: UTF-8

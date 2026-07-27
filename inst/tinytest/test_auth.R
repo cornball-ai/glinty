@@ -190,6 +190,41 @@ anon_old <- new.env()
 anon_old$principal <- list(email = "no-id@x")
 expect_false(resume_allowed(anon_old, same, verifier))
 
+# a verifier may return anything non-NULL, and glinty keeps it --
+# so resume_allowed() must answer for scalars and vectors rather
+# than erroring on them. No comparable id means no resume.
+scalar_old <- new.env()
+scalar_old$principal <- "u_1"
+expect_false(resume_allowed(scalar_old, "u_1", verifier))
+expect_false(resume_allowed(old, "u_1", verifier))
+expect_false(resume_allowed(scalar_old, same, verifier))
+expect_false(resume_allowed(old, c(id = "u_1"), verifier))
+expect_false(resume_allowed(old, list(id = NULL), verifier))
+expect_false(resume_allowed(old, list(id = c("u_1", "u_2")), verifier))
+expect_false(resume_allowed(old, list(id = NA), verifier))
+# an id that is numeric still compares, as its own string
+num_old <- new.env()
+num_old$principal <- list(id = 42L)
+expect_true(resume_allowed(num_old, list(id = 42L), verifier))
+expect_false(resume_allowed(num_old, list(id = 43L), verifier))
+
+# --- the ticket cap answers instead of dropping ---
+scap <- glinty:::new_session("capmsg")
+for (i in seq_len(64L)) {
+    glinty:::issue_ticket(scap, paste0("r", i), "upload")
+}
+scap$outgoing <- list()
+glinty:::dispatch_client_message(scap,
+    '{"type":"ticket","id":"dataset","purpose":"upload"}')
+expect_equal(length(scap$outgoing), 1L)
+capmsg <- jsonlite::fromJSON(scap$outgoing[[1L]])
+expect_equal(capmsg$type, "error")
+# scoped to the resource, so a client can re-enable exactly that
+# control rather than leaving it disabled forever
+expect_equal(capmsg$id, "dataset")
+expect_true(grepl("pending transfers", capmsg$message))
+glinty:::session_end(scap)
+
 # --- ticket tokens come from a CSPRNG and never repeat ---
 random_bytes <- glinty:::random_bytes
 b <- random_bytes(16L)

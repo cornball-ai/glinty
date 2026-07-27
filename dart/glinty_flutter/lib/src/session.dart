@@ -103,6 +103,14 @@ class GlintySession {
 
   GlintyTreeSource source = GlintyTreeSource.none;
 
+  /// True from the moment hello goes out until that socket's welcome
+  /// arrives. An id-less error inside that window refuses this
+  /// connection -- including on a reconnect, where a token that
+  /// worked before has since expired. Keyed to the exchange, not to
+  /// "have we ever connected", or a reconnect refusal reads as an
+  /// ordinary error and the client retries forever.
+  bool _awaitingWelcome = false;
+
   /// Every frame this client has sent, in order. The record is the
   /// point: invariant 2 is "this list did not grow", and invariant 1
   /// is "it grew by exactly one".
@@ -142,6 +150,7 @@ class GlintySession {
       if (token != null) 'token': token,
       if (_cachedRevision != null) 'prerendered': _cachedRevision,
     });
+    _awaitingWelcome = true;
     _emit(frame);
     return frame;
   }
@@ -165,7 +174,7 @@ class GlintySession {
         final id = msg['id'];
         if (id is String) {
           values[id] = null;
-        } else if (sessionId == null) {
+        } else if (_awaitingWelcome) {
           // a refused connection: the server says why once and
           // closes; nothing after it is meaningful
           refusalMessage =
@@ -180,6 +189,7 @@ class GlintySession {
   }
 
   void _welcome(Map<String, dynamic> msg) {
+    _awaitingWelcome = false;
     final protocol = msg['protocol'];
     if (protocol is! int || protocol != glintyProtocolVersion) {
       // Invariant 4. Refuse before touching `ui`, so a mismatched

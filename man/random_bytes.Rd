@@ -12,9 +12,12 @@ random_bytes(n)
 raw vector of length n
 }
 \description{
-openssl's CSPRNG when the package is present, the kernel's
-/dev/urandom otherwise -- which covers every platform glinty
-serves from. A platform with neither gets an error naming the fix
-rather than silently weaker credentials.
+One source, every platform: openssl's CSPRNG. This is why openssl
+is an Import rather than a Suggests -- session ids and tickets are
+bearer credentials on every platform glinty runs on, base R has no
+CSPRNG, and /dev/urandom is not a cross-platform answer (a Windows
+server would have silently fallen through to an error, or worse to
+something weaker). A dependency that is always needed belongs in
+Imports.
 }
 \keyword{internal}

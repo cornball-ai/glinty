@@ -40,6 +40,14 @@
        A refused session ignores everything and never reconnects: no
        message after the refusal is meaningful. */
     var refused = false;
+    /* True from the moment a socket sends hello until that socket's
+       welcome arrives. An id-less error in that window is a refusal
+       of this connection -- and refusals happen on reconnects too,
+       where a token has expired since the first hello. Keyed to the
+       socket rather than to "have we ever connected", or a reconnect
+       refusal reads as an ordinary session error and the client
+       retries forever against a server that will never let it in. */
+    var awaitingWelcome = false;
     /* The client's view of every input it knows about. Conditional
        panels are evaluated against this rather than re-read from the
        DOM, so server-pushed updates and Glinty.setInputValue() count
@@ -344,9 +352,12 @@
        server logs, and a leaked URL expires in seconds. */
     var ticketWaiters = {};
 
-    function requestTicket(id, purpose, cb) {
+    function requestTicket(id, purpose, cb, onRefused) {
         var key = purpose + ":" + id;
-        (ticketWaiters[key] = ticketWaiters[key] || []).push(cb);
+        (ticketWaiters[key] = ticketWaiters[key] || []).push({
+            grant: cb,
+            refused: onRefused
+        });
         send({ type: "ticket", id: id, purpose: purpose });
     }
 
@@ -354,8 +365,21 @@
         var key = msg.purpose + ":" + msg.id;
         var queue = ticketWaiters[key];
         if (queue && queue.length) {
-            queue.shift()(msg);
+            queue.shift().grant(msg);
         }
+    }
+
+    /* The server can refuse a grant (too many pending transfers).
+       Waiters have to hear about it: a control disabled while it
+       waits for a grant that never comes stays disabled forever. */
+    function refuseTickets(id, message) {
+        ["upload", "download"].forEach(function (purpose) {
+            var queue = ticketWaiters[purpose + ":" + id];
+            while (queue && queue.length) {
+                var waiter = queue.shift();
+                if (waiter.refused) waiter.refused(message);
+            }
+        });
     }
 
     /* ---------- file uploads (plain POST, not the WS) ---------- */
@@ -379,6 +403,11 @@
             }).finally(function () {
                 el.disabled = false;
             });
+        }, function () {
+            /* refused: give the control back rather than leaving it
+               dead while the user wonders what happened */
+            el.disabled = false;
+            el.classList.add("g-error");
         });
     }
 
@@ -1175,6 +1204,7 @@
     }
 
     function handleWelcome(msg) {
+        awaitingWelcome = false;
         if (msg.protocol !== PROTOCOL) {
             /* Refuse before touching the DOM state: a mismatched
                server must not get a half-rendered tree on screen. */
@@ -1262,16 +1292,22 @@
             deliverTicket(msg);
             break;
         case "error":
-            /* An id-less error before the bootstrap is a refused
-               connection (authentication, most likely): the server
-               says why once and closes. Visible, like every other
-               refusal. */
-            if (!msg.id && !connectedFired) {
+            /* An id-less error while this socket is still waiting for
+               its welcome is a refused connection (authentication,
+               most likely): the server says why once and closes.
+               Visible, like every other refusal -- including on a
+               reconnect, where the token that worked an hour ago has
+               expired. */
+            if (!msg.id && awaitingWelcome) {
                 refused = true;
+                awaitingWelcome = false;
                 showFatal("Connection refused",
                           msg.message || "The server refused this connection.");
                 break;
             }
+            /* an error naming a resource someone is waiting on is
+               that wait's answer */
+            if (msg.id) refuseTickets(msg.id, msg.message);
             applyError(msg);
             break;
         default:
@@ -1502,6 +1538,7 @@
             } else if (prerendered) {
                 hello.prerendered = prerendered;
             }
+            awaitingWelcome = true;
             ws.send(JSON.stringify(hello));
         });
         ws.addEventListener("message", onMessage);

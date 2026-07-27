@@ -26,7 +26,26 @@ Stage 5, authentication and deployment surface:
   exists.
 - A refused connection is visible in Flutter too
   (`GlintyRefusalView`), and the shared transcripts carry the
-  refusal exchange all three clients replay.
+  refusal exchange all three clients replay. Refusals on
+  **reconnect** are visible too: both clients decide by whether the
+  socket that sent hello is still awaiting its welcome, not by
+  whether they have ever connected -- an expired token on a
+  reconnect used to read as an ordinary error and retry forever.
+- **New dependency**: `openssl` moves from Suggests to Imports.
+  Session ids and tickets are bearer credentials on every platform,
+  base R has no CSPRNG, and the previous `/dev/urandom` fallback was
+  not cross-platform (a Windows server had no source at all). A
+  dependency that is always required belongs in Imports rather than
+  behind a `requireNamespace()` guard; RS256 JWTs come along for
+  free.
+- Hitting the per-session ticket cap now answers with an `error`
+  scoped to the resource instead of dropping the request, so a
+  waiting upload control is re-enabled rather than left disabled
+  forever.
+- `resume_allowed()` handles principals of any shape. A verifier may
+  return anything non-NULL and glinty keeps it; those without a
+  comparable `id` (bare strings, vectors) simply get no resume
+  rather than an error.
 
 - New: `run_app(auth = )` takes a verifier for the opaque token a
   client sends in `hello`; its return becomes `session$principal`,
