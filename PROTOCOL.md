@@ -409,8 +409,9 @@ make it slower.
 
 ## Staging
 
-1. **Component representation.** Builders emit components; the browser
-   client lowers them to DOM.
+1. **Component representation.** Builders emit components. Two
+   lowerings land together: component -> DOM in the browser client,
+   and component -> flitR ops in `native_scene.R`.
 2. **Bootstrap over the wire.** `welcome` carries the tree; the
    browser keeps pre-rendering and hydrates against `ui_revision`.
 3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
@@ -419,24 +420,32 @@ make it slower.
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Dart client, in its own repo.
 
-### flitR breaks, and that is accepted
+### flitR is retrofitted in stage 1, on a strict leash
 
-`run_app_native()` translates tag trees today
-([native_scene.R](R/native_scene.R)), so stage 1 breaks it the moment
-builders stop producing tags. It is not being retrofitted, bridged, or
-kept compiling.
+Two lowerings land together: component → DOM, and component → flitR
+ops. flitR is a cheap, already-working second frontend, and its only
+job here is to expose DOM-shaped mistakes in the vocabulary while they
+are still free to fix. Finding them from Dart — across a repo
+boundary, a language barrier and a frozen spec — is not free.
 
-flitR is shelved and has one user, so the cost of it being broken is
-known and near zero. It stays in the repo as an option; whether a
-component → flitR lowering is worth writing is a decision for after
-the Dart client exists, when there is something to compare against.
+The scope is deliberately narrow:
 
-**The risk being accepted:** with only one lowering, the component
-vocabulary is validated against the DOM alone until Dart arrives. Some
-of it will turn out to be DOM-shaped in ways nobody notices from
-inside the browser. Golden fixtures at stage 6 are where that surfaces,
-which is later and more expensive than a second lowering now would
-have been. That trade is deliberate, not overlooked.
+- **Direct lowering only.** No bridge through legacy tag trees. A
+  bridge would validate the DOM model twice and prove nothing, since
+  every component would have already been squeezed through an
+  HTML-shaped intermediate before flitR saw it.
+- **Only flitR's current subset.** Whatever renders natively today
+  keeps rendering. Nothing more.
+- **No new flitR widgets**, and no chasing glinty's feature set.
+- **Unsupported components stay explicit** — named failure or a
+  visible placeholder, never an approximation.
+- **Shared fixtures.** One set of component trees, both lowerings
+  asserted against it. That is the artifact that makes the check real
+  rather than aspirational, and it is the same mechanism stage 6 uses
+  for Dart.
+
+This is what freezing flitR means in practice: **feature freeze, not
+breakage.** It stops growing; it does not stop working.
 
 ### The spec stays draft until two clients agree
 
