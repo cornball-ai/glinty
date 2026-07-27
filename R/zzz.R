@@ -13,5 +13,6 @@
     .globals$welcome_ui <- NULL
     .globals$welcome_revision <- NULL
     .globals$welcome_theme <- NULL
+    .globals$tickets <- new.env(parent = emptyenv())
     reg_reset()
 }

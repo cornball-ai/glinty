@@ -3,7 +3,7 @@
 \alias{route_http}
 \title{Route a plain HTTP request}
 \usage{
-route_http(req, page_html, pkg_www, static_dir)
+route_http(req, page_html, pkg_www, static_dir, started = as.numeric(Sys.time()))
 }
 \arguments{
 \item{req}{parsed request}
@@ -14,6 +14,9 @@ route_http(req, page_html, pkg_www, static_dir)
 
 \item{static_dir}{character app asset dir (served at /static/),
 or NULL}
+
+\item{started}{numeric epoch seconds the server came up, for
+/healthz uptime}
 }
 \value{
 raw HTTP response

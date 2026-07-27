@@ -68,6 +68,22 @@ if (is.null(con)) {
         paste(readLines(log_file, warn = FALSE), collapse = " | ")))
 }
 
+# --- 0. /healthz answers before any session exists ---
+hz_con <- connect()
+writeBin(charToRaw("GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+    hz_con)
+hz <- raw(0L)
+repeat {
+    chunk <- readBin(hz_con, "raw", 65536L)
+    if (length(chunk) == 0L) break
+    hz <- c(hz, chunk)
+}
+close(hz_con)
+hz_txt <- rawToChar(hz)
+expect_true(grepl("200 OK", hz_txt))
+expect_true(grepl('"status":"ok"', hz_txt, fixed = TRUE))
+expect_true(grepl('"sessions":0', hz_txt, fixed = TRUE))
+
 # --- 1. GET / serves the page ---
 writeBin(charToRaw("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"), con)
 buf <- raw(0L)
@@ -218,13 +234,20 @@ expect_equal(msg$type, "welcome")
 expect_false(msg$resumed)
 close(con)
 
-# --- 10. multipart upload over a raw POST reaches the session ---
+# --- 10. multipart upload via a ticket minted over the socket ---
 # fresh WS session for the upload test
 con <- ws_handshake()
 writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}', mask = TRUE), con)
 msg <- next_json()
-up_sid <- msg$session
+expect_equal(msg$type, "welcome")
 next_json() # initial count update, ignore
+
+writeBin(text_frame('{"type":"ticket","id":"f","purpose":"upload"}',
+    mask = TRUE), con)
+grant <- next_json()
+expect_equal(grant$type, "ticket")
+expect_equal(grant$purpose, "upload")
+expect_true(startsWith(grant$token, "tk_"))
 
 payload <- as.raw(c(137, 80, 78, 71, 13, 10, 26, 10, 0:63))
 bnd <- "glintyE2Eboundary"
@@ -239,7 +262,7 @@ mp_body <- c(
 )
 post_con <- connect()
 writeBin(c(charToRaw(paste0(
-    "POST /upload?session=", up_sid, "&id=f HTTP/1.1\r\n",
+    "POST /upload?ticket=", grant$token, " HTTP/1.1\r\n",
     "Host: localhost\r\n",
     "Content-Type: multipart/form-data; boundary=", bnd, "\r\n",
     "Content-Length: ", length(mp_body), "\r\n\r\n"
@@ -253,6 +276,159 @@ repeat {
 close(post_con)
 expect_true(grepl("200 OK", rawToChar(up_resp)))
 expect_true(grepl('"ok":true', rawToChar(up_resp)))
+
+# replaying the consumed ticket gets a refusal, not a second upload
+post_con2 <- connect()
+writeBin(c(charToRaw(paste0(
+    "POST /upload?ticket=", grant$token, " HTTP/1.1\r\n",
+    "Host: localhost\r\n",
+    "Content-Type: multipart/form-data; boundary=", bnd, "\r\n",
+    "Content-Length: ", length(mp_body), "\r\n\r\n"
+)), mp_body), post_con2)
+replay <- raw(0L)
+repeat {
+    chunk <- readBin(post_con2, "raw", 65536L)
+    if (length(chunk) == 0L) break
+    replay <- c(replay, chunk)
+}
+close(post_con2)
+expect_true(grepl("403", rawToChar(replay), fixed = TRUE))
 close(con)
 
 kill_child()
+
+# --- 11. run_app(auth = ): the gate holds over a real socket ---
+auth_port <- NULL
+for (i in 1:20) {
+    candidate <- sample(18000:19999, 1L)
+    srv <- tryCatch(serverSocket(candidate), error = function(e) NULL)
+    if (!is.null(srv)) {
+        close(srv)
+        auth_port <- candidate
+        break
+    }
+}
+if (is.null(auth_port)) exit_file("no free port for the auth server")
+
+auth_pid <- tempfile("glinty-e2e-authpid-")
+auth_log <- tempfile("glinty-e2e-authlog-")
+auth_script <- tempfile("glinty-e2e-auth-", fileext = ".R")
+writeLines(c(
+    sprintf('writeLines(as.character(Sys.getpid()), "%s")', auth_pid),
+    "library(glinty)",
+    'a <- app(ui = page(text_output("who"), title = "gated"),',
+    "         server = function(input, output, session) {",
+    '             output$who <- render_text(function()',
+    '                 session$principal$id)',
+    "         })",
+    sprintf(paste0(
+        "run_app(a, port = %dL, quiet = TRUE,\n",
+        "        auth = function(token) {\n",
+        '            if (identical(token, "letmein")) list(id = "u_42")\n',
+        "        })"), auth_port)
+), auth_script)
+system2(file.path(R.home("bin"), "Rscript"),
+    c("--vanilla", auth_script),
+    wait = FALSE, stdout = auth_log, stderr = auth_log)
+kill_auth <- function() {
+    if (file.exists(auth_pid)) {
+        pid <- suppressWarnings(as.integer(readLines(auth_pid)[1L]))
+        if (!is.na(pid)) tools::pskill(pid)
+    }
+}
+on.exit(kill_auth(), add = TRUE)
+
+connect_auth <- function() {
+    tryCatch(
+        suppressWarnings(socketConnection("127.0.0.1", auth_port,
+            open = "r+b", blocking = TRUE, timeout = 5)),
+        error = function(e) NULL
+    )
+}
+con <- NULL
+deadline <- Sys.time() + 15
+while (Sys.time() < deadline) {
+    con <- connect_auth()
+    if (!is.null(con)) break
+    Sys.sleep(0.25)
+}
+if (is.null(con)) {
+    exit_file(paste("auth server never came up:",
+        paste(readLines(auth_log, warn = FALSE), collapse = " | ")))
+}
+close(con)
+
+ws_handshake_auth <- function() {
+    c2 <- connect_auth()
+    if (is.null(c2)) stop("could not connect for auth handshake")
+    writeBin(charToRaw(paste0(
+        "GET /ws HTTP/1.1\r\nHost: localhost\r\n",
+        "Upgrade: websocket\r\nConnection: keep-alive, Upgrade\r\n",
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n",
+        "Sec-WebSocket-Version: 13\r\n\r\n"
+    )), c2)
+    hbuf <- raw(0L)
+    pos <- -1L
+    deadline <- Sys.time() + 5
+    while (Sys.time() < deadline) {
+        hbuf <- c(hbuf, readBin(c2, "raw", 8192L))
+        pos <- find_end(hbuf)
+        if (pos > 0L) break
+    }
+    stopifnot(pos > 0L)
+    buf <<- if (length(hbuf) > pos + 3L) {
+        hbuf[(pos + 4L):length(hbuf)]
+    } else {
+        raw(0L)
+    }
+    c2
+}
+
+# no token: one error frame, then the server closes the socket
+con <- ws_handshake_auth()
+writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}',
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$type, "error")
+expect_true(grepl("authentication", msg$message))
+# the connection is closed: the next read hits EOF, not a welcome
+eof <- tryCatch({
+    deadline <- Sys.time() + 5
+    got <- raw(0L)
+    while (Sys.time() < deadline && length(got) == 0L) {
+        got <- readBin(con, "raw", 8192L)
+        f <- glinty:::ws_decode_frame(c(buf, got))
+        if (!is.null(f) && f$opcode == 8L) {
+            got <- raw(0L)
+            break
+        }
+        if (length(got) == 0L) break
+    }
+    length(got) == 0L
+}, error = function(e) TRUE)
+expect_true(eof)
+close(con)
+
+# the wrong token is refused the same way
+con <- ws_handshake_auth()
+writeBin(text_frame(
+    '{"type":"hello","protocol":3,"client":"e2e/1","token":"guess"}',
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$type, "error")
+close(con)
+
+# the right token gets a welcome, and the principal reaches the app
+con <- ws_handshake_auth()
+writeBin(text_frame(
+    '{"type":"hello","protocol":3,"client":"e2e/1","token":"letmein"}',
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$type, "welcome")
+msg <- next_json()
+expect_equal(msg$type, "output")
+expect_equal(msg$id, "who")
+expect_equal(msg$value, "u_42")
+close(con)
+
+kill_auth()

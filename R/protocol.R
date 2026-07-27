@@ -91,6 +91,23 @@ progress_msg <- function(action, handle) {
     as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
 }
 
+#' Create a ticket grant message
+#'
+#' @param id character resource id the ticket covers
+#' @param purpose "upload" or "download"
+#' @param token character the ticket
+#' @param expires numeric TTL in seconds (relative, so no clock sync
+#'   is asked of the client)
+#' @return character JSON string
+#' @keywords internal
+ticket_msg <- function(id, purpose, token, expires) {
+    as.character(jsonlite::toJSON(
+                                  list(type = "ticket", id = id, purpose = purpose, token = token,
+                                       expires = expires),
+                                  auto_unbox = TRUE
+        ))
+}
+
 #' Create an error message
 #'
 #' @param id character output ID, or NULL for session-level errors
@@ -175,6 +192,13 @@ dispatch_client_message <- function(session, txt) {
         }
     } else if (identical(msg$type, "measure")) {
         handle_measure(session, msg)
+    } else if (identical(msg$type, "ticket")) {
+        if (is.character(msg$id) && length(msg$id) == 1L &&
+            nzchar(msg$id) && is.character(msg$purpose) &&
+            msg$purpose %in% c("upload", "download")) {
+            t <- issue_ticket(session, msg$id, msg$purpose)
+            session$send(ticket_msg(msg$id, msg$purpose, t$token, t$expires))
+        }
     } else {
         session$send(error_msg(NULL,
                                paste0("unknown message type: ", msg$type)))

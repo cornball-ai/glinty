@@ -92,6 +92,48 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "hello-authenticated",
+              notes = paste("the opening exchange under run_app(auth = ):",
+                            "hello carries an opaque token, the verifier",
+                            "turns it into session$principal, and the",
+                            "welcome is otherwise unchanged. A refused",
+                            "token gets one error frame and a closed",
+                            "socket instead"),
+              frames = list(
+                            list(dir = "in", message = list(
+                        type = "hello", protocol = PROTOCOL_VERSION,
+                        client = "glinty-js/0.5.0",
+                        token = "eyJhb.example.token"
+                    )),
+                            list(dir = "out", message = list(
+                        type = "welcome", session = "s6",
+                        protocol = PROTOCOL_VERSION,
+                        ui_revision = rev,
+                        ui = unclass_recursive(simple_ui)
+                    ))
+            )
+        ),
+         list(
+              name = "ticket-grant",
+              notes = paste("a transfer credential: the client asks over",
+                            "the socket, the grant is scoped to one session,",
+                            "one resource, one purpose, and expires seconds",
+                            "(relative TTL) later. Single use: redeeming it",
+                            "consumes it, success or not"),
+              frames = list(
+                            list(dir = "in", message = list(
+                        type = "ticket", id = "dataset",
+                        purpose = "upload"
+                    )),
+                            list(dir = "out", message = list(
+                        type = "ticket", id = "dataset",
+                        purpose = "upload",
+                        token = "tk_9c1f2ab34d56e78f90a1b2c3d4e5f607",
+                        expires = 30L
+                    ))
+            )
+        ),
+         list(
               name = "revision-mismatch",
               notes = paste("pre-rendered markup from a different tree; the",
                             "client must discard it and build from welcome",

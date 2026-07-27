@@ -278,12 +278,17 @@
             var el = ev.target.closest("[data-g-target]");
             if (!el) return;
             /* data-g-message says what the element emits. Buttons are
-               events: no value, just the fact of the press. An element
-               carrying data-g-value is click-selected state (a tab):
-               that is an input. Anything else reports through its own
+               events: no value, just the fact of the press. A download
+               button's press IS the download -- the ticket listener
+               below handles it, and doubling it with an event frame
+               would make one press two actions. An element carrying
+               data-g-value is click-selected state (a tab): that is
+               an input. Anything else reports through its own
                input/change events, not through clicks. */
             if (el.dataset.gMessage === "event") {
-                send({ type: "event", id: el.dataset.gTarget });
+                if (el.dataset.gDownload === undefined) {
+                    send({ type: "event", id: el.dataset.gTarget });
+                }
                 return;
             }
             if (el.dataset.gValue !== undefined) {
@@ -330,6 +335,29 @@
         });
     }
 
+    /* ---------- transfer tickets ---------- */
+
+    /* Uploads and downloads run over plain HTTP, so they cannot ride
+       the socket's authentication. Each transfer asks the server for
+       a short-lived single-use ticket over the socket and puts only
+       that in the URL: no session credential in browser history or
+       server logs, and a leaked URL expires in seconds. */
+    var ticketWaiters = {};
+
+    function requestTicket(id, purpose, cb) {
+        var key = purpose + ":" + id;
+        (ticketWaiters[key] = ticketWaiters[key] || []).push(cb);
+        send({ type: "ticket", id: id, purpose: purpose });
+    }
+
+    function deliverTicket(msg) {
+        var key = msg.purpose + ":" + msg.id;
+        var queue = ticketWaiters[key];
+        if (queue && queue.length) {
+            queue.shift()(msg);
+        }
+    }
+
     /* ---------- file uploads (plain POST, not the WS) ---------- */
 
     function uploadFiles(el) {
@@ -339,17 +367,18 @@
             fd.append("file", f, f.name);
         });
         el.disabled = true;
-        fetch(
-            "/upload?session=" + encodeURIComponent(sessionId) +
-                "&id=" + encodeURIComponent(el.dataset.gUpload),
-            { method: "POST", body: fd }
-        ).then(function (resp) {
-            if (!resp.ok) throw new Error("upload failed: " + resp.status);
-            el.classList.remove("g-error");
-        }).catch(function () {
-            el.classList.add("g-error");
-        }).finally(function () {
-            el.disabled = false;
+        requestTicket(el.dataset.gUpload, "upload", function (ticket) {
+            fetch(
+                "/upload?ticket=" + encodeURIComponent(ticket.token),
+                { method: "POST", body: fd }
+            ).then(function (resp) {
+                if (!resp.ok) throw new Error("upload failed: " + resp.status);
+                el.classList.remove("g-error");
+            }).catch(function () {
+                el.classList.add("g-error");
+            }).finally(function () {
+                el.disabled = false;
+            });
         });
     }
 
@@ -568,6 +597,9 @@
             "class": ["g-btn", "g-btn-" + checkVariant(c.component, c.variant)]
                 .concat(extraClass || []).join(" ")
         });
+        if (c.component === "download_button") {
+            attrs["data-g-download"] = c.id;
+        }
         var btn = el("button", attrs);
         if (c.icon) {
             btn.appendChild(buildComponent({
@@ -1043,12 +1075,11 @@
         observeMeasured();
     }
 
-    /* The refusal, drawn. It replaces the content rather than sitting
-       on top of it, because there is no content this client can be
-       trusted to have understood. Styled inline so it renders even if
-       the stylesheet never loaded. */
-    function showProtocolError(got) {
-        var advice = got > PROTOCOL ? "Update the app." : "Update the server.";
+    /* A fatal refusal, drawn. It replaces the content rather than
+       sitting on top of it, because there is no content this client
+       can be trusted to show. Styled inline so it renders even if the
+       stylesheet never loaded. */
+    function showFatal(title, text) {
         var root = document.getElementById("glinty-root") || document.body;
         root.textContent = "";
         var box = document.createElement("div");
@@ -1058,13 +1089,19 @@
             "border-radius:8px;background:#fdecea;color:#4a1210;" +
             "font-family:system-ui,sans-serif");
         var h = document.createElement("h2");
-        h.textContent = "Incompatible glinty server";
+        h.textContent = title;
         var p = document.createElement("p");
-        p.textContent = "This app speaks glinty protocol " + PROTOCOL +
-            ", but the server sent protocol " + got + ". " + advice;
+        p.textContent = text;
         box.appendChild(h);
         box.appendChild(p);
         root.appendChild(box);
+    }
+
+    function showProtocolError(got) {
+        var advice = got > PROTOCOL ? "Update the app." : "Update the server.";
+        showFatal("Incompatible glinty server",
+                  "This app speaks glinty protocol " + PROTOCOL +
+                  ", but the server sent protocol " + got + ". " + advice);
     }
 
     /* Theme tokens land in the #g-theme style element -- the same
@@ -1221,7 +1258,20 @@
         case "progress":
             applyProgress(msg);
             break;
+        case "ticket":
+            deliverTicket(msg);
+            break;
         case "error":
+            /* An id-less error before the bootstrap is a refused
+               connection (authentication, most likely): the server
+               says why once and closes. Visible, like every other
+               refusal. */
+            if (!msg.id && !connectedFired) {
+                refused = true;
+                showFatal("Connection refused",
+                          msg.message || "The server refused this connection.");
+                break;
+            }
             applyError(msg);
             break;
         default:
@@ -1342,14 +1392,15 @@
 
     /* ---------- downloads ---------- */
 
-    /* The page HTML is built once and served to every session, so the
-       URL cannot be baked into the href at render time. Resolve it on
-       click, when the session id is known and current. */
+    /* The page HTML is built once and served to every session, so
+       nothing session-specific can be baked into an href at render
+       time. A press asks for a ticket and navigates to it. */
     function startDownload(el) {
         if (!sessionId) return;
-        window.location.href =
-            "/download?session=" + encodeURIComponent(sessionId) +
-            "&id=" + encodeURIComponent(el.dataset.gDownload);
+        requestTicket(el.dataset.gDownload, "download", function (ticket) {
+            window.location.href =
+                "/download?ticket=" + encodeURIComponent(ticket.token);
+        });
     }
 
     /* ---------- disconnect overlay ---------- */
@@ -1437,6 +1488,15 @@
                 kinds: SUPPORTED_KINDS,
                 features: SUPPORTED_FEATURES
             };
+            /* The auth seam, browser side: an app script (loaded
+               after glinty.js, before DOMContentLoaded) sets
+               window.GLINTY_AUTH to the opaque token its login flow
+               produced, and hello carries it. glinty never parses
+               it. */
+            if (typeof window.GLINTY_AUTH === "string" &&
+                    window.GLINTY_AUTH) {
+                hello.token = window.GLINTY_AUTH;
+            }
             if (sessionId) {
                 hello.resume = sessionId;
             } else if (prerendered) {

@@ -8,9 +8,9 @@
 #' current reactive state. Read any inputs they need through
 #' isolate(), since there is no reactive context on an HTTP request.
 #'
-#' The session id in the URL is the credential, the same as for
-#' file_input() uploads and resume. Fine for the localhost and LAN
-#' tool scope glinty targets; treat it accordingly.
+#' The GET carries a short-lived single-use ticket the client minted
+#' over the WebSocket, so no session credential appears in the URL,
+#' browser history, or server logs.
 #'
 #' @param session a glinty_session
 #' @param id character download ID, matching a download_button()
@@ -70,7 +70,7 @@ download_button <- function(id, label = "Download", variant = "default",
 
 #' Serve a registered download
 #'
-#' @param req a parsed request with a query carrying session and id
+#' @param req a parsed request with a query carrying a ticket
 #' @return raw HTTP response
 #' @keywords internal
 handle_download <- function(req) {
@@ -78,16 +78,12 @@ handle_download <- function(req) {
         http_response_raw(status, "text/plain", msg)
     }
     q <- parse_query(req$query)
-    sid <- unname(q["session"])
-    dl_id <- unname(q["id"])
-    if (is.na(sid) || is.na(dl_id) || !nzchar(sid) || !nzchar(dl_id)) {
-        return(bad(400L, "missing session or id"))
+    grant <- redeem_ticket(unname(q["ticket"]), "download")
+    if (is.null(grant)) {
+        return(bad(403L, "invalid or expired ticket"))
     }
-    session <- .globals$sessions[[sid]]
-    if (is.null(session) || session$ended) {
-        return(bad(404L, "unknown session"))
-    }
-    handler <- session$downloads[[dl_id]]
+    session <- grant$session
+    handler <- session$downloads[[grant$id]]
     if (is.null(handler)) {
         return(bad(404L, "unknown download"))
     }

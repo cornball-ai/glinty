@@ -8,6 +8,40 @@ markup against a tree revision; and outputs are typed by what the
 renderer produced rather than by the DOM property a browser would
 patch. See PROTOCOL.md.
 
+Stage 5, authentication and deployment surface:
+
+- New: `run_app(auth = )` takes a verifier for the opaque token a
+  client sends in `hello`; its return becomes `session$principal`,
+  NULL refuses the connection with one visible error frame and a
+  closed socket. The gate covers resume too. glinty never parses
+  the token. In the browser, set `window.GLINTY_AUTH` before
+  `DOMContentLoaded`.
+- New: `jwt_auth()` verifies HS256 JWTs (signature via digest's
+  HMAC, `exp` required, `nbf` and `aud` when present/configured)
+  and returns the claims with `sub` as `id`. RS256 works when the
+  openssl package (now in Suggests) is installed. The configured
+  algorithm is pinned: a token claiming any other `alg`, including
+  `none`, is refused unread.
+- **Breaking**: uploads and downloads ride short-lived single-use
+  tickets minted over the WebSocket (`/upload?ticket=`,
+  `/download?ticket=`); the session id is out of every URL, browser
+  history, and server log. Tickets are scoped to one session, one
+  resource, one purpose, expire in
+  `getOption("glinty.ticket_ttl", 30)` seconds, and die on first
+  redemption.
+- Fixed: download buttons were dead in the browser since stage 1 --
+  the lowering never emitted `data-g-download`, so a press sent a
+  bare event frame and no download. They work again, through
+  tickets, and a press is one action: the event frame is not also
+  sent.
+- New: `GET /healthz` returns `{status, sessions, uptime}` so a
+  supervisor can tell "listening" from "working" without opening a
+  WebSocket.
+- `run_app(port = NULL)` (the new default) reads `GLINTY_PORT` then
+  `PORT` from the environment before falling back to 8080, so a
+  scheduler-allocated port needs no plumbing. Startup now names the
+  all-interfaces exposure in the same breath as the URL.
+
 Stage 4, theme and variants:
 
 - New: `app(theme = app_theme(...))` declares a closed token set --

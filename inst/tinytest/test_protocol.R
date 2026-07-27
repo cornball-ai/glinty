@@ -99,6 +99,25 @@ dispatch(s, '{"type":"event","id":"go"}')
 flush_reactions()
 expect_equal(isolate(s$input$go()), 2L)
 
+# --- dispatch: a ticket request gets a scoped grant ---
+s$outgoing <- list()
+dispatch(s, '{"type":"ticket","id":"dataset","purpose":"upload"}')
+tg <- jsonlite::fromJSON(s$outgoing[[1L]])
+expect_equal(tg$type, "ticket")
+expect_equal(tg$id, "dataset")
+expect_equal(tg$purpose, "upload")
+expect_true(startsWith(tg$token, "tk_"))
+expect_true(tg$expires > 0)
+# and the grant redeems, once, for its purpose only
+grant <- glinty:::redeem_ticket(tg$token, "upload")
+expect_equal(grant$id, "dataset")
+expect_identical(grant$session, s)
+expect_null(glinty:::redeem_ticket(tg$token, "upload"))
+# a bad purpose never mints
+s$outgoing <- list()
+dispatch(s, '{"type":"ticket","id":"x","purpose":"delete_everything"}')
+expect_equal(length(s$outgoing), 0L)
+
 # --- dispatch: protocol 2 frames are unknown types now ---
 s$outgoing <- list()
 dispatch(s, '{"type":"init","inputs":{"name":"troy"}}')

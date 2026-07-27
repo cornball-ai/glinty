@@ -117,6 +117,77 @@
       ]
     },
     {
+      "name": "hello-authenticated",
+      "notes": "the opening exchange under run_app(auth = ): hello carries an opaque token, the verifier turns it into session$principal, and the welcome is otherwise unchanged. A refused token gets one error frame and a closed socket instead",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "hello",
+            "protocol": 3,
+            "client": "glinty-js/0.5.0",
+            "token": "eyJhb.example.token"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "welcome",
+            "session": "s6",
+            "protocol": 3,
+            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui": {
+              "component": "page",
+              "children": [
+                {
+                  "component": "heading",
+                  "value": "Demo",
+                  "level": 1
+                },
+                {
+                  "component": "text_input",
+                  "id": "name",
+                  "label": "Name:",
+                  "value": "",
+                  "emit": "live"
+                },
+                {
+                  "component": "text_output",
+                  "id": "greeting",
+                  "variant": "normal"
+                }
+              ],
+              "title": "Demo"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ticket-grant",
+      "notes": "a transfer credential: the client asks over the socket, the grant is scoped to one session, one resource, one purpose, and expires seconds (relative TTL) later. Single use: redeeming it consumes it, success or not",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "ticket",
+            "id": "dataset",
+            "purpose": "upload"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "ticket",
+            "id": "dataset",
+            "purpose": "upload",
+            "token": "tk_9c1f2ab34d56e78f90a1b2c3d4e5f607",
+            "expires": 30
+          }
+        }
+      ]
+    },
+    {
       "name": "revision-mismatch",
       "notes": "pre-rendered markup from a different tree; the client must discard it and build from welcome rather than patching a stale DOM",
       "frames": [

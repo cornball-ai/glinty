@@ -137,6 +137,26 @@ expect_equal(io$frames[[1L]]$message$type, "input")
 expect_equal(io$frames[[2L]]$message$type, "output")
 expect_true(io$frames[[2L]]$message$kind %in% unlist(glinty:::OUTPUT_KINDS))
 
+au <- by_name("hello-authenticated")
+expect_true(!is.null(au))
+expect_true(is.character(au$frames[[1L]]$message$token))
+expect_equal(au$frames[[2L]]$message$type, "welcome")
+
+tg <- by_name("ticket-grant")
+expect_true(!is.null(tg))
+treq <- tg$frames[[1L]]$message
+tgrant <- tg$frames[[2L]]$message
+expect_equal(treq$type, "ticket")
+expect_true(treq$purpose %in% c("upload", "download"))
+expect_null(treq$token)
+expect_equal(tgrant$type, "ticket")
+expect_equal(tgrant$id, treq$id)
+expect_equal(tgrant$purpose, treq$purpose)
+expect_true(is.character(tgrant$token) && nzchar(tgrant$token))
+# expires is a relative TTL in seconds, not an absolute clock
+expect_true(is.numeric(tgrant$expires) && tgrant$expires > 0 &&
+                tgrant$expires < 3600)
+
 ev <- by_name("button-event")
 expect_true(!is.null(ev))
 expect_equal(ev$frames[[1L]]$message$type, "event")

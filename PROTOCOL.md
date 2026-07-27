@@ -476,6 +476,16 @@ string, hands it to your function, and keeps what comes back. The
 default verifier accepts everything, so localhost development stays
 frictionless.
 
+A refused hello (verifier returned NULL, or threw — failing open on
+an exception would make a bug in the verifier a bypass of it) gets
+one id-less `error` frame naming the reason, and the socket closes.
+Clients draw that refusal; the browser shows it the way it shows a
+protocol mismatch. The gate sits before any session exists, resume
+included: a token that no longer verifies does not get its old
+session back. In the browser, an app script sets
+`window.GLINTY_AUTH` to the token its login flow produced before
+`DOMContentLoaded`, and hello carries it.
+
 That shape is deliberately format-agnostic, because the account model
 it has to serve is still a draft. It is not, however, meant to leave
 you writing a JWT parser.
@@ -509,10 +519,20 @@ These are plain HTTP, so they cannot ride the WebSocket's
 authentication. Protocol 2 put the session id in the URL, which made
 it a bearer credential in browser history and server logs.
 
-v3 issues a **short-lived signed ticket** per transfer: the server
-mints it over the WebSocket when the client needs one, scoped to one
-session, one resource id, and a few seconds. The bearer token never
-appears in a URL, and a leaked ticket expires before it is useful.
+v3 issues a **short-lived single-use ticket** per transfer: the
+server mints it over the WebSocket when the client needs one, scoped
+to one session, one resource id, one purpose, and a few seconds
+(`expires` is a relative TTL). Redeeming a ticket consumes it,
+success or not -- a retry asks for a new one over the socket, and a
+replayed URL gets nothing. The session id never appears in a URL,
+and a leaked ticket is dead within seconds either way.
+
+The ticket is an opaque token held server-side, not a signed
+payload: a single-process server is the authority on what it issued,
+and a store it can consult beats cryptography it could get wrong.
+Signing would buy verification by a process that did not mint the
+ticket, which is not this architecture. (An earlier draft said
+"signed"; this is the honest replacement.)
 
 ### Binding and TLS
 
@@ -632,7 +652,20 @@ make it slower.
    (spacers collapsed to zero) and several stage 1 classes had no
    rules. Unknown variants fall back to the first listed with a
    warning, in both lowerings, for every variant-bearing component.
-5. **Auth, tickets, `/healthz`, port from the environment.**
+5. **Auth, tickets, `/healthz`, port from the environment.** *(done)*
+   `run_app(auth = )` verifies the hello token and the result becomes
+   `session$principal`; `jwt_auth()` ships the HS256 batteries with
+   RS256 behind a Suggests on openssl, alg-pinned against confusion.
+   Transfers ride single-use tickets minted over the socket -- the
+   session id is out of every URL, and the browser's download
+   buttons, dead since stage 1 (the lowering never emitted
+   `data-g-download`), work again through them. `GET /healthz`
+   reports sessions and uptime; `run_app(port = NULL)` reads
+   GLINTY_PORT then PORT before falling back to 8080; startup names
+   the all-interfaces exposure in the same breath as the URL. The
+   auth gate is proven over a real socket in the e2e suite: no
+   token refused and closed, wrong token refused, right token
+   welcomed with the principal readable by the app.
 6. **Then** the Flutter client grows a transport and becomes an app
    rather than a renderer.
 

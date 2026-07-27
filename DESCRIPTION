@@ -23,5 +23,6 @@ Imports:
     tools,
     utils
 Suggests:
+    openssl,
     tinytest
 Encoding: UTF-8

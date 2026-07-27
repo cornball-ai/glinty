@@ -3,13 +3,21 @@
 \alias{run_app}
 \title{Run a glinty application}
 \usage{
-run_app(app_obj, port = 8080L, static_dir = "www", max_upload = 10485760L,
-        check_secrets = TRUE, quiet = FALSE)
+run_app(app_obj, port = NULL, auth = NULL, static_dir = "www",
+        max_upload = 10485760L, check_secrets = TRUE, quiet = FALSE)
 }
 \arguments{
 \item{app_obj}{a glinty_app object}
 
-\item{port}{integer HTTP port (default 8080)}
+\item{port}{integer HTTP port. NULL (the default) reads
+GLINTY_PORT then PORT from the environment before falling back
+to 8080, so a scheduler-allocated port needs no plumbing.}
+
+\item{auth}{a function(token) verifying the opaque token a client
+sends in hello: NULL from the function refuses the connection,
+anything else becomes session$principal. NULL (the default)
+accepts every connection with no principal. See jwt_auth() for
+the JWT case.}
 
 \item{static_dir}{character directory served under /static/
 (default "www" in the working directory; skipped if absent)}

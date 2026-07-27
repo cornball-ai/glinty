@@ -460,6 +460,34 @@ void main() {
       expect(find.text('Hello, Troy'), findsOneWidget);
     });
 
+    test('hello carries the auth token, when the app has one', () {
+      final expected = frames(transcript('hello-authenticated'), 'in').first;
+      final s = GlintySession(
+          client: expected['client'] as String,
+          token: expected['token'] as String);
+      final hello = s.hello();
+      expect(hello.body['token'], expected['token']);
+      expect(GlintySession().hello().body.containsKey('token'), isFalse,
+          reason: 'no token, no field');
+    });
+
+    test('a ticket request matches the transcript, and the grant lands',
+        () {
+      final t = transcript('ticket-grant');
+      final expected = frames(t, 'in').first;
+      final grant = frames(t, 'out').first;
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.sent.clear();
+
+      s.requestTicket(expected['id'] as String,
+          expected['purpose'] as String);
+      expect(s.sent.single.body, expected);
+
+      s.receive(grant);
+      expect(s.tickets['upload:dataset'], grant);
+    });
+
     test('an event frame matches the transcript shape', () {
       final expected = frames(transcript('button-event'), 'in').first;
       final s = GlintySession();

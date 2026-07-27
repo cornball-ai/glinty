@@ -65,6 +65,7 @@ enum GlintyTreeSource {
 class GlintySession {
   GlintySession({
     this.client = 'glinty_flutter/0.0.1',
+    this.token,
     GlintyComponent? cachedUi,
     String? cachedRevision,
     void Function(GlintyOutgoing)? onSend,
@@ -73,6 +74,12 @@ class GlintySession {
         _onSend = onSend;
 
   final String client;
+
+  /// Opaque auth token for hello, or null. glinty never parses it:
+  /// the server's run_app(auth = ) verifier does, and a refused token
+  /// gets one error frame and a closed socket.
+  final String? token;
+
   final void Function(GlintyOutgoing)? _onSend;
 
   GlintyComponent? _ui;
@@ -96,6 +103,12 @@ class GlintySession {
   /// Latest value per output id, for the renderer to draw.
   final Map<String, dynamic> values = <String, dynamic>{};
 
+  /// Latest ticket grant per "purpose:id", from `ticket` frames. A
+  /// transport layer consumes these to build transfer URLs; the
+  /// session only holds them.
+  final Map<String, Map<String, dynamic>> tickets =
+      <String, Map<String, dynamic>>{};
+
   /// The tree to render, or null when there is nothing to draw yet.
   GlintyComponent? get ui => error == null ? _ui : null;
 
@@ -118,6 +131,7 @@ class GlintySession {
       // and a kind declared without a slot to put it in is a lie.
       'kinds': const ['text', 'table'],
       'features': const <String>[],
+      if (token != null) 'token': token,
       if (_cachedRevision != null) 'prerendered': _cachedRevision,
     });
     _emit(frame);
@@ -133,6 +147,12 @@ class GlintySession {
       case 'output':
         final id = msg['id'];
         if (id is String) values[id] = msg['value'];
+      case 'ticket':
+        final id = msg['id'];
+        final purpose = msg['purpose'];
+        if (id is String && purpose is String) {
+          tickets['$purpose:$id'] = msg;
+        }
       case 'error':
         final id = msg['id'];
         if (id is String) values[id] = null;
@@ -190,6 +210,13 @@ class GlintySession {
   /// Report a discrete event, such as a button press.
   void sendEvent(String id) {
     _emit(GlintyOutgoing('event', {'type': 'event', 'id': id}));
+  }
+
+  /// Ask for a transfer ticket. The grant arrives as a `ticket`
+  /// frame and lands in [tickets] under "purpose:id".
+  void requestTicket(String id, String purpose) {
+    _emit(GlintyOutgoing(
+        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
   }
 
   /// Report an output's box so the server can render at that size.

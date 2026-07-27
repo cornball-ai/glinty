@@ -1200,6 +1200,105 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
+    section("transfer tickets replace session ids in URLs");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const grantShape = frames(transcript("ticket-grant"), "out")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.sandbox.fetch = (url) => {
+            page.fetches = page.fetches || [];
+            page.fetches.push(String(url));
+            return Promise.resolve({ ok: true });
+        };
+        page.sandbox.FormData = class FormData { append() {} };
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        /* downloads: a press asks for a ticket, not an event */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "download_button", id: "report",
+                     label: "Save" }
+        });
+        const dl = page.document.getElementById("report");
+        check("download buttons carry their download id",
+              dl.getAttribute("data-g-download") === "report");
+        const eventsBefore = page.frames("event").length;
+        page.fire("click", dl);
+        const reqs = page.frames("ticket");
+        check("a press requests a download ticket, and only that",
+              reqs.length === 1 &&
+              reqs[0].purpose === "download" && reqs[0].id === "report" &&
+              page.frames("event").length === eventsBefore);
+        page.ws().deliver({ type: "ticket", id: "report",
+                            purpose: "download",
+                            token: grantShape.token, expires: 30 });
+        check("the grant becomes the navigation target",
+              String(page.sandbox.location.href)
+                  .includes("/download?ticket=" + grantShape.token));
+        check("and no session id appears in the URL",
+              !String(page.sandbox.location.href).includes("session"));
+
+        /* uploads: the POST goes to the ticket, nothing else */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "file_input", id: "dataset",
+                     label: "CSV:" }
+        });
+        const up = page.document.getElementById("dataset");
+        up.files = [{ name: "a.bin" }];
+        page.fire("change", up);
+        const upReq = page.frames("ticket").filter(
+            (m) => m.purpose === "upload");
+        check("a chosen file requests an upload ticket",
+              upReq.length === 1 && upReq[0].id === "dataset");
+        page.ws().deliver({ type: "ticket", id: "dataset",
+                            purpose: "upload", token: "tk_up1",
+                            expires: 30 });
+        check("the POST goes to the ticket URL",
+              (page.fetches || []).some((u) =>
+                  u.includes("/upload?ticket=tk_up1") &&
+                  !u.includes("session")));
+    }
+
+    /* ---------------------------------------------------------- */
+    section("authentication: token out, refusal visible");
+    {
+        const withToken = freshPage({ setup: prerenderDemo });
+        withToken.sandbox.GLINTY_AUTH = "eyJhb.example.token";
+        /* GLINTY_AUTH is read at connect; boot again via a manual
+           reconnect path: close before any session, then... simplest
+           honest check is a fresh page whose sandbox carries the
+           token before DOMContentLoaded -- but freshPage already
+           fired it. So fire open on the socket it made: hello was
+           built at open time, after the token existed. */
+        withToken.ws().open();
+        check("hello carries the app-provided token",
+              withToken.sent[0].token === "eyJhb.example.token");
+
+        const bare = freshPage({ setup: prerenderDemo });
+        bare.ws().open();
+        check("no token, no field", !("token" in bare.sent[0]));
+
+        /* a refused connection says so on screen and goes quiet */
+        bare.ws().deliver({ type: "error", id: null,
+                            message: "authentication failed" });
+        const box = bare.document.getElementById("g-protocol-error");
+        check("the refusal is visible",
+              box !== null &&
+              box.textContent.includes("Connection refused") &&
+              box.textContent.includes("authentication failed"));
+        bare.ws().deliver(frames(transcript("hello-welcome"), "out")[0]);
+        check("nothing after the refusal is processed",
+              bare.G.sessionId() === null);
+        bare.ws().close();
+        await sleep(650);
+        check("a refused connection does not reconnect",
+              bare.sockets.length === 1);
+    }
+
+    /* ---------------------------------------------------------- */
     section("public surface");
     {
         const page = freshPage({ setup: prerenderDemo });

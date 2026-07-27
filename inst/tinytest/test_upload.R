@@ -4,6 +4,7 @@ extract_boundary <- glinty:::extract_boundary
 parse_multipart <- glinty:::parse_multipart
 parse_query <- glinty:::parse_query
 handle_upload <- glinty:::handle_upload
+issue_ticket <- glinty:::issue_ticket
 
 # --- boundary extraction ---
 expect_equal(
@@ -69,7 +70,7 @@ observe_event(s$input$f, function(v) seen <<- v)
 
 req <- list(
     method = "POST", path = "/upload",
-    query = paste0("session=up1&id=f"),
+    query = paste0("ticket=", issue_ticket(s, "f", "upload")$token),
     headers = c("content-type" = paste0(
         "multipart/form-data; boundary=", b)),
     body = body
@@ -93,19 +94,28 @@ glinty:::session_end(s)
 expect_false(dir.exists(updir))
 
 # --- error paths ---
-expect_true(grepl("404", rawToChar(handle_upload(list(
-    method = "POST", path = "/upload", query = "session=ghost&id=f",
-    headers = c("content-type" = "multipart/form-data; boundary=x"),
-    body = raw(0L)
-)))))
-expect_true(grepl("400", rawToChar(handle_upload(list(
+# no ticket, bogus ticket: refused before anything is parsed
+expect_true(grepl("403", rawToChar(handle_upload(list(
     method = "POST", path = "/upload", query = "",
     headers = character(0L), body = raw(0L)
 )))))
+expect_true(grepl("403", rawToChar(handle_upload(list(
+    method = "POST", path = "/upload", query = "ticket=tk_bogus",
+    headers = c("content-type" = "multipart/form-data; boundary=x"),
+    body = raw(0L)
+)))))
+# a valid ticket with a non-multipart body still fails cleanly
 s2 <- glinty:::new_session("up2")
+tk2 <- issue_ticket(s2, "f", "upload")$token
 expect_true(grepl("400", rawToChar(handle_upload(list(
-    method = "POST", path = "/upload", query = "session=up2&id=f",
+    method = "POST", path = "/upload", query = paste0("ticket=", tk2),
     headers = c("content-type" = "application/json"),
     body = charToRaw("{}")
+)))))
+# and that consumed the ticket: replaying the same URL gets nothing
+expect_true(grepl("403", rawToChar(handle_upload(list(
+    method = "POST", path = "/upload", query = paste0("ticket=", tk2),
+    headers = c("content-type" = "multipart/form-data; boundary=x"),
+    body = raw(0L)
 )))))
 glinty:::session_end(s2)

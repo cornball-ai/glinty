@@ -161,14 +161,30 @@ observers and timers stay warm for `getOption("glinty.resume_grace",
 60)` seconds while the client retries with backoff, then resumes
 with state intact. Expired sessions get an honest reload.
 
+## Authentication and deployment
+
+`run_app(auth = )` takes a verifier for the opaque token a client
+sends when it connects: NULL refuses the connection, anything else
+becomes `session$principal`. `jwt_auth()` covers the JWT case in one
+line (HS256 built in; RS256 with the openssl package). Uploads and
+downloads ride short-lived single-use tickets minted over the
+WebSocket, so no session credential ever appears in a URL. `GET
+/healthz` reports sessions and uptime for supervisors, and
+`run_app()` reads `GLINTY_PORT`/`PORT` from the environment when no
+port is given.
+
 ## Limits (by design)
 
 - Single-threaded: one slow computation stalls all sessions (same
   process model as one Shiny worker, minus the async escape hatches).
 - No bookmarking, no modules yet.
-- `serverSocket()` binds all interfaces; treat the port as reachable
-  from your local network, and the session id as a weak resume
-  credential within the grace window.
+- `serverSocket()` binds all interfaces -- base R sockets cannot bind
+  selectively or terminate TLS. Gate sessions with `auth =`, and
+  scope the port with a firewall, container namespace, or reverse
+  proxy; startup says this out loud.
+- The session id remains a weak resume credential within the
+  reconnect grace window (auth is re-verified on resume when
+  configured).
 
 ## Provenance
 

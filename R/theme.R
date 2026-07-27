@@ -86,7 +86,7 @@ app_theme <- function(colors = list(), spacing = NULL, radius = NULL,
         # characters, and validating here keeps the first paint and
         # the hydrated state identical.
         if (!is.character(val) || length(val) != 1L || !nzchar(val) ||
-                !grepl("^[A-Za-z0-9][A-Za-z0-9 _-]*$", val)) {
+            !grepl("^[A-Za-z0-9][A-Za-z0-9 _-]*$", val)) {
             stop("app_theme() font$", nm,
                  " must be a single font family name ",
                  "(letters, digits, spaces, hyphens)", call. = FALSE)

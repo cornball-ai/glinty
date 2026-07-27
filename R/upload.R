@@ -1,10 +1,12 @@
 #' Handle a file upload POST
 #'
-#' POST /upload?session=<sid>&id=<input_id> with a multipart body.
-#' File parts are written under a per-session temp dir (removed when
-#' the session ends) and the input becomes a data.frame with one row
-#' per file: name, size, type, datapath. Dependent outputs update
-#' over the WebSocket on the next tick.
+#' POST /upload?ticket=<token> with a multipart body. The ticket was
+#' minted over the WebSocket and binds the session and the input id,
+#' so neither appears in the URL. File parts are written under a
+#' per-session temp dir (removed when the session ends) and the input
+#' becomes a data.frame with one row per file: name, size, type,
+#' datapath. Dependent outputs update over the WebSocket on the next
+#' tick.
 #'
 #' @param req parsed request with raw body
 #' @return raw HTTP response
@@ -15,15 +17,12 @@ handle_upload <- function(req) {
                           sprintf('{"ok":false,"error":"%s"}', msg))
     }
     q <- parse_query(req$query)
-    sid <- unname(q["session"])
-    input_id <- unname(q["id"])
-    if (is.na(sid) || is.na(input_id) || !nzchar(sid) || !nzchar(input_id)) {
-        return(bad(400L, "missing session or id"))
+    grant <- redeem_ticket(unname(q["ticket"]), "upload")
+    if (is.null(grant)) {
+        return(bad(403L, "invalid or expired ticket"))
     }
-    session <- .globals$sessions[[sid]]
-    if (is.null(session) || session$ended) {
-        return(bad(404L, "unknown session"))
-    }
+    session <- grant$session
+    input_id <- grant$id
     boundary <- extract_boundary(get_header(req, "content-type"))
     if (is.null(boundary)) {
         return(bad(400L, "expected multipart/form-data"))

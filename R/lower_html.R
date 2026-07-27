@@ -341,6 +341,11 @@ html_button <- function(x, extra_class = NULL) {
                list(type = "button",
                     class = paste(c("g-btn", paste0("g-btn-", x$variant),
                                     extra_class), collapse = " ")))
+    if (identical(x$component, "download_button")) {
+        # what the client's click delegation keys on: a press asks
+        # for a download ticket instead of emitting an event frame
+        attrs[["data-g-download"]] <- x$id
+    }
     html_el("button", attrs, inner)
 }
 

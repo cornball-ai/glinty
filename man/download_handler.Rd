@@ -29,9 +29,9 @@ filename and content are called at request time, so they see
 current reactive state. Read any inputs they need through
 isolate(), since there is no reactive context on an HTTP request.
 
-The session id in the URL is the credential, the same as for
-file_input() uploads and resume. Fine for the localhost and LAN
-tool scope glinty targets; treat it accordingly.
+The GET carries a short-lived single-use ticket the client minted
+over the WebSocket, so no session credential appears in the URL,
+browser history, or server logs.
 
 }
 \examples{
