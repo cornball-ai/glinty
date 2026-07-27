@@ -3,34 +3,28 @@
 \alias{password_input}
 \title{Create a password input}
 \usage{
-password_input(id, label = "", placeholder = "")
+password_input(id, label = "", placeholder = NULL, emit = "live")
 }
 \arguments{
 \item{id}{character input ID}
 
 \item{label}{character label text}
 
-\item{placeholder}{character placeholder text; a good place to say
-which environment variable is in play, without echoing it}
+\item{placeholder}{character placeholder text; a good place to name
+the environment variable in play, without echoing it}
+
+\item{emit}{character "live" or "settle"}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-Identical to text_input() except the browser masks the characters.
-Masking is display only: the value travels over the WebSocket like
-any other input, so serve the app over HTTPS if the connection
-leaves the machine.
-}
-\details{
-There is deliberately no value argument. A value= attribute is
-rendered into the page source in plain text, where the masking does
-nothing, so prefilling a password field from a secret publishes it
-to anyone who can fetch the page. Read the secret server-side
-instead and let an empty field mean "use the configured one".
-
+There is deliberately no value argument. A prefilled password is
+rendered into the page source in plain text, where masking does
+nothing, so a secret put here would be published. Read it
+server-side and let an empty field mean "use the configured one".
 }
 \examples{
 password_input("api_key", "API Key:",
-               placeholder = "using OPENAI_API_KEY (type to override)")
+               placeholder = "using OPENAI_API_KEY")
 }

@@ -1,66 +1,50 @@
+# Input builders. Each is one component() call; validation, defaults
+# and the wire format live in the schema.
+#
+# Every input takes `emit`, which says *when* it reports rather than
+# how: "live" while the value is changing, "settle" once it has. The
+# browser spends that on input/change events, Flutter on onChanged and
+# onEditingComplete. Naming a DOM event here would make the API
+# browser-shaped.
+
 #' Create a text input
 #'
 #' @param id character input ID
 #' @param label character label text
 #' @param value character initial value
 #' @param placeholder character placeholder text
-#' @return A UI element
+#' @param emit character "live" to report while typing, "settle" to
+#'   report when the field is committed
+#' @return A UI component
 #' @examples
 #' text_input("name", "Name:")
 #' @export
-text_input <- function(id, label = "", value = "", placeholder = "") {
-    attrs <- list(id = id, type = "text", class = "g-input", value = value)
-    if (nzchar(placeholder)) {
-        attrs$placeholder <- placeholder
-    }
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("input", attrs = attrs,
-                            bind = list(event = "input", target = id))
-        )
-    )
+text_input <- function(id, label = "", value = "", placeholder = NULL,
+                       emit = "live") {
+    component("text_input", id = id, label = label, value = value,
+              placeholder = placeholder, emit = emit)
 }
 
 #' Create a password input
 #'
-#' Identical to text_input() except the browser masks the characters.
-#' Masking is display only: the value travels over the WebSocket like
-#' any other input, so serve the app over HTTPS if the connection
-#' leaves the machine.
-#'
-#' There is deliberately no value argument. A value= attribute is
-#' rendered into the page source in plain text, where the masking does
-#' nothing, so prefilling a password field from a secret publishes it
-#' to anyone who can fetch the page. Read the secret server-side
-#' instead and let an empty field mean "use the configured one".
+#' There is deliberately no value argument. A prefilled password is
+#' rendered into the page source in plain text, where masking does
+#' nothing, so a secret put here would be published. Read it
+#' server-side and let an empty field mean "use the configured one".
 #'
 #' @param id character input ID
 #' @param label character label text
-#' @param placeholder character placeholder text; a good place to say
-#'   which environment variable is in play, without echoing it
-#' @return A UI element
+#' @param placeholder character placeholder text; a good place to name
+#'   the environment variable in play, without echoing it
+#' @param emit character "live" or "settle"
+#' @return A UI component
 #' @examples
 #' password_input("api_key", "API Key:",
-#'                placeholder = "using OPENAI_API_KEY (type to override)")
+#'                placeholder = "using OPENAI_API_KEY")
 #' @export
-password_input <- function(id, label = "", placeholder = "") {
-    value <- ""
-    attrs <- list(id = id, type = "password", class = "g-input", value = value)
-    if (nzchar(placeholder)) {
-        attrs$placeholder <- placeholder
-    }
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("input", attrs = attrs,
-                            bind = list(event = "input", target = id))
-        )
-    )
+password_input <- function(id, label = "", placeholder = NULL, emit = "live") {
+    component("password_input", id = id, label = label,
+              placeholder = placeholder, emit = emit)
 }
 
 #' Create a multi-line text input
@@ -68,118 +52,17 @@ password_input <- function(id, label = "", placeholder = "") {
 #' @param id character input ID
 #' @param label character label text
 #' @param value character initial value
-#' @param rows integer number of visible rows
+#' @param rows integer visible rows
 #' @param placeholder character placeholder text
-#' @return A UI element
+#' @param emit character "live" or "settle"
+#' @return A UI component
 #' @examples
 #' textarea_input("notes", "Notes:", rows = 6L)
 #' @export
 textarea_input <- function(id, label = "", value = "", rows = 4L,
-                           placeholder = "") {
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("textarea",
-                            text = value,
-                            attrs = list(id = id, class = "g-textarea",
-                    rows = as.character(rows),
-                    placeholder = placeholder),
-                            bind = list(event = "input", target = id))
-        )
-    )
-}
-
-#' Create a checkbox input
-#'
-#' @param id character input ID
-#' @param label character label text
-#' @param value logical initial checked state
-#' @return A UI element
-#' @examples
-#' checkbox_input("save", "Save results", value = TRUE)
-#' @export
-checkbox_input <- function(id, label = "", value = FALSE) {
-    attrs <- list(id = id, type = "checkbox", class = "g-checkbox")
-    if (isTRUE(value)) {
-        attrs$checked <- "checked"
-    }
-    tag(
-        "div",
-        attrs = list(class = "g-checkbox-group"),
-        children = list(
-                        tag("input", attrs = attrs,
-                            bind = list(event = "change", target = id)),
-                        tag("label", text = label, attrs = list("for" = id))
-        )
-    )
-}
-
-#' Create a select dropdown
-#'
-#' @param id character input ID
-#' @param label character label text
-#' @param choices character vector of choices; names are display labels
-#' @param selected character value to select initially
-#' @return A UI element
-#' @examples
-#' select_input("engine", "Engine:", c(Fast = "fast", Slow = "slow"))
-#' @export
-select_input <- function(id, label = "", choices = character(0),
-                         selected = NULL) {
-    if (is.null(names(choices))) {
-        names(choices) <- choices
-    }
-    if (is.null(selected) && length(choices) > 0L) {
-        selected <- choices[[1L]]
-    }
-    options <- lapply(seq_along(choices), function(i) {
-        attrs <- list(value = choices[[i]])
-        if (identical(choices[[i]], selected)) attrs$selected <- "selected"
-        tag("option", text = names(choices)[[i]], attrs = attrs)
-    })
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("select", attrs = list(id = id, class = "g-select"),
-                            children = options, bind = list(event = "change", target = id))
-        )
-    )
-}
-
-#' Create a range slider input
-#'
-#' @param id character input ID
-#' @param label character label text
-#' @param min numeric minimum value
-#' @param max numeric maximum value
-#' @param value numeric initial value
-#' @param step numeric step size
-#' @return A UI element
-#' @examples
-#' slider_input("n", "Points:", min = 10, max = 500, value = 100, step = 10)
-#' @export
-slider_input <- function(id, label = "", min = 0, max = 1, value = 0.5,
-                         step = 0.1) {
-    tag(
-        "div",
-        attrs = list(class = "g-slider-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("input",
-                            attrs = list(id = id, type = "range", class = "g-slider",
-                    min = as.character(min), max = as.character(max),
-                    value = as.character(value),
-                    step = as.character(step)),
-                            bind = list(event = "input", target = id)),
-                        tag("span",
-                            text = as.character(value),
-                            attrs = list(id = paste0(id, "_val"), class = "g-slider-val"))
-        )
-    )
+                           placeholder = NULL, emit = "live") {
+    component("textarea_input", id = id, label = label, value = value,
+              rows = rows, placeholder = placeholder, emit = emit)
 }
 
 #' Create a numeric input
@@ -187,172 +70,147 @@ slider_input <- function(id, label = "", min = 0, max = 1, value = 0.5,
 #' @param id character input ID
 #' @param label character label text
 #' @param value numeric initial value
-#' @param min numeric minimum (optional)
-#' @param max numeric maximum (optional)
-#' @param step numeric step size (optional)
-#' @return A UI element
+#' @param min,max numeric bounds
+#' @param step numeric step size
+#' @param emit character "live" or "settle"
+#' @return A UI component
 #' @examples
 #' number_input("k", "Clusters:", value = 3, min = 1, max = 10)
 #' @export
 number_input <- function(id, label = "", value = NULL, min = NULL,
-                         max = NULL, step = NULL) {
-    attrs <- list(id = id, type = "number", class = "g-number")
-    if (!is.null(value)) {
-        attrs$value <- as.character(value)
-    }
-    if (!is.null(min)) {
-        attrs$min <- as.character(min)
-    }
-    if (!is.null(max)) {
-        attrs$max <- as.character(max)
-    }
-    if (!is.null(step)) {
-        attrs$step <- as.character(step)
-    }
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("input", attrs = attrs,
-                            bind = list(event = "input", target = id))
-        )
-    )
+                         max = NULL, step = NULL, emit = "live") {
+    component("number_input", id = id, label = label, value = value,
+              min = min, max = max, step = step, emit = emit)
 }
 
-#' Create a button
-#'
-#' Clicks increment the input value (action-button semantics), so
-#' observe_event(input$id, ...) fires once per click.
-#'
-#' @param id character button ID
-#' @param label character button label
-#' @return A UI element
-#' @examples
-#' button("go", "Run")
-#' @export
-button <- function(id, label) {
-    tag("button", text = label, attrs = list(id = id, class = "g-btn"),
-        bind = list(event = "click", target = id))
-}
-
-#' Create a file input
-#'
-#' Files upload over a plain POST (not the WebSocket); when the
-#' upload completes, the input value becomes a data.frame with one
-#' row per file: name, size, type, datapath. The datapath points at
-#' a server-side copy in a per-session temp dir removed when the
-#' session ends. Size is capped by getOption("glinty.max_upload")
-#' (10 MB default).
+#' Create a select dropdown
 #'
 #' @param id character input ID
 #' @param label character label text
-#' @param accept character vector of accepted types/extensions,
-#'   e.g. c(".csv", "image/png") (optional)
-#' @param multiple logical allow selecting several files
-#' @return A UI element
+#' @param choices character vector of choices; names are display
+#'   labels. A list of value/label pairs also works.
+#' @param selected character value selected initially
+#' @param multiple logical allow several selections
+#' @param emit character "live" or "settle"
+#' @return A UI component
 #' @examples
-#' file_input("dataset", "CSV:", accept = ".csv")
+#' select_input("engine", "Engine:", c(Fast = "fast", Slow = "slow"))
 #' @export
-file_input <- function(id, label = "", accept = NULL, multiple = FALSE) {
-    attrs <- list(id = id, type = "file", class = "g-file")
-    attrs[["data-g-upload"]] <- id
-    if (!is.null(accept)) {
-        attrs$accept <- paste(accept, collapse = ",")
-    }
-    if (isTRUE(multiple)) {
-        attrs$multiple <- "multiple"
-    }
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(tag("label", text = label, attrs = list("for" = id)),
-                        tag("input", attrs = attrs))
-    )
+select_input <- function(id, label = "", choices = character(0),
+                         selected = NULL, multiple = FALSE, emit = "settle") {
+    component("select_input", id = id, label = label, choices = choices,
+              selected = selected, multiple = multiple, emit = emit)
+}
+
+#' Create a checkbox
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param value logical initial state
+#' @param emit character "live" or "settle"
+#' @return A UI component
+#' @examples
+#' checkbox_input("save", "Save results", value = TRUE)
+#' @export
+checkbox_input <- function(id, label = "", value = FALSE, emit = "settle") {
+    component("checkbox_input", id = id, label = label, value = value,
+              emit = emit)
 }
 
 #' Create a radio button group
 #'
-#' One input value shared by the group: the checked member's value.
+#' One input value shared by the group: the selected member's value.
 #'
-#' @param id character input ID (also the shared name of the group)
-#' @param label character group label text
+#' @param id character input ID
+#' @param label character group label
 #' @param choices character vector of choices; names are display labels
-#' @param selected character value checked initially (first choice by
-#'   default)
-#' @return A UI element
+#' @param selected character value selected initially
+#' @param emit character "live" or "settle"
+#' @return A UI component
 #' @examples
 #' radio_buttons("mode", "Mode:", c(Fast = "fast", Careful = "careful"))
 #' @export
 radio_buttons <- function(id, label = "", choices = character(0),
-                          selected = NULL) {
-    if (is.null(names(choices))) {
-        names(choices) <- choices
-    }
+                          selected = NULL, emit = "settle") {
     if (is.null(selected) && length(choices) > 0L) {
-        selected <- choices[[1L]]
+        selected <- unname(choices[[1L]])
     }
-    items <- lapply(seq_along(choices), function(i) {
-        item_id <- paste0(id, "_", i)
-        attrs <- list(id = item_id, type = "radio", name = id,
-                      value = choices[[i]], class = "g-radio")
-        if (identical(choices[[i]], selected)) {
-            attrs$checked <- "checked"
-        }
-        tag(
-            "div",
-            attrs = list(class = "g-radio-item"),
-            children = list(
-                            tag("input", attrs = attrs,
-                                bind = list(event = "change", target = id)),
-                            tag("label", text = names(choices)[[i]],
-                                attrs = list("for" = item_id))
-            )
-        )
-    })
-    tag(
-        "div",
-        attrs = list(id = id, class = "g-radio-group"),
-        children = c(
-                     list(tag("label", text = label,
-                              attrs = list(class = "g-radio-group-label"))),
-                     items
-        )
-    )
+    component("radio_buttons", id = id, label = label, choices = choices,
+              selected = selected, emit = emit)
+}
+
+#' Create a range slider
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param min,max numeric bounds
+#' @param value numeric initial value
+#' @param step numeric step size; a frontend may derive its own
+#'   division count from it, which is why it is a number
+#' @param emit character "live" or "settle"
+#' @return A UI component
+#' @examples
+#' slider_input("n", "Points:", min = 10, max = 500, value = 100, step = 10)
+#' @export
+slider_input <- function(id, label = "", min = 0, max = 1, value = NULL,
+                         step = NULL, emit = "live") {
+    component("slider_input", id = id, label = label, min = min, max = max,
+              value = value, step = step, emit = emit)
 }
 
 #' Create a date input
 #'
-#' The input value arrives server-side as a "YYYY-MM-DD" string;
-#' convert with as.Date() at the point of use. No hidden coercion.
+#' The value arrives server-side as a "YYYY-MM-DD" string; convert
+#' with as.Date() at the point of use. No hidden coercion.
 #'
 #' @param id character input ID
 #' @param label character label text
-#' @param value character initial date, "YYYY-MM-DD" (optional)
-#' @param min character earliest selectable date (optional)
-#' @param max character latest selectable date (optional)
-#' @return A UI element
+#' @param value character initial date, "YYYY-MM-DD"
+#' @param min,max character selectable range
+#' @param emit character "live" or "settle"
+#' @return A UI component
 #' @examples
-#' date_input("start", "Start:", value = "2026-07-07")
+#' date_input("start", "Start:", value = "2026-07-27")
 #' @export
-date_input <- function(id, label = "", value = NULL, min = NULL, max = NULL) {
-    attrs <- list(id = id, type = "date", class = "g-date")
-    if (!is.null(value)) {
-        attrs$value <- as.character(value)
-    }
-    if (!is.null(min)) {
-        attrs$min <- as.character(min)
-    }
-    if (!is.null(max)) {
-        attrs$max <- as.character(max)
-    }
-    tag(
-        "div",
-        attrs = list(class = "g-input-group"),
-        children = list(
-                        tag("label", text = label, attrs = list("for" = id)),
-                        tag("input", attrs = attrs,
-                            bind = list(event = "change", target = id))
-        )
-    )
+date_input <- function(id, label = "", value = NULL, min = NULL, max = NULL,
+                       emit = "settle") {
+    component("date_input", id = id, label = label, value = value,
+              min = min, max = max, emit = emit)
+}
+
+#' Create a file input
+#'
+#' Files upload over HTTP rather than the socket; when the upload
+#' completes the input value becomes a data.frame with one row per
+#' file: name, size, type, datapath.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param accept character vector of accepted types or extensions
+#' @param multiple logical allow several files
+#' @return A UI component
+#' @examples
+#' file_input("dataset", "CSV:", accept = ".csv")
+#' @export
+file_input <- function(id, label = "", accept = NULL, multiple = FALSE) {
+    component("file_input", id = id, label = label, accept = accept,
+              multiple = multiple)
+}
+
+#' Create a button
+#'
+#' A button emits an event rather than an input: there is no value the
+#' server keeps. observe_event(input$id, ...) fires once per press.
+#'
+#' @param id character button ID
+#' @param label character button label
+#' @param variant character "default", "primary", "secondary",
+#'   "danger" or "ghost"
+#' @param icon character icon name shown before the label
+#' @return A UI component
+#' @examples
+#' button("go", "Run", variant = "primary")
+#' @export
+button <- function(id, label, variant = "default", icon = NULL) {
+    component("button", id = id, label = label, variant = variant, icon = icon)
 }

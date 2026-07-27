@@ -3,7 +3,7 @@
 \alias{text_input}
 \title{Create a text input}
 \usage{
-text_input(id, label = "", value = "", placeholder = "")
+text_input(id, label = "", value = "", placeholder = NULL, emit = "live")
 }
 \arguments{
 \item{id}{character input ID}
@@ -13,9 +13,12 @@ text_input(id, label = "", value = "", placeholder = "")
 \item{value}{character initial value}
 
 \item{placeholder}{character placeholder text}
+
+\item{emit}{character "live" to report while typing, "settle" to
+report when the field is committed}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
 Create a text input

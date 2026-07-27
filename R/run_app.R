@@ -81,9 +81,9 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     .globals$progress <- list()
 
     page_html <- full_page_html(
-                                tag_to_html(app_obj$ui),
+                                component_to_html(app_obj$ui),
         if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app",
-                                app_obj$ui$head
+                                attr(app_obj$ui, "assets")
     )
     # Before a single byte is served, not after.
     if (isTRUE(check_secrets)) {

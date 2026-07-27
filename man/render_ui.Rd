@@ -6,13 +6,13 @@
 render_ui(fn)
 }
 \arguments{
-\item{fn}{zero-arg function returning a glinty_tag or NULL}
+\item{fn}{zero-arg function returning a component or NULL}
 }
 \value{
 a glinty_renderer for assignment to output$id
 }
 \description{
-The portable path for dynamic content: fn returns a glinty_tag
+The portable path for dynamic content: fn returns a component
 (wrap several in div()/column()) or NULL to render nothing. The
 tag tree travels structured on the wire; the browser builds real
 DOM from it (event bindings included, via delegation) and the

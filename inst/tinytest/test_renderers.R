@@ -32,12 +32,12 @@ expect_equal(m$value, "42")
 
 # --- render_html: innerHTML, serializes tags ---
 with_session(s, {
-    s$output$frag <- render_html(function() div(h3("Hi")))
+    s$output$frag <- render_html(function() "<h3>Hi</h3>")
 })
 flush_reactions()
 m <- last_msg(s)
 expect_equal(m$property, "innerHTML")
-expect_equal(m$value, "<div><h3>Hi</h3></div>")
+expect_equal(m$value, "<h3>Hi</h3>")
 
 # --- render_table: structured header/rows on the wire ---
 with_session(s, {

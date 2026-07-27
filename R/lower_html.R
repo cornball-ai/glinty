@@ -1,10 +1,10 @@
 # Component -> DOM lowering for the browser frontend.
 #
-# One of two lowerings that must agree; the other is component -> flitR
-# ops in native_scene.R. Neither is the canonical form: the component
-# tree is. If something here needs a field that only makes sense as
-# HTML, that is a signal the component is DOM-shaped and the schema is
-# wrong -- not a reason to add the field.
+# One of two lowerings that must agree; the other is the Flutter
+# renderer in dart/glinty_flutter. Neither is the canonical form: the
+# component tree is. If something here needs a field that only makes
+# sense as HTML, that is a signal the component is DOM-shaped and the
+# schema is wrong -- not a reason to add the field.
 
 #' Lower a component tree to HTML
 #'
@@ -57,6 +57,8 @@ component_to_html <- function(x) {
            image_output = html_el("img", c(html_slot(x),
                 list(class = "g-image-output", alt = x$alt)), void = TRUE),
            audio_output = html_audio_output(x),
+           html_output = html_el("div", c(html_slot(x),
+                list(class = "g-html-output"))),
            ui_output = html_el("div", c(html_slot(x),
                                         list(class = "g-ui-output"))),
            tabset = html_tabset(x),

@@ -10,7 +10,6 @@ with_session <- glinty:::with_session
 dispatch <- glinty:::dispatch_client_message
 custom_msg <- glinty:::custom_msg
 normalize_value <- glinty:::normalize_value
-tag_to_html <- glinty:::tag_to_html
 
 # --- custom_msg produces exact JSON, scalars unboxed ---
 expect_equal(
@@ -88,30 +87,10 @@ flush_reactions()
 expect_equal(fires, 3L)
 session_end(s)
 
-# --- value-carrying click binds ---
-row <- tag("div", text = "Entry 3",
-           bind = list(event = "click", target = "row_click", value = "id-3"))
-html <- tag_to_html(row)
-expect_true(grepl('data-g-event="click"', html, fixed = TRUE))
-expect_true(grepl('data-g-target="row_click"', html, fixed = TRUE))
-expect_true(grepl('data-g-value="id-3"', html, fixed = TRUE))
-
-# a bind without a value emits no data-g-value at all
-plain <- tag_to_html(button("go", "Run"))
-expect_false(grepl("data-g-value", plain, fixed = TRUE))
-
-# bind attributes are escaped, like every other attribute
-nasty <- tag("div", bind = list(event = "click", target = "pick",
-                                value = 'x" onclick="evil()'))
-nasty_html <- tag_to_html(nasty)
-expect_false(grepl('onclick="evil()"', nasty_html, fixed = TRUE))
-expect_true(grepl("&quot;", nasty_html, fixed = TRUE))
-
-# non-character values are coerced, so ids can be numeric
-numeric_bind <- tag_to_html(tag("div", bind = list(event = "click",
-                                                   target = "pick",
-                                                   value = 7L)))
-expect_true(grepl('data-g-value="7"', numeric_bind, fixed = TRUE))
+# The value-carrying click bind tests lived here. Under v3 a click
+# that carries a value is a component concern rather than a tag
+# attribute, and tag() is now the raw_html escape hatch, so there is
+# no tag-level binding left to assert.
 
 # --- the client script exposes the documented surface ---
 js <- readLines(system.file("www", "glinty.js", package = "glinty"),

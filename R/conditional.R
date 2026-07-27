@@ -36,13 +36,11 @@
 #' )
 #' @export
 conditional_panel <- function(..., condition) {
-    if (missing(condition) || !inherits(condition, "glinty_condition")) {
+    if (missing(condition)) {
         stop("conditional_panel() needs a condition from input_is(), ",
              "cond_and(), cond_or() or cond_not()", call. = FALSE)
     }
-    attrs <- list(class = "g-conditional")
-    attrs[["data-g-cond"]] <- condition_json(condition)
-    tag("div", children = list(...), attrs = attrs)
+    component("conditional_panel", condition = condition, children = list(...))
 }
 
 #' Test an input's value

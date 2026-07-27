@@ -214,6 +214,8 @@ COMPONENT_SCHEMA <- list(
         controls = field("bool", default = TRUE),
         autoplay = field("bool", default = FALSE)
     ),
+                         # Browser-only, like tag(): raw markup has no widget equivalent.
+                         html_output = list(id = field("string", required = TRUE)),
                          ui_output = list(id = field("string", required = TRUE)),
 
                          # composite layout

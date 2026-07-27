@@ -37,7 +37,7 @@ full_page_html <- function(body_html, title = "glinty app", head = NULL) {
 #' @param css character vector of stylesheet URLs
 #' @param js character vector of script URLs
 #' @param favicon character icon URL
-#' @param extra a glinty_tag or raw character HTML appended to head
+#' @param extra raw character HTML appended to head
 #' @return a list, or NULL when nothing was supplied
 #' @keywords internal
 page_head <- function(css = NULL, js = NULL, favicon = NULL, extra = NULL) {
@@ -84,22 +84,19 @@ body_scripts_html <- function(head) {
 
 #' Serialize the escape-hatch head content
 #'
-#' A glinty_tag is serialized; character is trusted as-is, since the
+#' Trusted as-is, since the
 #' whole point of the escape hatch is emitting markup glinty has no
 #' constructor for.
 #'
-#' @param extra a glinty_tag, character, or NULL
+#' @param extra character, or NULL
 #' @return character HTML
 #' @keywords internal
 raw_head_html <- function(extra) {
     if (is.null(extra)) {
         return(character(0L))
     }
-    if (inherits(extra, "glinty_tag")) {
-        return(paste0(tag_to_html(extra), "\n"))
-    }
     if (is.character(extra)) {
         return(paste0(paste(extra, collapse = "\n"), "\n"))
     }
-    stop("page(head=) expects a glinty_tag, character, or NULL", call. = FALSE)
+    stop("page(head=) expects character or NULL", call. = FALSE)
 }

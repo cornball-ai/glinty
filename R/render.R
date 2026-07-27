@@ -27,11 +27,11 @@ render_text <- function(fn) {
 
 #' Render HTML markup
 #'
-#' The value is set as innerHTML. glinty_tag trees are serialized;
+#' The value is set as innerHTML. component trees are serialized;
 #' character values are trusted as-is, so escape untrusted text with
 #' html_escape().
 #'
-#' @param fn zero-arg function returning a glinty_tag or character
+#' @param fn zero-arg function returning a component or character
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
@@ -42,8 +42,8 @@ render_html <- function(fn) {
     new_renderer(
                  function() {
         val <- fn()
-        if (inherits(val, "glinty_tag")) {
-            tag_to_html(val)
+        if (is_component(val)) {
+            component_to_html(val)
         } else {
             paste(as.character(val), collapse = "")
         }
@@ -187,7 +187,7 @@ render_audio <- function(fn) {
 
 #' Render a dynamic UI subtree
 #'
-#' The portable path for dynamic content: fn returns a glinty_tag
+#' The portable path for dynamic content: fn returns a component
 #' (wrap several in div()/column()) or NULL to render nothing. The
 #' tag tree travels structured on the wire; the browser builds real
 #' DOM from it (event bindings included, via delegation) and the
@@ -196,7 +196,7 @@ render_audio <- function(fn) {
 #' touches them, on both frontends. For raw markup strings use
 #' render_html() (browser-only escape hatch).
 #'
-#' @param fn zero-arg function returning a glinty_tag or NULL
+#' @param fn zero-arg function returning a component or NULL
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
@@ -212,9 +212,9 @@ render_ui <- function(fn) {
         if (is.null(val)) {
             return(NULL)
         }
-        if (!inherits(val, "glinty_tag")) {
-            stop("render_ui() expects a glinty_tag or NULL; wrap ",
-                 "multiple elements in div() or column()", call. = FALSE)
+        if (!is_component(val)) {
+            stop("render_ui() expects a component or NULL; wrap ",
+                 "several in column()", call. = FALSE)
         }
         unclass_recursive(val)
     },

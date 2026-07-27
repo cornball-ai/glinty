@@ -6,13 +6,13 @@
 render_html(fn)
 }
 \arguments{
-\item{fn}{zero-arg function returning a glinty_tag or character}
+\item{fn}{zero-arg function returning a component or character}
 }
 \value{
 a glinty_renderer for assignment to output$id
 }
 \description{
-The value is set as innerHTML. glinty_tag trees are serialized;
+The value is set as innerHTML. component trees are serialized;
 character values are trusted as-is, so escape untrusted text with
 html_escape().
 }

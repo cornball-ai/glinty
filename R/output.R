@@ -146,11 +146,18 @@ collect_tree_ids <- function(x) {
         return(character(0L))
     }
     ids <- character(0L)
-    if (!is.null(x$attrs$id)) {
-        ids <- as.character(x$attrs$id)
+    if (!is.null(x$id)) {
+        ids <- as.character(x$id)
     }
     for (child in if (is.null(x$children)) list() else x$children) {
         ids <- c(ids, collect_tree_ids(child))
+    }
+    # A tabset's children hang off its panels, so a replay would miss
+    # every output inside a tab without this.
+    for (panel in if (is.null(x$panels)) list() else x$panels) {
+        for (child in if (is.null(panel$children)) list() else panel$children) {
+            ids <- c(ids, collect_tree_ids(child))
+        }
     }
     ids
 }

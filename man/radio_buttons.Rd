@@ -3,23 +3,25 @@
 \alias{radio_buttons}
 \title{Create a radio button group}
 \usage{
-radio_buttons(id, label = "", choices = character(0), selected = NULL)
+radio_buttons(id, label = "", choices = character(0), selected = NULL,
+              emit = "settle")
 }
 \arguments{
-\item{id}{character input ID (also the shared name of the group)}
+\item{id}{character input ID}
 
-\item{label}{character group label text}
+\item{label}{character group label}
 
 \item{choices}{character vector of choices; names are display labels}
 
-\item{selected}{character value checked initially (first choice by
-default)}
+\item{selected}{character value selected initially}
+
+\item{emit}{character "live" or "settle"}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-One input value shared by the group: the checked member's value.
+One input value shared by the group: the selected member's value.
 }
 \examples{
 radio_buttons("mode", "Mode:", c(Fast = "fast", Careful = "careful"))

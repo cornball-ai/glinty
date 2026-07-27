@@ -1,37 +1,32 @@
-#' Generic tag constructor
+# The escape hatch.
+#
+# Under protocol v2 tag() was how every widget was built. Under v3 the
+# component set is, and tag() is what remains for markup glinty has no
+# component for. It produces raw_html, which the browser renders and
+# every other frontend refuses by name -- arbitrary HTML has no
+# meaning to a Flutter widget tree.
+#
+# So anything that must render on more than one frontend comes from
+# the component set, and this is for the browser-only remainder.
+
+#' Emit raw HTML
 #'
-#' The extensibility contract: any element with an id, a
-#' data-g-event, and a data-g-target (via bind) is a glinty input;
-#' any element with an id can be an output target. Custom widgets are
-#' plain R functions returning tag() trees.
+#' The browser-only escape hatch, for markup with no component
+#' equivalent. The string is trusted as-is and inserted unescaped, so
+#' never pass untrusted text through it.
 #'
-#' @param name character tag name (e.g. "div", "button")
-#' @param children list of child tags
-#' @param text character text content (takes precedence over children)
-#' @param attrs named list of HTML attributes
-#' @param bind list with event and target fields for JS event
-#'   binding, plus an optional value field. A click bind with a value
-#'   sets the input to that value instead of bumping an
-#'   action-button counter, which is how one delegated handler
-#'   serves a list of rows: every row targets the same input and
-#'   reports which one was clicked.
-#' @return A tag list with class "glinty_tag"
+#' Any frontend other than the browser refuses it by name and draws a
+#' visible placeholder, since arbitrary markup cannot be translated
+#' into a widget tree. Content that has to appear everywhere belongs
+#' in the component set instead.
+#'
+#' @param html character raw HTML
+#' @return A UI component
 #' @examples
-#' tag("input",
-#'     attrs = list(id = "col", type = "color"),
-#'     bind = list(event = "input", target = "col"))
-#'
-#' # a clickable row reporting its own id
-#' tag("div", text = "Entry 3",
-#'     bind = list(event = "click", target = "row_click", value = "id-3"))
+#' tag("<details><summary>More</summary>body</details>")
 #' @export
-tag <- function(name, children = list(), text = NULL, attrs = list(),
-                bind = NULL) {
-    structure(
-              list(tag = name, attrs = attrs, text = text, children = children,
-                   bind = bind),
-              class = "glinty_tag"
-    )
+tag <- function(html) {
+    component("raw_html", html = html)
 }
 
 #' Escape text for safe HTML output
@@ -47,82 +42,4 @@ html_escape <- function(x) {
     x <- gsub(">", "&gt;", x, fixed = TRUE)
     x <- gsub('"', "&quot;", x, fixed = TRUE)
     x
-}
-
-#' Convert a tag tree to an HTML string
-#'
-#' @param x a glinty_tag object or character
-#' @return character HTML string
-#' @keywords internal
-tag_to_html <- function(x) {
-    if (is.null(x)) {
-        return("")
-    }
-    if (is.character(x)) {
-        return(html_escape(x))
-    }
-
-    void <- c("input", "br", "hr", "img", "meta", "link")
-    name <- x$tag
-
-    # Build attribute string
-    attr_parts <- character(0)
-    if (length(x$attrs) > 0) {
-        for (nm in names(x$attrs)) {
-            attr_parts <- c(
-                            attr_parts,
-                            paste0(nm, '="', html_escape(as.character(x$attrs[[nm]])), '"')
-            )
-        }
-    }
-
-    # Add data attributes for event binding
-    if (!is.null(x$bind)) {
-        attr_parts <- c(
-                        attr_parts,
-                        paste0('data-g-event="', html_escape(x$bind$event), '"'),
-                        paste0('data-g-target="', html_escape(x$bind$target), '"')
-        )
-        if (!is.null(x$bind$value)) {
-            attr_parts <- c(attr_parts,
-                            paste0('data-g-value="',
-                                   html_escape(as.character(x$bind$value)), '"'))
-        }
-    }
-
-    attr_str <- if (length(attr_parts) > 0) {
-        paste0(" ", paste(attr_parts, collapse = " "))
-    } else {
-        ""
-    }
-
-    if (name %in% void) {
-        return(paste0("<", name, attr_str, ">"))
-    }
-
-    # Text takes precedence over children
-    inner <- ""
-    if (!is.null(x$text)) {
-        inner <- html_escape(x$text)
-    } else if (length(x$children) > 0) {
-        inner <- paste(
-                       vapply(x$children, tag_to_html, character(1)),
-                       collapse = ""
-        )
-    }
-
-    paste0("<", name, attr_str, ">", inner, "</", name, ">")
-}
-
-#' Print a tag as HTML
-#'
-#' @param x a glinty_tag
-#' @param ... ignored
-#' @return x, invisibly
-#' @examples
-#' print(h1("Hello"))
-#' @export
-print.glinty_tag <- function(x, ...) {
-    cat(tag_to_html(x), "\n")
-    invisible(x)
 }

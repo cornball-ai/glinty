@@ -10,13 +10,13 @@ tab_panel(title, ...)
 server when the tab is selected. Titles must be unique within a
 tabset.}
 
-\item{...}{child elements}
+\item{...}{child components}
 }
 \value{
-A glinty_tab_panel
+A tab panel spec
 }
 \description{
-One labelled page of a tabset(). Not a UI element on its own; it
+One labelled page of a tabset(). Not a component on its own; it
 only means anything inside tabset().
 }
 \examples{

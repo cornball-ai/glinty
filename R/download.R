@@ -55,16 +55,17 @@ download_handler <- function(session, id, filename, content) {
 #'
 #' @param id character download ID
 #' @param label character button label
-#' @param class character extra CSS class(es)
-#' @return A UI element
+#' @param variant character "default", "primary", "secondary",
+#'   "danger" or "ghost"
+#' @param icon character icon name shown before the label
+#' @return A UI component
 #' @examples
 #' download_button("download_audio", "Download")
 #' @export
-download_button <- function(id, label = "Download", class = NULL) {
-    cls <- paste(c("g-btn", "g-download", class), collapse = " ")
-    attrs <- list(id = id, class = cls)
-    attrs[["data-g-download"]] <- id
-    tag("a", text = label, attrs = attrs)
+download_button <- function(id, label = "Download", variant = "default",
+                            icon = NULL) {
+    component("download_button", id = id, label = label, variant = variant,
+              icon = icon)
 }
 
 #' Serve a registered download

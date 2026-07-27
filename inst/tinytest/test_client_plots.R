@@ -1,18 +1,18 @@
 # Client-sized plots: responsive plot_output + clientdata-driven
 # render_plot sizing.
 
-tag_to_html <- getFromNamespace("tag_to_html", "glinty")
+component_to_html <- getFromNamespace("component_to_html", "glinty")
 
 # --- plot_output shapes ---
 po <- plot_output("p1")
-html <- tag_to_html(po)
+html <- component_to_html(po)
 expect_true(grepl("width:100%", html, fixed = TRUE))
 expect_true(grepl("aspect-ratio", html))
 expect_false(grepl(' width="', html))
 expect_false(grepl(' height="', html))
 
 po2 <- plot_output("p2", width = 300L, height = 200L)
-html2 <- tag_to_html(po2)
+html2 <- component_to_html(po2)
 expect_true(grepl('width="300"', html2))
 expect_true(grepl('height="200"', html2))
 expect_false(grepl("style=", html2))

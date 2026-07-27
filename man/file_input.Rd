@@ -10,21 +10,17 @@ file_input(id, label = "", accept = NULL, multiple = FALSE)
 
 \item{label}{character label text}
 
-\item{accept}{character vector of accepted types/extensions,
-e.g. c(".csv", "image/png") (optional)}
+\item{accept}{character vector of accepted types or extensions}
 
-\item{multiple}{logical allow selecting several files}
+\item{multiple}{logical allow several files}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-Files upload over a plain POST (not the WebSocket); when the
-upload completes, the input value becomes a data.frame with one
-row per file: name, size, type, datapath. The datapath points at
-a server-side copy in a per-session temp dir removed when the
-session ends. Size is capped by getOption("glinty.max_upload")
-(10 MB default).
+Files upload over HTTP rather than the socket; when the upload
+completes the input value becomes a data.frame with one row per
+file: name, size, type, datapath.
 }
 \examples{
 file_input("dataset", "CSV:", accept = ".csv")

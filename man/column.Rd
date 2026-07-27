@@ -3,21 +3,21 @@
 \alias{column}
 \title{Arrange children in a vertical column}
 \usage{
-column(..., gap = NULL)
+column(..., gap = NULL, id = NULL)
 }
 \arguments{
-\item{...}{child elements}
+\item{...}{child components}
 
-\item{gap}{numeric gap between children in pixels (frontend
-default when NULL)}
+\item{gap}{integer space between children, in pixels}
+
+\item{id}{character element ID}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-The explicit counterpart of row(); maps to a flexbox column in the
-browser and flitR's column layout natively.
+Arrange children in a vertical column
 }
 \examples{
-column(h3("Stack"), text_output("a"), text_output("b"))
+column(heading("Stack"), text_output("a"), text_output("b"))
 }

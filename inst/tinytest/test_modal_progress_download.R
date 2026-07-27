@@ -25,7 +25,7 @@ expect_equal(mime_type(""), "application/octet-stream")
 
 # --- modals ---
 s <- new_session("m1")
-show_modal(s, p("Really?"), title = "Confirm",
+show_modal(s, txt("Really?"), title = "Confirm",
            footer = row(modal_button("Cancel"), button("ok", "OK")))
 expect_equal(length(s$outgoing), 1L)
 m <- json(s$outgoing[[1]])
@@ -33,18 +33,18 @@ expect_equal(m$type, "modal")
 expect_equal(m$action, "show")
 expect_equal(m$title, "Confirm")
 expect_true(m$easy_close)
-# the body is a list of tag trees, stripped of their R classes
+# the body is a list of components, stripped of their R classes
 expect_equal(length(m$body), 1L)
-expect_equal(m$body[[1]]$tag, "p")
-expect_equal(m$body[[1]]$text, "Really?")
-# footer binds survive, so a button in a dialog is a normal input
-expect_equal(m$footer$tag, "div")
+expect_equal(m$body[[1]]$component, "text")
+expect_equal(m$body[[1]]$value, "Really?")
+# footer components survive, so a button in a dialog is a real one
+expect_equal(m$footer$component, "row")
 ok_btn <- m$footer$children[[2]]
-expect_equal(ok_btn$bind$target, "ok")
-expect_equal(ok_btn$bind$event, "click")
+expect_equal(ok_btn$id, "ok")
+expect_equal(ok_btn$component, "button")
 
 s$outgoing <- list()
-show_modal(s, p("x"), easy_close = FALSE)
+show_modal(s, txt("x"), easy_close = FALSE)
 expect_false(json(s$outgoing[[1]])$easy_close)
 expect_null(json(s$outgoing[[1]])$title)
 
@@ -56,10 +56,10 @@ expect_equal(json(s$outgoing[[1]])$action, "hide")
 expect_error(show_modal(list()), "glinty_session")
 expect_error(remove_modal(list()), "glinty_session")
 
-# modal_button closes client-side, so it carries no bind
+# modal_button closes client-side, marked by its reserved id
 mb <- modal_button("Cancel")
-expect_null(mb$bind)
-expect_equal(mb$attrs[["data-g-modal-close"]], "1")
+expect_equal(mb$component, "button")
+expect_equal(mb$id, "..modal_close")
 session_end(s)
 
 # --- progress ---
@@ -127,9 +127,9 @@ session_end(s)
 
 # --- downloads ---
 db <- download_button("dl", "Get it")
-expect_equal(db$tag, "a")
-expect_equal(db$attrs[["data-g-download"]], "dl")
-expect_true(grepl("g-download", db$attrs$class, fixed = TRUE))
+expect_equal(db$component, "download_button")
+expect_equal(db$id, "dl")
+expect_equal(db$label, "Get it")
 
 s <- new_session("d1")
 download_handler(s, "dl",

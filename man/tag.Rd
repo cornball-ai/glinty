@@ -1,41 +1,28 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{tag}
 \alias{tag}
-\title{Generic tag constructor}
+\title{Emit raw HTML}
 \usage{
-tag(name, children = list(), text = NULL, attrs = list(), bind = NULL)
+tag(html)
 }
 \arguments{
-\item{name}{character tag name (e.g. "div", "button")}
-
-\item{children}{list of child tags}
-
-\item{text}{character text content (takes precedence over children)}
-
-\item{attrs}{named list of HTML attributes}
-
-\item{bind}{list with event and target fields for JS event
-binding, plus an optional value field. A click bind with a value
-sets the input to that value instead of bumping an
-action-button counter, which is how one delegated handler
-serves a list of rows: every row targets the same input and
-reports which one was clicked.}
+\item{html}{character raw HTML}
 }
 \value{
-A tag list with class "glinty_tag"
+A UI component
 }
 \description{
-The extensibility contract: any element with an id, a
-data-g-event, and a data-g-target (via bind) is a glinty input;
-any element with an id can be an output target. Custom widgets are
-plain R functions returning tag() trees.
+The browser-only escape hatch, for markup with no component
+equivalent. The string is trusted as-is and inserted unescaped, so
+never pass untrusted text through it.
+}
+\details{
+Any frontend other than the browser refuses it by name and draws a
+visible placeholder, since arbitrary markup cannot be translated
+into a widget tree. Content that has to appear everywhere belongs
+in the component set instead.
+
 }
 \examples{
-tag("input",
-    attrs = list(id = "col", type = "color"),
-    bind = list(event = "input", target = "col"))
-
-# a clickable row reporting its own id
-tag("div", text = "Entry 3",
-    bind = list(event = "click", target = "row_click", value = "id-3"))
+tag("<details><summary>More</summary>body</details>")
 }

@@ -12,7 +12,7 @@ page_head(css = NULL, js = NULL, favicon = NULL, extra = NULL)
 
 \item{favicon}{character icon URL}
 
-\item{extra}{a glinty_tag or raw character HTML appended to head}
+\item{extra}{raw character HTML appended to head}
 }
 \value{
 a list, or NULL when nothing was supplied

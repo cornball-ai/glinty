@@ -3,7 +3,8 @@
 \alias{textarea_input}
 \title{Create a multi-line text input}
 \usage{
-textarea_input(id, label = "", value = "", rows = 4L, placeholder = "")
+textarea_input(id, label = "", value = "", rows = 4L, placeholder = NULL,
+               emit = "live")
 }
 \arguments{
 \item{id}{character input ID}
@@ -12,12 +13,14 @@ textarea_input(id, label = "", value = "", rows = 4L, placeholder = "")
 
 \item{value}{character initial value}
 
-\item{rows}{integer number of visible rows}
+\item{rows}{integer visible rows}
 
 \item{placeholder}{character placeholder text}
+
+\item{emit}{character "live" or "settle"}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
 Create a multi-line text input

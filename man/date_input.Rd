@@ -3,26 +3,26 @@
 \alias{date_input}
 \title{Create a date input}
 \usage{
-date_input(id, label = "", value = NULL, min = NULL, max = NULL)
+date_input(id, label = "", value = NULL, min = NULL, max = NULL, emit = "settle")
 }
 \arguments{
 \item{id}{character input ID}
 
 \item{label}{character label text}
 
-\item{value}{character initial date, "YYYY-MM-DD" (optional)}
+\item{value}{character initial date, "YYYY-MM-DD"}
 
-\item{min}{character earliest selectable date (optional)}
+\item{emit}{character "live" or "settle"}
 
-\item{max}{character latest selectable date (optional)}
+\item{min,max}{character selectable range}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-The input value arrives server-side as a "YYYY-MM-DD" string;
-convert with as.Date() at the point of use. No hidden coercion.
+The value arrives server-side as a "YYYY-MM-DD" string; convert
+with as.Date() at the point of use. No hidden coercion.
 }
 \examples{
-date_input("start", "Start:", value = "2026-07-07")
+date_input("start", "Start:", value = "2026-07-27")
 }
