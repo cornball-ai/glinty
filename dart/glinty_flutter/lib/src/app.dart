@@ -31,7 +31,7 @@ class GlintyView extends StatelessWidget {
           onEvent: session.sendEvent,
           values: session.values,
           spacing: glintySpacing(session.theme),
-          monoFamily: glintyMonoFamily(session.theme),
+          monoStack: glintyMonoStack(session.theme),
         );
     final built = Builder(builder: (context) => r.build(context, ui));
     final tokens = session.theme;

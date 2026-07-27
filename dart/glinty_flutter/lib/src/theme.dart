@@ -33,28 +33,46 @@ double glintySpacing(Map<String, dynamic>? theme) {
   return v is num && v >= 0 ? v.toDouble() : 4;
 }
 
-/// Font tokens that name a platform role rather than a family. CSS
-/// resolves these itself; Flutter has no registry for them, so they
-/// mean "use the platform's own" here -- passing one through as a
-/// fontFamily would silently miss and land on the default *sans*
-/// face, which for the mono token is exactly wrong.
-const _genericFonts = <String>{
-  'system-ui', 'sans-serif', 'serif', 'monospace',
-  'ui-monospace', 'ui-sans-serif', 'ui-serif',
+/// What each CSS generic resolves to here, preserving its role. CSS
+/// resolves generics itself; Flutter resolves whatever the platform
+/// font collection knows -- Android registers 'sans-serif', 'serif'
+/// and 'monospace' as real family names (the framework's own error
+/// style says fontFamily: 'monospace'), Apple platforms only know
+/// concrete faces. So each role leads with the generic name and
+/// falls back to faces every desktop and Apple platform ships,
+/// which is what keeps body: "monospace" mono and mono: "serif"
+/// serif instead of collapsing every generic to the default sans.
+const _roleStacks = <String, List<String>>{
+  'system-ui': ['sans-serif'],
+  'ui-sans-serif': ['sans-serif'],
+  'sans-serif': ['sans-serif'],
+  'serif': ['serif', 'Georgia', 'Times New Roman'],
+  'ui-serif': ['serif', 'Georgia', 'Times New Roman'],
+  'monospace': ['monospace', 'Menlo', 'Courier New'],
+  'ui-monospace': ['monospace', 'Menlo', 'Courier New'],
 };
 
-String? _familyOrNull(dynamic v) {
-  if (v is! String || v.isEmpty || _genericFonts.contains(v)) return null;
-  return v;
+/// The mono role's own stack, the fallback for everything monospaced.
+const glintyMonoRole = ['monospace', 'Menlo', 'Courier New'];
+
+/// Resolve one font token to a family stack.
+///
+/// Absent tokens take [fallback]; a generic takes its role's stack;
+/// a custom family leads and degrades through [fallback], so a
+/// missing bundled font lands within its role rather than on sans.
+List<String> glintyFontStack(dynamic v,
+    {List<String> fallback = const []}) {
+  if (v is! String || v.isEmpty) return fallback;
+  final generic = _roleStacks[v];
+  if (generic != null) return generic;
+  return [v, ...fallback];
 }
 
-/// The theme's mono font family, for verbatim output. Null when the
-/// theme is absent or the token names a generic role: the renderer's
-/// platform monospace applies then. A custom family only takes
-/// effect if the app bundled that font asset.
-String? glintyMonoFamily(Map<String, dynamic>? theme) {
+/// The stack for verbatim output, from the theme's mono token.
+List<String> glintyMonoStack(Map<String, dynamic>? theme) {
   final font = theme?['font'];
-  return _familyOrNull(font is Map ? font['mono'] : null);
+  return glintyFontStack(font is Map ? font['mono'] : null,
+      fallback: glintyMonoRole);
 }
 
 /// Build ThemeData from a welcome's theme tokens.
@@ -93,10 +111,13 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
           borderRadius: BorderRadius.circular(radiusV.toDouble()))
       : null;
 
+  final bodyStack = glintyFontStack(font['body']);
+
   return ThemeData(
     colorScheme: scheme,
     scaffoldBackgroundColor: background,
-    fontFamily: _familyOrNull(font['body']),
+    fontFamily: bodyStack.isEmpty ? null : bodyStack.first,
+    fontFamilyFallback: bodyStack.length > 1 ? bodyStack.sublist(1) : null,
     cardTheme: shape == null ? null : CardThemeData(shape: shape),
     filledButtonTheme: shape == null
         ? null

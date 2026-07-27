@@ -57,7 +57,7 @@ class GlintyRenderer {
       this.onEvent,
       this.values = const {},
       this.spacing = 4,
-      this.monoFamily});
+      this.monoStack = const ['monospace', 'Menlo', 'Courier New']});
 
   final GlintySink? onInput;
   final GlintyEventSink? onEvent;
@@ -67,10 +67,11 @@ class GlintyRenderer {
   /// --g-space, and the same default when no theme was set.
   final double spacing;
 
-  /// The theme's mono font family for verbatim output, or null for
-  /// the platform monospace -- the same role --g-font-mono plays in
-  /// the browser.
-  final String? monoFamily;
+  /// The family stack for verbatim output -- the same role
+  /// --g-font-mono plays in the browser, resolved to families the
+  /// platform can know (see glintyMonoStack). Leads with the theme's
+  /// choice and degrades within the mono role.
+  final List<String> monoStack;
 
   /// The spec's fallback rule: unknown variants take the first
   /// listed, with a warning rather than an error, because a
@@ -429,7 +430,9 @@ class GlintyRenderer {
         padding: const EdgeInsets.all(8),
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Text(_outputText(c),
-            style: TextStyle(fontFamily: monoFamily ?? 'monospace')),
+            style: TextStyle(
+                fontFamily: monoStack.first,
+                fontFamilyFallback: monoStack.sublist(1))),
       );
 
   Widget _table(GlintyComponent c) {

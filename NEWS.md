@@ -57,9 +57,11 @@ Stage 4, theme and variants:
   into the served style block, so the character set is the injection
   surface, and validating identically in `app_theme()` and the
   client keeps first paint and hydrated state from diverging.
-  Flutter maps generics to the platform default rather than passing
-  CSS keywords through as family names, which would silently land
-  verbatim text on a sans face.
+  Flutter lowers each generic to a role-preserving fallback stack
+  (the generic name, which Android resolves natively, then faces
+  Apple and desktop ship), so a monospace body stays mono and a
+  serif mono token goes serif rather than every generic collapsing
+  to sans.
 - The Flutter spacer now uses the theme's spacing unit (default 4,
   matching the browser) instead of a hardcoded 8.
 

@@ -392,11 +392,16 @@ user prefers and silently restyling a declared palette would be
 inference magic.
 
 Each font token names **one family**, or a CSS generic (`system-ui`,
-`ui-monospace`, `monospace`, ...) meaning the platform's own. The
-browser appends its fallback stack; Flutter maps generics to the
-platform default and a custom family only takes effect where the app
-bundled that font — a name a client cannot resolve degrades to its
-default face, silently, which is how fonts have always failed.
+`ui-monospace`, `monospace`, ...) meaning the platform's own face
+for that role. The role is preserved everywhere: the browser
+resolves generics natively, and Flutter lowers each one to a
+per-platform fallback stack (the generic name itself, which Android
+registers as a real family, then faces Apple and desktop platforms
+ship), so a monospace body stays mono and a serif mono token goes
+serif rather than collapsing to sans. A custom family leads its
+role's stack and only takes effect where the client has the font —
+a name a client cannot resolve degrades within its role, silently,
+which is how fonts have always failed.
 Values are limited to letters, digits, spaces and hyphens: they are
 interpolated into a style block, so the character set is the
 injection surface, and the server and client enforce the same rule

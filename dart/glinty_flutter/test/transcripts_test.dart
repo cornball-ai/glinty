@@ -156,26 +156,42 @@ void main() {
       expect(data.filledButtonTheme.style?.shape?.resolve({}),
           isA<RoundedRectangleBorder>());
 
-      expect(glintyMonoFamily({'font': {'mono': 'JetBrains Mono'}}),
-          'JetBrains Mono');
-      expect(glintyMonoFamily({'font': {'body': 'Inter'}}), isNull);
-      expect(glintyMonoFamily(null), isNull);
+      // a custom mono family leads its stack and degrades within the
+      // mono role, never to sans
+      expect(glintyMonoStack({'font': {'mono': 'JetBrains Mono'}}),
+          ['JetBrains Mono', 'monospace', 'Menlo', 'Courier New']);
+      expect(glintyMonoStack({'font': {'body': 'Inter'}}), glintyMonoRole);
+      expect(glintyMonoStack(null), glintyMonoRole);
 
       // ghost buttons are TextButtons -- the one family radius missed
       expect(data.textButtonTheme.style?.shape?.resolve({}),
           isA<RoundedRectangleBorder>());
     });
 
-    test('CSS generic font roles mean the platform default here', () {
-      // Passing ui-monospace through as a Flutter fontFamily would
-      // miss silently and land verbatim text on the default *sans*
-      // face; a generic role means "the platform's own".
-      expect(glintyMonoFamily({'font': {'mono': 'ui-monospace'}}), isNull);
-      expect(glintyMonoFamily({'font': {'mono': 'monospace'}}), isNull);
-      final data = glintyThemeData({
-        'font': {'body': 'system-ui', 'mono': 'ui-monospace'}
+    test('CSS generics preserve their role instead of collapsing', () {
+      // The framework's own error style says fontFamily: 'monospace'
+      // (flutter/lib/src/material/app.dart): the generic names are
+      // resolvable on Android, and the stacks append faces Apple and
+      // desktop platforms know. body monospace stays mono, mono
+      // serif goes serif -- neither collapses to the default sans.
+      final monoBody = glintyThemeData({
+        'font': {'body': 'monospace'}
       });
-      expect(data.textTheme.bodyMedium?.fontFamily,
+      expect(monoBody.textTheme.bodyMedium?.fontFamily, 'monospace');
+      expect(monoBody.textTheme.bodyMedium?.fontFamilyFallback,
+          contains('Menlo'));
+
+      expect(glintyMonoStack({'font': {'mono': 'serif'}}),
+          ['serif', 'Georgia', 'Times New Roman']);
+
+      // sans roles ARE the platform default; ui-monospace keeps mono
+      expect(glintyFontStack('system-ui'), ['sans-serif']);
+      expect(glintyMonoStack({'font': {'mono': 'ui-monospace'}}),
+          glintyMonoRole);
+      final sansBody = glintyThemeData({
+        'font': {'body': 'system-ui'}
+      });
+      expect(sansBody.textTheme.bodyMedium?.fontFamily,
           isNot('system-ui'));
     });
 
