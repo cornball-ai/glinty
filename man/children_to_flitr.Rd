@@ -3,10 +3,12 @@
 \alias{children_to_flitr}
 \title{Lower a list of children, dropping the ones that contribute nothing}
 \usage{
-children_to_flitr(children, unsupported)
+children_to_flitr(children, session, unsupported)
 }
 \arguments{
 \item{children}{list of components}
+
+\item{session}{the native session}
 
 \item{unsupported}{collector env}
 }

@@ -36,6 +36,18 @@ component_to_html <- function(x) {
            row = html_layout(x, "g-layout-row"),
            column = html_layout(x, "g-layout-col"),
            panel = html_panel(x),
+           text_input = html_text_like(x, "text"),
+           password_input = html_text_like(x, "password"),
+           textarea_input = html_textarea(x),
+           number_input = html_number(x),
+           select_input = html_select(x),
+           checkbox_input = html_checkbox(x),
+           radio_buttons = html_radio(x),
+           slider_input = html_slider(x),
+           date_input = html_text_like(x, "date"),
+           file_input = html_file(x),
+           button = html_button(x),
+           download_button = html_button(x, "g-download"),
            raw_html = x$html,
            html_unsupported(x$component)
     )
@@ -166,4 +178,148 @@ html_panel <- function(x) {
     }
     html_el("div", list(class = paste0("g-panel g-panel-", x$variant),
                         id = x$id), inner)
+}
+
+# --- inputs ---
+#
+# `emit` becomes a DOM event name here and nowhere else. The component
+# says when it wants to report; this is the only place that knows the
+# browser calls that "input" or "change".
+
+#' DOM event for an emit intent
+#'
+#' @param emit character "live" or "settle"
+#' @return character DOM event name
+#' @keywords internal
+emit_event <- function(emit) {
+    if (identical(emit, "live")) {
+        "input"
+    } else {
+        "change"
+    }
+}
+
+#' Wrap a labelled control
+#'
+#' @param x the component
+#' @param control character HTML of the control itself
+#' @return character HTML
+#' @keywords internal
+html_field_group <- function(x, control) {
+    label <- ""
+    if (!is.null(x$label) && nzchar(x$label)) {
+        label <- html_el("label", list("for" = x$id), html_escape(x$label))
+    }
+    html_el("div", list(class = "g-field"), paste0(label, control))
+}
+
+#' Attributes that wire a control to the protocol
+#'
+#' @param x the component
+#' @return named list
+#' @keywords internal
+html_bind <- function(x) {
+    meta <- INPUT_META[[x$component]]
+    out <- list(id = x$id)
+    out[["data-g-target"]] <- x$id
+    out[["data-g-message"]] <- meta$message
+    if (!is.null(x$emit)) {
+        out[["data-g-event"]] <- emit_event(x$emit)
+    }
+    out
+}
+
+html_text_like <- function(x, type) {
+    attrs <- c(html_bind(x),
+               list(type = type, class = "g-input",
+                    value = if (is.null(x$value)) "" else x$value,
+                    placeholder = x$placeholder))
+    html_field_group(x, html_el("input", attrs, void = TRUE))
+}
+
+html_textarea <- function(x) {
+    attrs <- c(html_bind(x),
+               list(class = "g-textarea", rows = x$rows, placeholder = x$placeholder))
+    html_field_group(x, html_el("textarea", attrs, html_escape(x$value)))
+}
+
+html_number <- function(x) {
+    attrs <- c(html_bind(x),
+               list(type = "number", class = "g-input", value = x$value,
+                    min = x$min, max = x$max, step = x$step))
+    html_field_group(x, html_el("input", attrs, void = TRUE))
+}
+
+html_select <- function(x) {
+    opts <- paste(vapply(x$choices, function(ch) {
+        sel <- if (identical(ch$value, x$selected)) "selected" else NULL
+        html_el("option", list(value = ch$value, selected = sel),
+                html_escape(ch$label))
+    }, character(1L)), collapse = "")
+    attrs <- c(html_bind(x),
+               list(class = "g-select",
+                    multiple = if (isTRUE(x$multiple)) "multiple" else NULL))
+    html_field_group(x, html_el("select", attrs, opts))
+}
+
+html_checkbox <- function(x) {
+    attrs <- c(html_bind(x),
+               list(type = "checkbox", class = "g-checkbox",
+                    checked = if (isTRUE(x$value)) "checked" else NULL))
+    html_el("div", list(class = "g-check"),
+            paste0(html_el("input", attrs, void = TRUE),
+                   html_el("label", list("for" = x$id), html_escape(x$label))))
+}
+
+html_radio <- function(x) {
+    items <- paste(vapply(seq_along(x$choices), function(i) {
+        ch <- x$choices[[i]]
+        item_id <- paste0(x$id, "_", i)
+        attrs <- list(id = item_id, type = "radio", name = x$id,
+                      value = ch$value, class = "g-radio",
+                      checked = if (identical(ch$value, x$selected)) {
+                "checked"
+            } else {
+                NULL
+            })
+        attrs[["data-g-target"]] <- x$id
+        attrs[["data-g-message"]] <- "input"
+        attrs[["data-g-event"]] <- emit_event(x$emit)
+        html_el("div", list(class = "g-radio-item"),
+                paste0(html_el("input", attrs, void = TRUE),
+                       html_el("label", list("for" = item_id), html_escape(ch$label))))
+    }, character(1L)), collapse = "")
+    html_el("div", list(id = x$id, class = "g-radio-group"),
+            paste0(html_el("label", list(class = "g-radio-group-label"),
+                           html_escape(x$label)), items))
+}
+
+html_slider <- function(x) {
+    attrs <- c(html_bind(x),
+               list(type = "range", class = "g-slider", min = x$min, max = x$max,
+                    value = x$value, step = x$step))
+    html_field_group(x, html_el("input", attrs, void = TRUE))
+}
+
+html_file <- function(x) {
+    attrs <- list(id = x$id, type = "file", class = "g-file",
+                  multiple = if (isTRUE(x$multiple)) "multiple" else NULL)
+    attrs[["data-g-upload"]] <- x$id
+    if (!is.null(x$accept)) {
+        attrs$accept <- paste(x$accept, collapse = ",")
+    }
+    html_field_group(x, html_el("input", attrs, void = TRUE))
+}
+
+html_button <- function(x, extra_class = NULL) {
+    inner <- html_escape(x$label)
+    if (!is.null(x$icon)) {
+        inner <- paste0(component_to_html(component("icon", name = x$icon)),
+                        inner)
+    }
+    attrs <- c(html_bind(x),
+               list(type = "button",
+                    class = paste(c("g-btn", paste0("g-btn-", x$variant),
+                                    extra_class), collapse = " ")))
+    html_el("button", attrs, inner)
 }

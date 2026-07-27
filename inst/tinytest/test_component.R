@@ -136,7 +136,7 @@ for (nm in names(COMPONENT_SCHEMA)) {
         spec <- COMPONENT_SCHEMA[[nm]][[fname]]
         expect_true(is.character(spec$type))
         expect_true(spec$type %in% c("string", "number", "int", "bool",
-                                     "enum", "children", "any"))
+                                     "enum", "choices", "children", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)

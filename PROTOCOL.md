@@ -163,6 +163,53 @@ not a silent default.
 `password_input` has no `value` field **in the schema**, not merely by
 convention. A field that cannot be expressed cannot leak.
 
+### The Flutter column
+
+Every component names the Flutter widget it is expected to lower to.
+This is a paper check, and it is the one that actually points at the
+target.
+
+flitR cannot serve that purpose. It is a **falsifier, not a
+validator**: where it cannot lower something the component is probably
+DOM-shaped, which is how `gap` became a number and `spacer` became
+theme units. But flitR is more primitive than the DOM in the opposite
+direction from Flutter — absolutely-positioned draw ops with layout
+computed in R, versus a framework that owns layout, retains widget
+state, and has its own focus and text models. **flitR disagreeing is a
+signal; flitR agreeing is not a clearance.**
+
+| component | Flutter | note |
+|---|---|---|
+| `text` | `Text` | variant → `TextStyle` from theme |
+| `heading` | `Text` | level → `textTheme.headlineN` |
+| `link` | `InkWell` + `Text` | `external` → `url_launcher` |
+| `icon` | `Icon` | name → `IconData`; needs a name→icon map |
+| `divider` | `Divider` | `labelled` → `Row` with `Expanded` rules |
+| `spacer` | `SizedBox` | size × theme spacing |
+| `row` / `column` | `Row` / `Column` | `gap` → `spacing` (Flutter 3.27+) or separators |
+| `panel` | `Card` / `Container` | variant selects |
+| `text_input` | `TextField` | `emit` → `onChanged` vs `onEditingComplete` |
+| `password_input` | `TextField(obscureText: true)` | |
+| `textarea_input` | `TextField(maxLines:)` | |
+| `number_input` | `TextField` + `TextInputType.number` | Flutter has no spinner |
+| `select_input` | `DropdownButton` | `multiple` has no direct widget |
+| `checkbox_input` | `CheckboxListTile` | |
+| `radio_buttons` | `RadioListTile` | |
+| `slider_input` | `Slider` | `divisions` = range / step |
+| `date_input` | `showDatePicker` | a dialog, not an inline field |
+| `file_input` | `file_picker` package | not in the SDK |
+| `button` | `FilledButton` etc. | variant selects the constructor |
+| `tabset` | `TabBar` + `TabBarView` | retains child state, unlike flitR |
+
+Three of those already flag real work, none of which flitR would have
+surfaced: `select_input(multiple = TRUE)` has no single Flutter
+widget, `date_input` is a dialog rather than an inline control, and
+`file_input` needs a package outside the SDK. `icon` needs a
+name-to-`IconData` map that has to exist somewhere.
+
+None are blocking. All are cheaper to know now than after the
+vocabulary is frozen.
+
 ### Output kinds
 
 `output` messages carry a `kind`, which is what the renderer produced:
@@ -427,6 +474,13 @@ ops. flitR is a cheap, already-working second frontend, and its only
 job here is to expose DOM-shaped mistakes in the vocabulary while they
 are still free to fix. Finding them from Dart — across a repo
 boundary, a language barrier and a frozen spec — is not free.
+
+Do not overclaim what it buys. flitR catches **browser bias**, not
+Flutter readiness — see "The Flutter column". It is a falsifier, and
+nothing about its shape may be allowed back into the schema. flitR has
+no live/settle distinction and therefore cannot honour `emit`; `emit`
+stays regardless, because Flutter's `onChanged` and
+`onEditingComplete` need it.
 
 The scope is deliberately narrow:
 

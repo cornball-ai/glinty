@@ -8,7 +8,7 @@
 #' Declare one component field
 #'
 #' @param type character one of "string", "number", "int", "bool",
-#'   "enum", "children", "any"
+#'   "enum", "choices", "children", "any"
 #' @param required logical must be supplied
 #' @param default value filled in when absent; NULL means the field
 #'   stays absent rather than becoming null on the wire
@@ -84,9 +84,147 @@ COMPONENT_SCHEMA <- list(
                                       id = field("string")
     ),
 
+                         # inputs
+                         #
+                         # `emit` is the one field every input shares, and it is
+                         # deliberately about intent rather than mechanism: "live" means
+                         # report while the value is being changed, "settle" means report
+                         # once it has. The browser lowers those to input/change events with
+                         # a debounce; Flutter would lower them to onChanged and
+                         # onEditingComplete. Naming a DOM event here would have made the
+                         # schema browser-shaped.
+                         text_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        value = field("string", default = ""),
+        placeholder = field("string"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
+                         password_input = list(
+        # No `value` field, by schema. A field that cannot be expressed
+        # cannot be rendered into page source.
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        placeholder = field("string"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
+                         textarea_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        value = field("string", default = ""),
+        rows = field("int", default = 4L, min = 1, max = 100),
+        placeholder = field("string"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
+                         number_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        value = field("number"),
+        min = field("number"),
+        max = field("number"),
+        step = field("number"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
+                         select_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        choices = field("choices", required = TRUE),
+        selected = field("string"),
+        multiple = field("bool", default = FALSE),
+        emit = field("enum", default = "settle", values = c("live", "settle"))
+    ),
+                         checkbox_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        value = field("bool", default = FALSE),
+        emit = field("enum", default = "settle", values = c("live", "settle"))
+    ),
+                         radio_buttons = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        choices = field("choices", required = TRUE),
+        selected = field("string"),
+        emit = field("enum", default = "settle", values = c("live", "settle"))
+    ),
+                         slider_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        min = field("number", required = TRUE),
+        max = field("number", required = TRUE),
+        value = field("number"),
+        step = field("number"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
+                         date_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        value = field("string"),
+        min = field("string"),
+        max = field("string"),
+        emit = field("enum", default = "settle", values = c("live", "settle"))
+    ),
+                         file_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        accept = field("any"),
+        multiple = field("bool", default = FALSE)
+    ),
+
+                         # events, not inputs: they carry no value the server keeps
+                         button = list(
+                                       id = field("string", required = TRUE),
+                                       label = field("string", required = TRUE),
+                                       variant = field("enum", default = "default",
+            values = c("default", "primary", "secondary", "danger", "ghost")),
+                                       icon = field("string")
+    ),
+                         download_button = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = "Download"),
+        variant = field("enum", default = "default",
+                        values = c("default", "primary", "secondary", "danger", "ghost")),
+        icon = field("string")
+    ),
+
                          # escape hatch
                          raw_html = list(html = field("string", required = TRUE))
 )
+
+#' What each input emits, and of what type
+#'
+#' Kept beside the schema rather than inside it because it describes
+#' the component's protocol behaviour, not a field the wire carries.
+#'
+#' `message` is which client-to-server message the component produces:
+#' `input` for something whose value the server keeps, `event` for a
+#' discrete action it merely observes. `value_type` is what that
+#' message's value must be, and is what the conformance test holds
+#' both lowerings to.
+#'
+#' @keywords internal
+INPUT_META <- list(
+                   text_input = list(message = "input", value_type = "string"),
+                   password_input = list(message = "input", value_type = "string"),
+                   textarea_input = list(message = "input", value_type = "string"),
+                   number_input = list(message = "input", value_type = "number"),
+                   select_input = list(message = "input", value_type = "string"),
+                   checkbox_input = list(message = "input", value_type = "bool"),
+                   radio_buttons = list(message = "input", value_type = "string"),
+                   slider_input = list(message = "input", value_type = "number"),
+                   date_input = list(message = "input", value_type = "string"),
+                   file_input = list(message = "input", value_type = "files"),
+                   button = list(message = "event", value_type = NULL),
+                   download_button = list(message = "event", value_type = NULL)
+)
+
+#' Is this component an input or event emitter?
+#'
+#' @param name character component name
+#' @return logical
+#' @keywords internal
+is_input_component <- function(name) {
+    !is.null(INPUT_META[[name]])
+}
 
 #' Construct a component
 #'
@@ -197,6 +335,34 @@ check_field <- function(value, spec, type, nm) {
                  "')", call. = FALSE)
         }
         return(value)
+    },
+           choices = {
+        # A named character vector is the R-idiomatic way to write
+        # choices and the wire form is a list of {value, label}, so
+        # normalize here rather than making every builder do it.
+        if (is.character(value) || is.numeric(value)) {
+            labels <- names(value)
+            if (is.null(labels)) {
+                labels <- as.character(value)
+            }
+            labels[!nzchar(labels)] <- as.character(value)[!nzchar(labels)]
+            value <- lapply(seq_along(value), function(i) {
+                list(value = as.character(value[[i]]),
+                     label = as.character(labels[[i]]))
+            })
+        }
+        if (!is.list(value) || length(value) == 0L) {
+            stop(where, " must be a non-empty vector or list of choices",
+                 call. = FALSE)
+        }
+        for (i in seq_along(value)) {
+            ch <- value[[i]]
+            if (!is.list(ch) || is.null(ch$value) || is.null(ch$label)) {
+                stop(where, " choice ", i,
+                     " must have both a value and a label", call. = FALSE)
+            }
+        }
+        return(unname(value))
     },
            children = {
         if (!is.list(value)) {

@@ -3,10 +3,12 @@
 \alias{component_to_flitr}
 \title{Lower a component tree to flitR ops}
 \usage{
-component_to_flitr(x, unsupported)
+component_to_flitr(x, session, unsupported)
 }
 \arguments{
 \item{x}{a glinty_component}
+
+\item{session}{the native session}
 
 \item{unsupported}{collector env with a `$names` character vector}
 }
