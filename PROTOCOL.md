@@ -721,6 +721,21 @@ make it slower.
    skips when R is absent, so CI installs R and then asserts the run
    was not skipped.
 
+   **A client holds its own input state.** The component tree is the
+   shape of the UI; the current value of each input is session
+   state, seeded from that tree by the same rules the server seeds
+   its own (an empty text field is `""`, a checkbox `false`, a
+   single select its first choice), then owned by user edits and
+   `input_update` frames. A client that reads a control's value out
+   of the component draws the initial value forever, and a
+   `conditional_panel` evaluated against anything else disagrees
+   with the server about what is visible.
+
+   A `resumed: false` welcome means the session the client described
+   is gone: values, inputs and transfer tickets are dropped and any
+   retained widget state goes with them. The browser reloads the
+   page for exactly this reason.
+
 ### flitR is retired, not retrofitted
 
 An earlier draft had flitR retrofitted alongside the browser in stage

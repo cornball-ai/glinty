@@ -57,14 +57,24 @@ typedef GlintyTicketSink = void Function(String id, String purpose);
 class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
+      this.onLink,
       this.onEvent,
       this.onTicket,
       this.values = const {},
+      this.inputs = const {},
+      this.condition,
       this.spacing = 4,
       this.monoStack = const ['monospace', 'Menlo', 'Courier New']});
 
   final GlintySink? onInput;
   final GlintyEventSink? onEvent;
+
+  /// Where a link tap goes. Opening a URL needs a platform plugin
+  /// (url_launcher), which is outside this package's budget, so the
+  /// embedder decides. Without it a link renders as styled text and
+  /// is not tappable -- pretending to be a link that does nothing is
+  /// the kind of quiet lie this client keeps refusing to tell.
+  final void Function(String href, {bool external})? onLink;
 
   /// Where a download_button's press goes: a ticket request, not an
   /// event. The press IS the download, and an event frame as well
@@ -104,6 +114,17 @@ class GlintyRenderer {
         '- falling back to ${known.first}');
     return known.first;
   }
+
+  /// Current input values, owned by the session. A control reads
+  /// its value from here, not from the component: the tree is the
+  /// shape of the UI and this is its state, so an edit survives the
+  /// next rebuild.
+  final Map<String, dynamic> inputs;
+
+  /// Decides whether a conditional_panel shows. Defaults to always,
+  /// which is what a fixture render wants; an app passes the
+  /// session so panels actually toggle.
+  final bool Function(dynamic condition)? condition;
 
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
@@ -157,9 +178,14 @@ class GlintyRenderer {
       case 'tabset':
         return _tabset(context, c);
       case 'conditional_panel':
-        // Visibility is decided by whoever holds the input values. The
-        // renderer is handed an already-resolved tree in stage 2; for
-        // now it renders children, which keeps the fixture honest.
+        // Evaluated against the same input store the controls draw
+        // from, by the same rules R and the browser use. A fixture
+        // render with no evaluator shows the children, which is what
+        // makes the fixture a render test rather than a state test.
+        final decide = condition;
+        if (decide != null && !decide(c.fields['condition'])) {
+          return const SizedBox.shrink();
+        }
         return _column(context, c);
       default:
         return _unsupported(c.type);
@@ -198,16 +224,24 @@ class GlintyRenderer {
     return Text(c.str('value') ?? '', style: style);
   }
 
-  Widget _link(BuildContext context, GlintyComponent c) => InkWell(
-        onTap: () {},
-        child: Text(
-          c.str('value') ?? '',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            decoration: TextDecoration.underline,
-          ),
-        ),
-      );
+  Widget _link(BuildContext context, GlintyComponent c) {
+    final href = c.str('href') ?? '';
+    final cb = onLink;
+    final label = Text(
+      c.str('value') ?? '',
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.primary,
+        decoration: TextDecoration.underline,
+      ),
+    );
+    // No handler, no tap target: an InkWell with an empty onTap
+    // looks tappable and does nothing.
+    if (cb == null) return label;
+    return InkWell(
+      onTap: () => cb(href, external: c.boolean('external')),
+      child: label,
+    );
+  }
 
   Widget _divider(GlintyComponent c) {
     final label = c.str('label');
@@ -311,23 +345,31 @@ class GlintyRenderer {
 
   // --- inputs ---
 
+  /// The current value of an input, falling back to what the tree
+  /// declared. A control that reads only the tree draws its initial
+  /// value forever.
+  dynamic _value(String id, dynamic fallback) =>
+      inputs.containsKey(id) ? inputs[id] : fallback;
+
   Widget _textField(BuildContext context, GlintyComponent c,
       {bool obscure = false, int maxLines = 1, bool numeric = false}) {
     final id = c.str('id')!;
     final emit = GlintyEmit.parse(c.str('emit'));
     void report(String v) => onInput?.call(id, numeric ? num.tryParse(v) : v);
-    return TextField(
+    // A StatefulWidget, because a text field owns a controller and a
+    // selection: rebuilding one from a fresh TextEditingController
+    // every frame drops the caret and (with any latency at all) the
+    // characters typed since the last frame.
+    return _GlintyTextField(
       key: Key(id),
-      obscureText: obscure,
-      maxLines: obscure ? 1 : maxLines,
-      keyboardType: numeric ? TextInputType.number : null,
-      controller: TextEditingController(text: c.str('value') ?? ''),
-      decoration: InputDecoration(
-        labelText: (c.str('label')?.isEmpty ?? true) ? null : c.str('label'),
-        hintText: c.str('placeholder'),
-      ),
+      value: _value(id, c.str('value') ?? '')?.toString() ?? '',
+      obscure: obscure,
+      maxLines: maxLines,
+      numeric: numeric,
+      label: (c.str('label')?.isEmpty ?? true) ? null : c.str('label'),
+      hint: c.str('placeholder'),
       // This is where `emit` is spent, and the only place that knows
-      // Flutter calls these onChanged and onEditingComplete.
+      // Flutter calls these onChanged and onSubmitted.
       onChanged: emit == GlintyEmit.live ? report : null,
       onSubmitted: emit == GlintyEmit.settle ? report : null,
     );
@@ -336,10 +378,13 @@ class GlintyRenderer {
   Widget _select(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final choices = c.choices;
+    final current = _value(id, c.str('selected'))?.toString() ??
+        (choices.isNotEmpty ? choices.first.value : null);
     return DropdownButton<String>(
       key: Key(id),
-      value: c.str('selected') ??
-          (choices.isNotEmpty ? choices.first.value : null),
+      // a value the choices no longer contain would assert; fall
+      // back rather than crash on a tree that changed under us
+      value: choices.any((ch) => ch.value == current) ? current : null,
       items: choices
           .map((ch) =>
               DropdownMenuItem(value: ch.value, child: Text(ch.label)))
@@ -354,7 +399,7 @@ class GlintyRenderer {
     final id = c.str('id')!;
     return CheckboxListTile(
       key: Key(id),
-      value: c.boolean('value'),
+      value: _value(id, c.boolean('value')) == true,
       title: Text(c.str('label') ?? ''),
       onChanged: (v) => onInput?.call(id, v ?? false),
     );
@@ -364,20 +409,20 @@ class GlintyRenderer {
     final id = c.str('id')!;
     // RadioGroup replaced per-tile groupValue/onChanged in 3.32.
     return RadioGroup<String>(
-      groupValue: c.str('selected'),
+      groupValue: _value(id, c.str('selected'))?.toString(),
       onChanged: (v) {
         if (v != null) onInput?.call(id, v);
       },
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: c.choices
-          .map((ch) => RadioListTile<String>(
-                key: Key('${id}_${ch.value}'),
-                value: ch.value,
-                title: Text(ch.label),
-              ))
-          .toList(),
-    ));
+        mainAxisSize: MainAxisSize.min,
+        children: c.choices
+            .map((ch) => RadioListTile<String>(
+                  key: Key('${id}_${ch.value}'),
+                  value: ch.value,
+                  title: Text(ch.label),
+                ))
+            .toList(),
+      ));
   }
 
   Widget _slider(GlintyComponent c) {
@@ -385,6 +430,8 @@ class GlintyRenderer {
     final min = c.number('min')?.toDouble() ?? 0;
     final max = c.number('max')?.toDouble() ?? 1;
     final step = c.number('step')?.toDouble();
+    final raw = _value(id, c.number('value'));
+    final current = raw is num ? raw.toDouble() : min;
     return Slider(
       key: Key(id),
       min: min,
@@ -392,7 +439,7 @@ class GlintyRenderer {
       // Flutter wants a division count where the protocol says step
       // size. Derivable because step is a number.
       divisions: step != null && step > 0 ? ((max - min) / step).round() : null,
-      value: (c.number('value')?.toDouble() ?? min).clamp(min, max),
+      value: current.clamp(min, max),
       onChanged: (v) => onInput?.call(id, v),
     );
   }
@@ -471,7 +518,7 @@ class GlintyRenderer {
   Widget _tabset(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final panels = c.panels;
-    final selected = c.str('selected');
+    final selected = _value(id, c.str('selected'))?.toString();
     final initial = panels.indexWhere((p) => p.title == selected);
     return DefaultTabController(
       key: Key(id),
@@ -509,5 +556,86 @@ class GlintyRenderer {
         padding: const EdgeInsets.all(8),
         color: const Color(0xFFFFF3CD),
         child: Text('[unsupported component: $name]'),
+      );
+}
+
+/// A text field that keeps its controller across rebuilds.
+///
+/// The renderer is stateless by design -- it turns a tree into
+/// widgets and holds nothing. A text field cannot be: it owns a
+/// controller and a selection, and rebuilding it from a fresh
+/// controller each frame drops the caret to position zero and, with
+/// any latency at all, the characters typed since the last frame.
+///
+/// So the controller lives here, and only follows the incoming value
+/// when that value actually differs from what the field holds --
+/// which is how a server-driven update_input lands without stomping
+/// someone mid-word.
+class _GlintyTextField extends StatefulWidget {
+  const _GlintyTextField({
+    super.key,
+    required this.value,
+    required this.obscure,
+    required this.maxLines,
+    required this.numeric,
+    this.label,
+    this.hint,
+    this.onChanged,
+    this.onSubmitted,
+  });
+
+  final String value;
+  final bool obscure;
+  final int maxLines;
+  final bool numeric;
+  final String? label;
+  final String? hint;
+  final void Function(String)? onChanged;
+  final void Function(String)? onSubmitted;
+
+  @override
+  State<_GlintyTextField> createState() => _GlintyTextFieldState();
+}
+
+class _GlintyTextFieldState extends State<_GlintyTextField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void didUpdateWidget(_GlintyTextField old) {
+    super.didUpdateWidget(old);
+    if (widget.value != _controller.text) {
+      // Keep the caret where the user left it when the text is the
+      // same length or longer; a server push that shortens the value
+      // clamps to the end rather than pointing past it.
+      final offset = _controller.selection.baseOffset;
+      _controller.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(
+            offset: offset < 0 || offset > widget.value.length
+                ? widget.value.length
+                : offset),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: _controller,
+        obscureText: widget.obscure,
+        maxLines: widget.obscure ? 1 : widget.maxLines,
+        keyboardType: widget.numeric ? TextInputType.number : null,
+        decoration: InputDecoration(
+          labelText: widget.label,
+          hintText: widget.hint,
+        ),
+        onChanged: widget.onChanged,
+        onSubmitted: widget.onSubmitted,
       );
 }

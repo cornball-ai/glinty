@@ -55,8 +55,16 @@ class GlintyConnection extends ChangeNotifier {
     this.retryCap = const Duration(seconds: 5),
     GlintySocketOpener? open,
     this.onDownload,
+    this.onLink,
   }) : _open = open ?? _defaultOpener {
-    session = GlintySession(client: client, token: token, onSend: _send);
+    session = GlintySession(
+      client: client,
+      token: token,
+      onSend: _send,
+      // Declared only when wired: a feature named in hello that the
+      // embedder never supplied is a claim the server would believe.
+      features: [if (onDownload != null) 'download'],
+    );
   }
 
   /// The ws:// or wss:// endpoint. Apple's ATS makes wss the only
@@ -78,6 +86,11 @@ class GlintyConnection extends ChangeNotifier {
   /// platform work this package deliberately leaves to the embedder;
   /// without a callback the grant is logged and dropped.
   final void Function(Uri url)? onDownload;
+
+  /// Called when a link is tapped. Opening a URL needs a platform
+  /// plugin, so the embedder decides; without one, links render as
+  /// styled text and are not tappable.
+  final void Function(String href, {bool external})? onLink;
 
   late final GlintySession session;
 
@@ -109,23 +122,56 @@ class GlintyConnection extends ChangeNotifier {
       _socket = socket;
       _events = socket.events.listen(_onEvent, onDone: _onClosed);
       // hello goes out on this socket; the session stamps `resume`
-      // when it already has a session id.
+      // when it already has a session id. The state stays
+      // connecting until welcome answers -- an open socket is not a
+      // usable app, and saying otherwise would let the UI draw
+      // before it has a tree.
       session.hello();
-      _setState(GlintyConnectionState.live);
     } catch (e) {
       _onClosed();
     }
   }
 
+  /// Frames written while no socket is up, flushed on welcome.
+  ///
+  /// An interaction made during a reconnect is a real interaction:
+  /// dropping it silently is the failure this queue exists to stop.
+  /// Capped, because a user tapping at a dead app should not grow
+  /// memory without limit.
+  final List<GlintyOutgoing> _pending = [];
+  static const _pendingCap = 64;
+
   void _send(GlintyOutgoing frame) {
     final socket = _socket;
-    if (socket == null) return;
+    // hello is the exception: it belongs to the socket being opened,
+    // never to the queue, or a reconnect would replay the previous
+    // hello ahead of its own.
+    if (socket == null) {
+      if (frame.type != 'hello' && _pending.length < _pendingCap) {
+        _pending.add(frame);
+      }
+      return;
+    }
     try {
       socket.sendText(jsonEncode(frame.body));
     } on WebSocketConnectionClosed {
-      // The drop will arrive as a close event; the retry path owns
-      // it. Losing this frame is correct -- resending it after a
-      // resume would replay an interaction the user made once.
+      if (frame.type != 'hello' && _pending.length < _pendingCap) {
+        _pending.add(frame);
+      }
+    }
+  }
+
+  void _flushPending() {
+    final socket = _socket;
+    if (socket == null || _pending.isEmpty) return;
+    final queued = List<GlintyOutgoing>.from(_pending);
+    _pending.clear();
+    for (final frame in queued) {
+      try {
+        socket.sendText(jsonEncode(frame.body));
+      } on WebSocketConnectionClosed {
+        _pending.add(frame);
+      }
     }
   }
 
@@ -136,6 +182,15 @@ class GlintyConnection extends ChangeNotifier {
         if (decoded is! Map) return;
         final msg = decoded.cast<String, dynamic>();
         session.receive(msg);
+        if (msg['type'] == 'welcome' && !session.refused) {
+          // The app is usable now, not when the socket opened. A
+          // welcome is also proof this endpoint works, so the retry
+          // budget resets -- otherwise a long-lived app that drops
+          // once a day exhausts it and stops for good.
+          _retries = 0;
+          _setState(GlintyConnectionState.live);
+          _flushPending();
+        }
         if (msg['type'] == 'ticket' && msg['purpose'] == 'download') {
           _deliverDownload(msg);
         }

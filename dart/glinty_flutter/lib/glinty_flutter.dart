@@ -7,6 +7,7 @@ library;
 
 export 'src/app.dart';
 export 'src/component.dart';
+export 'src/inputs.dart';
 export 'src/render.dart';
 export 'src/session.dart';
 export 'src/theme.dart';

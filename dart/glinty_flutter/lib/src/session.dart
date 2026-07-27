@@ -17,6 +17,7 @@
 library;
 
 import 'component.dart';
+import 'inputs.dart';
 import 'render.dart' show supportedComponents;
 
 /// The protocol version this client speaks.
@@ -66,6 +67,7 @@ class GlintySession {
   GlintySession({
     this.client = 'glinty_flutter/0.0.1',
     this.token,
+    this.features = const <String>[],
     GlintyComponent? cachedUi,
     String? cachedRevision,
     void Function(GlintyOutgoing)? onSend,
@@ -74,6 +76,12 @@ class GlintySession {
         _onSend = onSend;
 
   final String client;
+
+  /// Optional protocol features this client actually supports,
+  /// declared in hello. Empty unless an embedder wired them: a
+  /// feature named here that nothing implements is a claim the
+  /// server would believe.
+  final List<String> features;
 
   /// Opaque auth token for hello, or null. glinty never parses it:
   /// the server's run_app(auth = ) verifier does, and a refused token
@@ -119,6 +127,17 @@ class GlintySession {
   /// Latest value per output id, for the renderer to draw.
   final Map<String, dynamic> values = <String, dynamic>{};
 
+  /// Current value per input id: the state a control draws from.
+  /// Seeded from the tree on welcome, then owned by user edits and
+  /// `input_update` frames. The component tree is the shape of the
+  /// UI; this is its state.
+  final Map<String, dynamic> inputs = <String, dynamic>{};
+
+  /// Bumped whenever the tree is replaced or the state is cleared.
+  /// Widgets key off it so Flutter discards controllers and element
+  /// state belonging to a tree that no longer exists.
+  int generation = 0;
+
   /// Latest ticket grant per "purpose:id", from `ticket` frames. A
   /// transport layer consumes these to build transfer URLs; the
   /// session only holds them.
@@ -146,7 +165,7 @@ class GlintySession {
       // `ui` are absent because the components that carry them are,
       // and a kind declared without a slot to put it in is a lie.
       'kinds': const ['text', 'table'],
-      'features': const <String>[],
+      'features': features,
       if (token != null) 'token': token,
       // resume and prerendered are alternatives, not companions: a
       // reconnect asks for its session back, a fresh connect says
@@ -176,6 +195,22 @@ class GlintySession {
         final purpose = msg['purpose'];
         if (id is String && purpose is String) {
           tickets['$purpose:$id'] = msg;
+        }
+      case 'input_update':
+        // A server-driven change is a value change like any other,
+        // so the store (and any conditional panel keyed on it) must
+        // see it. Deliberately no echo back: the server already
+        // synced its own copy, and answering would be a second write.
+        final id = msg['id'];
+        if (id is String) {
+          if (msg.containsKey('selected')) {
+            inputs[id] = msg['selected'];
+          } else if (msg.containsKey('value')) {
+            inputs[id] = msg['value'];
+          }
+          // choices/min/max/label live in the tree, which this
+          // client rebuilds from welcome; a running app sees the
+          // value change now and the rest on the next tree.
         }
       case 'error':
         final id = msg['id'];
@@ -208,6 +243,20 @@ class GlintySession {
       return;
     }
 
+    if (msg['resumed'] == false) {
+      // We asked to resume and the server said no: the session we
+      // held is gone. Every value in this client describes it, so
+      // every value goes. Keeping them would draw one session's
+      // state over another's -- the browser reloads the page for
+      // exactly this reason.
+      values.clear();
+      inputs.clear();
+      tickets.clear();
+      _ui = null;
+      _cachedRevision = null;
+      generation++;
+    }
+
     sessionId = msg['session']?.toString();
     theme = msg['theme'] is Map
         ? (msg['theme'] as Map).cast<String, dynamic>()
@@ -226,6 +275,14 @@ class GlintySession {
       _ui = msg['ui'] == null ? null : GlintyComponent.fromJson(msg['ui']);
       _cachedRevision = revision;
       source = GlintyTreeSource.rebuilt;
+      generation++;
+      // Seed the input store from the tree, the way the server seeds
+      // its own from the same tree (R/seed.R). Without this a
+      // control reads its value out of the component every rebuild
+      // and can never change.
+      inputs
+        ..clear()
+        ..addAll(seedInputs(_ui));
     }
     // Invariant 2: nothing is emitted here. Adoption is not user
     // interaction, and the server built this tree, so it already knows
@@ -233,9 +290,17 @@ class GlintySession {
     // back would write the whole form on every reconnect.
   }
 
+  /// Is a conditional_panel's condition currently true?
+  bool conditionHolds(dynamic condition) =>
+      evalCondition(condition, inputs);
+
   /// Report an input's new value. Called by the renderer, never by
   /// [receive].
   void sendInput(String id, dynamic value) {
+    // local state first: the control draws from here, and a
+    // conditional panel keyed on it settles without waiting for a
+    // round trip
+    inputs[id] = value;
     _emit(GlintyOutgoing('input', {'type': 'input', 'id': id, 'value': value}));
   }
 

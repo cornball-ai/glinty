@@ -33,6 +33,7 @@ class GlintyApp extends StatefulWidget {
     required this.url,
     this.token,
     this.onDownload,
+    this.onLink,
     this.open,
   });
 
@@ -47,6 +48,9 @@ class GlintyApp extends StatefulWidget {
   /// platform work this package leaves to the embedder.
   final void Function(Uri url)? onDownload;
 
+  /// Where a link tap goes; without it links are not tappable.
+  final void Function(String href, {bool external})? onLink;
+
   /// Socket opener, for tests and embedders.
   final GlintySocketOpener? open;
 
@@ -60,13 +64,27 @@ class _GlintyAppState extends State<GlintyApp> {
   @override
   void initState() {
     super.initState();
-    _conn = GlintyConnection(
-      url: widget.url,
-      token: widget.token,
-      onDownload: widget.onDownload,
-      open: widget.open,
-    );
-    _conn.start();
+    _conn = _connect();
+  }
+
+  GlintyConnection _connect() => GlintyConnection(
+        url: widget.url,
+        token: widget.token,
+        onDownload: widget.onDownload,
+        onLink: widget.onLink,
+        open: widget.open,
+      )..start();
+
+  @override
+  void didUpdateWidget(GlintyApp old) {
+    super.didUpdateWidget(old);
+    // A new endpoint or a new token is a different session: an app
+    // that logs a user out and back in, or points at another server,
+    // must not keep talking on the old connection.
+    if (old.url != widget.url || old.token != widget.token) {
+      _conn.dispose();
+      _conn = _connect();
+    }
   }
 
   @override
@@ -124,11 +142,20 @@ class GlintyView extends StatelessWidget {
           onInput: s.sendInput,
           onEvent: s.sendEvent,
           onTicket: s.requestTicket,
+          onLink: conn?.onLink,
           values: s.values,
+          inputs: s.inputs,
+          condition: s.conditionHolds,
           spacing: glintySpacing(s.theme),
           monoStack: glintyMonoStack(s.theme),
         );
-    final built = Builder(builder: (context) => r.build(context, ui));
+    // Keyed by generation: a replaced tree (or a refused resume that
+    // cleared the state) must not leave Flutter reusing the element
+    // and controller state of the tree that is gone.
+    final built = KeyedSubtree(
+      key: ValueKey('glinty-tree-${s.generation}'),
+      child: Builder(builder: (context) => r.build(context, ui)),
+    );
     final tokens = s.theme;
     final themed = tokens == null
         ? built

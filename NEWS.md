@@ -28,6 +28,28 @@ Stage 6, the Flutter client becomes an app:
   trip, events, a ticket grant, resume with state replay, and an
   auth refusal. CI installs R for it and then asserts it did not
   skip.
+- **Inputs are state, not tree fields.** The session keeps an input
+  store, seeded from the tree exactly the way the server seeds its
+  own, updated by user edits and by `input_update` frames; controls
+  read from it. Before this a text field lost what you typed on the
+  next rebuild, and checkboxes, selects, sliders and radios sat at
+  their initial values forever. `conditional_panel` now evaluates
+  its condition against that store, by the same matching rules R and
+  the browser use.
+- A refused resume (`resumed: false`) clears values, inputs and
+  tickets and bumps a generation the widget tree keys on, so
+  controllers belonging to the dead session go with it. The browser
+  reloads the page for the same reason.
+- Transport corrections: `live` waits for `welcome` rather than a
+  merely-open socket, a welcome resets the retry budget (a
+  long-lived app that drops once a day used to exhaust it), and
+  interactions made during a reconnect are queued and flushed
+  instead of silently dropped.
+- Honest declarations: `hello.features` lists `download` only when
+  an `onDownload` is wired, and a link with no `onLink` renders as
+  styled text rather than an `InkWell` that looks tappable and does
+  nothing.
+- `GlintyApp` reconnects when its `url` or `token` changes.
 
 Stage 5, authentication and deployment surface:
 

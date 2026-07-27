@@ -94,6 +94,12 @@ void main() {
     expect(c.sockets.single.sent, hasLength(1));
     expect(c.sockets.single.sent.single['type'], 'hello');
     expect(c.sockets.single.sent.single['protocol'], glintyProtocolVersion);
+    // An open socket is not a usable app: live waits for welcome, or
+    // the UI draws before it has a tree.
+    expect(c.conn.state, GlintyConnectionState.connecting);
+
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
     expect(c.conn.state, GlintyConnectionState.live);
     c.conn.dispose();
   });
