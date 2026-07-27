@@ -96,7 +96,8 @@ jobs:
   # so a component or an exchange added on the R side fails here until
   # this client answers for it.
   flutter:
-    runs-on: ubuntu-latest
+    # pinned like ubuntu-rapt: the r2u source below hardcodes noble
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: dart/glinty_flutter
@@ -113,14 +114,26 @@ jobs:
       # suite still passes -- which is exactly why it is here: a
       # skipped e2e that reports green is the failure mode this
       # protocol keeps refusing to ship.
+      #
+      # Dependencies come from r2u as apt binaries: openssl needs
+      # libssl headers to build from source, and the site library
+      # needs root either way.
       - name: R and glinty
         working-directory: .
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends r-base-core
-          Rscript -e 'install.packages(c("digest","jsonlite","openssl"),
-                        repos = "https://cloud.r-project.org")'
-          R CMD INSTALL .
+          wget -q -O- https://eddelbuettel.github.io/r2u/assets/dirk_eddelbuettel_key.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/cranapt_key.asc > /dev/null
+          echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
+            | sudo tee /etc/apt/sources.list.d/cranapt.list
+          ok=0
+          for i in 1 2 3 4; do
+            if sudo apt-get update -qq; then ok=1; break; fi
+            echo "apt update failed, retry $i"; sleep 45
+          done
+          test "$ok" = 1 || { echo "apt update failed after 4 attempts"; exit 1; }
+          sudo apt-get install -y --no-install-recommends \
+            r-base-core r-cran-digest r-cran-jsonlite r-cran-openssl
+          sudo R CMD INSTALL .
 
       - run: flutter pub get
       - run: flutter analyze
