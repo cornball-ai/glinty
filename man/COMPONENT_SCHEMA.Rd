@@ -10,14 +10,9 @@ An object of class \code{list} of length 11.
 COMPONENT_SCHEMA
 }
 \description{
-Declares every component's required and optional fields, plus
-defaults for the optional ones. Construction validates against this,
-so a malformed component fails where it was written rather than in a
-client.
-}
-\details{
-`children` is called out separately because it nests components
-rather than holding scalars, and lowerings recurse on it.
-
+Every component's fields, with types, bounds and defaults.
+Construction validates against this, so a malformed component fails
+where it was written rather than in a client -- or worse, in one
+client and not another.
 }
 \keyword{internal}

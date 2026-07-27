@@ -1,0 +1,158 @@
+[
+  {
+    "name": "text",
+    "notes": "the simplest leaf; every frontend renders it",
+    "component": {
+      "component": "text",
+      "value": "hello",
+      "variant": "normal"
+    }
+  },
+  {
+    "name": "text-muted",
+    "notes": "variant is semantic; each frontend picks its own muting",
+    "component": {
+      "component": "text",
+      "value": "quiet",
+      "variant": "muted"
+    }
+  },
+  {
+    "name": "heading",
+    "notes": "level is 1..4, not a tag name",
+    "component": {
+      "component": "heading",
+      "value": "Title",
+      "level": 1
+    }
+  },
+  {
+    "name": "link",
+    "notes": "href is data; a native frontend opens a browser",
+    "component": {
+      "component": "link",
+      "value": "cornball.ai",
+      "href": "https://cornball.ai",
+      "external": false
+    }
+  },
+  {
+    "name": "divider",
+    "notes": "no required fields; a lowering must handle the bare case",
+    "component": {
+      "component": "divider",
+      "variant": "line"
+    }
+  },
+  {
+    "name": "divider-labelled",
+    "notes": "the 'or' separator both migrated apps use",
+    "component": {
+      "component": "divider",
+      "label": "or",
+      "variant": "labelled"
+    }
+  },
+  {
+    "name": "spacer",
+    "notes": "size is in theme spacing units, not pixels",
+    "component": {
+      "component": "spacer",
+      "size": 2
+    }
+  },
+  {
+    "name": "icon",
+    "notes": "named, not a glyph or a path; frontends own the artwork",
+    "component": {
+      "component": "icon",
+      "name": "play",
+      "size": 16
+    }
+  },
+  {
+    "name": "row",
+    "notes": "nesting; gap is a number, not a CSS string",
+    "component": {
+      "component": "row",
+      "children": [
+        {
+          "component": "text",
+          "value": "a",
+          "variant": "normal"
+        },
+        {
+          "component": "text",
+          "value": "b",
+          "variant": "normal"
+        }
+      ],
+      "gap": 12
+    }
+  },
+  {
+    "name": "column-nested",
+    "notes": "recursion depth > 1, which is where lowerings drift",
+    "component": {
+      "component": "column",
+      "children": [
+        {
+          "component": "heading",
+          "value": "Section",
+          "level": 2
+        },
+        {
+          "component": "row",
+          "children": [
+            {
+              "component": "text",
+              "value": "x",
+              "variant": "normal"
+            },
+            {
+              "component": "spacer",
+              "size": 1
+            },
+            {
+              "component": "text",
+              "value": "y",
+              "variant": "normal"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "panel-card",
+    "notes": "a titled container; the browser draws a header, flitR may not",
+    "component": {
+      "component": "panel",
+      "children": [
+        {
+          "component": "text",
+          "value": "body",
+          "variant": "normal"
+        }
+      ],
+      "variant": "card",
+      "title": "Results"
+    }
+  },
+  {
+    "name": "empty-column",
+    "notes": "a lowering must not crash on an empty container",
+    "component": {
+      "component": "column",
+      "children": []
+    }
+  },
+  {
+    "name": "raw_html",
+    "notes": "browser renders; every other frontend must refuse by name",
+    "component": {
+      "component": "raw_html",
+      "html": "<details>x<\/details>"
+    }
+  }
+]

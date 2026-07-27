@@ -1,7 +1,7 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{check_children}
 \alias{check_children}
-\title{Coerce a list of children, rejecting anything that is not a component}
+\title{Validate a list of children}
 \usage{
 check_children(children, fn)
 }
@@ -11,11 +11,16 @@ check_children(children, fn)
 \item{fn}{character calling function, for the error message}
 }
 \value{
-the list, unnamed
+the list, filtered and unnamed
 }
 \description{
-Layout components accept `...` and every element has to be a
-component, or a lowering will meet something it cannot render at the
-worst possible moment. Catching it here names the caller instead.
+NULLs are dropped so conditional children compose, but the index in
+the error message is the caller's original one -- reporting a
+post-filter index sends people looking at the wrong argument.
+}
+\details{
+Reached through check_field() rather than called directly, so a
+builder cannot forget it.
+
 }
 \keyword{internal}

@@ -8,6 +8,13 @@
 # only counts as frontend-neutral once more than one lowering has had
 # to render it, and a fixture list is what stops that check from being
 # something everyone means to do later.
+#
+# The list is defined in R and *checked in as JSON* at
+# inst/fixtures/components.json. The Dart client lives in another
+# repository and cannot call R, so the artifact both sides consume has
+# to be data. write_fixture_json() regenerates it and a test fails if
+# the two drift, which keeps the R definition authoritative without
+# making the JSON a stale copy.
 
 #' Component fixtures every lowering must handle
 #'
@@ -96,4 +103,43 @@ component_fixtures <- function() {
               notes = "browser renders; every other frontend must refuse by name"
         )
     )
+}
+
+#' Serialize the fixtures to JSON
+#'
+#' The wire form of every fixture, plus its name and note, as one
+#' document. This is what a client in another language consumes.
+#'
+#' @return character JSON
+#' @keywords internal
+fixture_json <- function() {
+    payload <- lapply(component_fixtures(), function(f) {
+        list(name = f$name, notes = f$notes,
+             component = unclass_recursive(f$component))
+    })
+    as.character(jsonlite::toJSON(payload, auto_unbox = TRUE, pretty = TRUE,
+                                  null = "null"))
+}
+
+#' Path to the checked-in fixture JSON
+#'
+#' @return character path, or "" when the package is not installed
+#' @keywords internal
+fixture_json_path <- function() {
+    system.file("fixtures", "components.json", package = "glinty")
+}
+
+#' Regenerate the checked-in fixture JSON
+#'
+#' Run after changing component_fixtures(). A test compares the file
+#' against fixture_json() and fails on drift, so the JSON cannot
+#' silently fall behind the R definition.
+#'
+#' @param path character destination; defaults to the source tree
+#' @return the path, invisibly
+#' @keywords internal
+write_fixture_json <- function(path = "inst/fixtures/components.json") {
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    writeLines(fixture_json(), path)
+    invisible(path)
 }
