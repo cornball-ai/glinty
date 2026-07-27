@@ -9,13 +9,7 @@ env:
 
 jobs:
   ci:
-    strategy:
-      matrix:
-        include:
-          - {os: macos-latest}
-          - {os: ubuntu-latest}
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v6
@@ -28,6 +22,54 @@ jobs:
 
       - name: Test
         run: ./run.sh run_tests
+
+  # Ubuntu goes through r2u + rapt instead of r-ci's bspm bootstrap:
+  # Python-free, dogfoods cornball's own installer, and the mirror
+  # fetch (the part that actually flakes) gets explicit retries.
+  ubuntu-rapt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: r2u and R
+        run: |
+          wget -q -O- https://eddelbuettel.github.io/r2u/assets/dirk_eddelbuettel_key.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/cranapt_key.asc > /dev/null
+          echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
+            | sudo tee /etc/apt/sources.list.d/cranapt.list
+          wget -q -O- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc > /dev/null
+          echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" \
+            | sudo tee /etc/apt/sources.list.d/cran_r.list
+          printf 'Package: *\nPin: release o=CRAN-Apt Project\nPin: release l=CRAN-Apt Packages\nPin-Priority: 700\n' \
+            | sudo tee /etc/apt/preferences.d/99cranapt
+          for i in 1 2 3 4; do
+            sudo apt-get update -qq && break || { echo "apt update failed, retry $i"; sleep 45; }
+          done
+          sudo apt-get install -y --no-install-recommends \
+            r-base-core r-base-dev debhelper
+
+      - name: rapt
+        run: |
+          git clone --depth 1 https://github.com/cornball-ai/rapt /tmp/rapt
+          cd /tmp/rapt/pkg
+          dpkg-buildpackage -us -uc -b
+          sudo apt-get install -y /tmp/rapt/rapt_*.deb
+          Rscript -e 'print(rapt::manager())'
+
+      - name: Dependencies (install.packages -> rapt -> apt -> r2u)
+        run: Rscript -e 'install.packages(c("digest", "jsonlite", "tinytest"))'
+
+      - name: Build and check
+        run: |
+          R CMD build .
+          _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --as-cran glinty_*.tar.gz
+
+      - name: Test
+        run: |
+          sudo R CMD INSTALL glinty_*.tar.gz
+          Rscript -e 'tinytest::test_package("glinty")'
 
   # The second lowering. Separate from the R job because it needs the
   # Flutter SDK and nothing else here does -- but it reads the same

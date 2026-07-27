@@ -744,21 +744,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("no theme, no block",
               bare.document.getElementById("g-theme") === null);
 
-        /* Token values are interpolated into CSS text; one that could
-           escape the declaration is dropped, not written. */
+        /* Each token is held to the same rule app_theme() enforces:
+           hex colors, one plain family name -- so a value the server
+           admitted is a value this client writes, and vice versa. */
         const hostile = freshPage({ setup: prerenderDemo });
         hostile.ws().open();
         hostile.ws().deliver({
             type: "welcome", session: "sx", protocol: 3,
             theme: { colors: { primary: "red;}body{display:none",
                                danger: "#b3261e" },
+                     font: { mono: "x;--g-primary:#ff0000",
+                             body: "JetBrains Mono" },
                      spacing: 4 }
         });
         const hnode = hostile.document.getElementById("g-theme");
-        check("a value that could escape the block is refused",
+        check("values outside the shared server rule are refused",
               hnode !== null &&
               !hnode.textContent.includes("display:none") &&
-              hnode.textContent.includes("--g-danger:#b3261e"));
+              !hnode.textContent.includes("#ff0000") &&
+              hnode.textContent.includes("--g-danger:#b3261e") &&
+              hnode.textContent.includes("--g-font-body:JetBrains Mono"));
     }
 
     /* ---------------------------------------------------------- */

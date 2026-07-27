@@ -1081,18 +1081,21 @@
                              "background", "text", "muted", "border",
                              "danger"];
 
-    /* Token values come from a server this client already trusts for
-       markup, but they are interpolated into CSS text, so anything
-       that could close the declaration or the block is refused. */
-    function cssSafe(value) {
-        return !/[;{}<>]/.test(value);
-    }
+    /* Token values are interpolated into CSS text, so each field is
+       held to the same rule app_theme() enforces server-side --
+       "#rrggbb(aa)" colors, one plain family name per font token.
+       Identical rules on both sides is the point: a value the server
+       admitted is a value this client writes, so the first paint and
+       the hydrated state cannot diverge. */
+    var HEX_COLOR = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
+    var FONT_FAMILY = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/;
 
     function themeCssText(theme) {
         var parts = [];
         var colors = theme.colors || {};
         THEME_COLOR_NAMES.forEach(function (name) {
-            if (typeof colors[name] === "string" && cssSafe(colors[name])) {
+            if (typeof colors[name] === "string" &&
+                    HEX_COLOR.test(colors[name])) {
                 parts.push("--g-" + name.replace(/_/g, "-") + ":" +
                            colors[name]);
             }
@@ -1104,10 +1107,10 @@
             parts.push("--g-radius:" + theme.radius + "px");
         }
         var font = theme.font || {};
-        if (typeof font.body === "string" && cssSafe(font.body)) {
+        if (typeof font.body === "string" && FONT_FAMILY.test(font.body)) {
             parts.push("--g-font-body:" + font.body);
         }
-        if (typeof font.mono === "string" && cssSafe(font.mono)) {
+        if (typeof font.mono === "string" && FONT_FAMILY.test(font.mono)) {
             parts.push("--g-font-mono:" + font.mono);
         }
         if (typeof font.size === "number" && isFinite(font.size)) {
