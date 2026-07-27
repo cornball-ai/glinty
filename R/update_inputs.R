@@ -1,6 +1,6 @@
 #' Update a text input from the server
 #'
-#' Sends a typed update_input message that the client applies without
+#' Sends a typed input_update message that the client applies without
 #' re-emitting an input event, and syncs the session's server-side
 #' input value so state converges without a round trip. The client
 #' skips the value patch when the element has focus, so it never
@@ -172,7 +172,7 @@ update_number_input <- function(session, id, value = NULL, min = NULL,
                       sync_value = value)
 }
 
-#' Queue an update_input message and sync server-side state
+#' Queue an input_update message and sync server-side state
 #'
 #' @param session a glinty_session
 #' @param id character input ID
@@ -187,7 +187,7 @@ send_input_update <- function(session, id, fields, sync_value = NULL) {
     if (length(fields) == 0L) {
         return(invisible(NULL))
     }
-    session$send(update_input_msg(id, fields))
+    session$send(input_update_msg(id, fields))
     if (!is.null(sync_value)) {
         handle_input(session, id, sync_value)
     }

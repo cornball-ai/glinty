@@ -140,6 +140,9 @@
             }
             el.classList.toggle("g-hidden", !evalCondition(cond));
         });
+        /* a panel toggling can reveal a plot that has never had a
+           real box to report */
+        scheduleMeasure();
     }
 
     /* ---------- tabsets ---------- */
@@ -159,45 +162,51 @@
             if (p.closest(".g-tabset") !== set) return;
             p.classList.toggle("g-hidden", p.dataset.gTabPanel !== name);
         });
+        /* the newly shown panel may hold a plot that was 0x0 while
+           hidden and has never reported a real box */
+        scheduleMeasure();
     }
 
     /* ---------- client-sized plots ---------- */
 
+    /* Last (width x height @ dpr) sent per output id. Dedup is per
+       id and client-side: an element that is rebuilt at the same size
+       stays silent, because the measurement is session state on the
+       server and survives anything that happens to the element. */
     var plotDims = {};
 
-    function measurePlots(report) {
+    /* A rendered box is the one thing the server cannot know from the
+       tree, so it is the one thing a client still reports after
+       adopting. Dimensions are logical (CSS) pixels; dpr says how
+       many physical pixels back each one, so the server can render a
+       raster that is sharp on this screen. A box that cannot be seen
+       (hidden, detached: zero size) is never reported -- zero is not
+       a size, and the server keeps the last real one. */
+    function reportPlotDims() {
+        var dpr = window.devicePixelRatio || 1;
         document.querySelectorAll("img.g-plot-output").forEach(function (el) {
             if (!el.id) return;
             var w = Math.round(el.clientWidth);
             var h = Math.round(el.clientHeight);
             if (w < 1 || h < 1) return;
-            var key = el.id + ":" + w + "x" + h;
+            var key = w + "x" + h + "@" + dpr;
             if (plotDims[el.id] === key) return;
             plotDims[el.id] = key;
-            report(el.id, "width", w);
-            report(el.id, "height", h);
+            send({ type: "measure", id: el.id, width: w, height: h,
+                   dpr: dpr });
         });
     }
 
-    /* A rendered box is the one thing the server cannot know from the
-       tree, so it is the one thing a client still reports after
-       adopting. (Stage 3 turns these reserved inputs into `measure`
-       messages.) */
-    function reportPlotDims() {
-        measurePlots(function (id, dim, value) {
-            send({
-                type: "input",
-                id: "..clientdata_output_" + id + "_" + dim,
-                value: value
-            });
-        });
+    /* One debounced entry point for everything that can change a
+       measured element's box or visibility: window resize, a tab
+       switch, a conditional panel toggling, dynamic UI arriving. The
+       dedup above makes spurious calls free. */
+    var measureTimer = null;
+    function scheduleMeasure() {
+        if (measureTimer) clearTimeout(measureTimer);
+        measureTimer = setTimeout(reportPlotDims, 250);
     }
-
-    var resizeTimer = null;
-    window.addEventListener("resize", function () {
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(reportPlotDims, 250);
-    });
+    window.addEventListener("resize", scheduleMeasure);
 
     /* ---------- outgoing ---------- */
 
@@ -783,24 +792,50 @@
         el.appendChild(tbl);
     }
 
-    function applyUpdate(msg) {
+    /* Apply an output message: the value is typed by kind (what the
+       renderer produced), and the receiving element decides how to
+       show it. The DOM property names of protocol 2 are gone from
+       the wire; this is the only place that knows text means
+       textContent here. */
+    function applyOutput(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
         clearError(el);
-        if (msg.property === "table") {
+        switch (msg.kind) {
+        case "text":
+            el.textContent = msg.value === null ? "" : msg.value;
+            break;
+        case "html":
+            el.innerHTML = msg.value === null ? "" : msg.value;
+            break;
+        case "table":
             buildTable(el, msg.value || {});
-            return;
+            break;
+        case "image": {
+            var v = msg.value || {};
+            el.src = v.src || "";
+            /* logical pixels: the raster behind src may be denser */
+            if (v.width) el.setAttribute("width", v.width);
+            if (v.height) el.setAttribute("height", v.height);
+            break;
         }
-        if (msg.property === "ui") {
+        case "audio":
+            el.src = (msg.value || {}).src || "";
+            break;
+        case "ui": {
             el.textContent = "";
             var node = buildComponent(msg.value);
             if (node) el.appendChild(node);
             /* the new subtree may contain conditional panels that
-               have never been evaluated */
+               have never been evaluated, and plots that have never
+               reported a box (refreshConditionals also schedules a
+               measure pass) */
             refreshConditionals();
-            return;
+            break;
         }
-        el[msg.property] = msg.value;
+        default:
+            console.warn("glinty: unknown output kind", msg.kind);
+        }
     }
 
     function applyRadioUpdate(group, msg) {
@@ -1009,10 +1044,10 @@
                              msg.handler);
             }
             break;
-        case "update":
-            applyUpdate(msg);
+        case "output":
+            applyOutput(msg);
             break;
-        case "update_input":
+        case "input_update":
             applyInputUpdate(msg);
             break;
         case "modal":

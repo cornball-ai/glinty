@@ -185,9 +185,24 @@ class GlintySession {
   }
 
   /// Report an output's box so the server can render at that size.
-  void sendMeasure(String id, int width, int height) {
-    _emit(GlintyOutgoing('measure',
-        {'type': 'measure', 'id': id, 'width': width, 'height': height}));
+  ///
+  /// Width and height are logical pixels -- Flutter's native unit, so
+  /// no conversion happens here, which is the point of the protocol
+  /// choosing it. [dpr] is `MediaQuery.devicePixelRatio`: the server
+  /// rasterizes at width x dpr by height x dpr and the image comes
+  /// back sized in logical pixels.
+  ///
+  /// Callers deduplicate per id: send only when (width, height, dpr)
+  /// changed, and never for a box that cannot be seen -- the server
+  /// keeps the last real measurement across rebuilds.
+  void sendMeasure(String id, int width, int height, {num dpr = 1}) {
+    _emit(GlintyOutgoing('measure', {
+      'type': 'measure',
+      'id': id,
+      'width': width,
+      'height': height,
+      'dpr': dpr,
+    }));
   }
 
   void _emit(GlintyOutgoing frame) {

@@ -1,16 +1,18 @@
-#' Create an update message
+#' Create an output message
 #'
-#' The DOM patch used by all outputs: set one property on the element
-#' with the given id.
+#' An output's current value, typed by what the renderer produced --
+#' not by the DOM property a browser would patch. How a value is
+#' displayed belongs to the receiving component; `kind` only says
+#' what the value is.
 #'
-#' @param id character element ID
-#' @param property character DOM property to update
-#' @param value new value
+#' @param id character output ID
+#' @param kind character one of text, html, table, image, audio, ui
+#' @param value the renderer's value
 #' @return character JSON string
 #' @keywords internal
-update_msg <- function(id, property, value) {
+output_msg <- function(id, kind, value) {
     as.character(jsonlite::toJSON(
-                                  list(type = "update", id = id, property = property, value = value),
+                                  list(type = "output", id = id, kind = kind, value = value),
                                   auto_unbox = TRUE, null = "null"
         ))
 }
@@ -26,8 +28,8 @@ update_msg <- function(id, property, value) {
 #'   selected, min, max, step) with NULLs already dropped
 #' @return character JSON string
 #' @keywords internal
-update_input_msg <- function(id, fields) {
-    msg <- c(list(type = "update_input", id = id), fields)
+input_update_msg <- function(id, fields) {
+    msg <- c(list(type = "input_update", id = id), fields)
     as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
 }
 
@@ -158,13 +160,18 @@ dispatch_client_message <- function(session, txt) {
     if (identical(msg$type, "hello")) {
         handle_hello(session, msg)
     } else if (identical(msg$type, "input")) {
-        if (is.character(msg$id)) {
+        # ids opening with ".." were protocol 2's reserved measurement
+        # channel; refusing them keeps a client from spoofing session
+        # measurement state through the input path.
+        if (is.character(msg$id) && !startsWith(msg$id, "..")) {
             handle_input(session, msg$id, normalize_value(msg$value))
         }
     } else if (identical(msg$type, "event")) {
         if (is.character(msg$id)) {
             handle_event(session, msg$id)
         }
+    } else if (identical(msg$type, "measure")) {
+        handle_measure(session, msg)
     } else {
         session$send(error_msg(NULL,
                                paste0("unknown message type: ", msg$type)))
@@ -197,6 +204,70 @@ handle_hello <- function(session, msg) {
                                  features = as.character(unlist(msg$features))
     )
     invisible(NULL)
+}
+
+#' Record a client measurement for one output
+#'
+#' Width and height arrive in logical pixels, dpr as physical pixels
+#' per logical one (absent means 1). Last write wins, per id, into
+#' session state -- element state on the client may come and go with
+#' rebuilds, but the session's idea of "how big is this output" only
+#' changes when a client reports a new box. A measurement for an id
+#' with no renderer yet is stored and harmless: dynamic UI races
+#' layout, and the output it names may be about to exist.
+#'
+#' Stored as a reactive value, so a renderer that read it re-renders
+#' exactly when a new box arrives.
+#'
+#' @param session a glinty_session
+#' @param msg decoded measure message
+#' @return invisible(NULL)
+#' @keywords internal
+handle_measure <- function(session, msg) {
+    if (!is.character(msg$id) || length(msg$id) != 1L || !nzchar(msg$id)) {
+        return(invisible(NULL))
+    }
+    w <- suppressWarnings(as.numeric(msg$width))
+    h <- suppressWarnings(as.numeric(msg$height))
+    dpr <- if (is.null(msg$dpr)) {
+        1
+    } else {
+        suppressWarnings(as.numeric(msg$dpr))
+    }
+    ok <- function(x, lo, hi) {
+        length(x) == 1L && is.finite(x) && x >= lo && x <= hi
+    }
+    # Zero is not a size, it is the absence of one; a client following
+    # the spec never sends it, and one that does must not shrink a
+    # plot for an element that is about to come back.
+    if (!ok(w, 1, 100000) || !ok(h, 1, 100000) || !ok(dpr, 0.1, 16)) {
+        return(invisible(NULL))
+    }
+    box <- list(width = w, height = h, dpr = dpr)
+    env <- session$measures
+    if (!exists(msg$id, envir = env)) {
+        env[[msg$id]] <- reactive_val(box)
+    } else {
+        env[[msg$id]](box)
+    }
+    invisible(NULL)
+}
+
+#' Read an output's client-reported box, reactively
+#'
+#' @param session a glinty_session
+#' @param id character output ID
+#' @return list(width, height, dpr), or NULL before any report
+#' @keywords internal
+measured_box <- function(session, id) {
+    env <- session$measures
+    if (!exists(id, envir = env)) {
+        # Creating the reactive value on first read means the read is
+        # tracked even before a client reports, so the first
+        # measurement re-renders the plot that is waiting for it.
+        env[[id]] <- reactive_val(NULL)
+    }
+    env[[id]]()
 }
 
 #' Normalize a JSON-decoded input value

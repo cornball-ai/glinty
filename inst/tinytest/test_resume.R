@@ -55,7 +55,7 @@ expect_equal(msgs[[1L]]$type, "welcome")
 expect_true(msgs[[1L]]$resumed)
 expect_equal(msgs[[2L]]$id, "echo")
 expect_equal(msgs[[2L]]$value, "v 42")
-expect_equal(msgs[[3L]]$type, "update_input")
+expect_equal(msgs[[3L]]$type, "input_update")
 session_end(s)
 
 # --- grace expiry ends the session ---

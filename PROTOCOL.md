@@ -48,7 +48,7 @@ is a translation of the other.
 | `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
 | `input` | `id`, `value` | an input changed |
 | `event` | `id` | a button press or other discrete event |
-| `measure` | `id`, `width`, `height` | a client-sized output's rendered box |
+| `measure` | `id`, `width`, `height`, `dpr?` | a client-sized output's box, in logical pixels |
 | `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
 | `ack` | `seq` | optional flow control, reserved |
 
@@ -304,12 +304,53 @@ native client would have to fake.
 v3 makes it a message:
 
 ```json
-{"type": "measure", "id": "scatter", "width": 640, "height": 480}
+{"type": "measure", "id": "scatter", "width": 640, "height": 480,
+ "dpr": 2}
 ```
 
-Sent on first layout and on resize, debounced by the client. The
-server exposes it to `render_plot()` and re-renders reactively, same
-as today, without pretending a measurement is an input.
+**Units: logical pixels.** `width` and `height` are the element's
+box in logical pixels -- CSS pixels in the browser, Flutter's native
+logical pixels in Flutter -- rounded to integers. Both frameworks
+already speak this unit, which is the point: neither side ever
+converts. Physical pixels never cross the wire as dimensions.
+
+**`dpr` is the device pixel ratio**, how many physical pixels back
+one logical pixel (`window.devicePixelRatio`,
+`MediaQuery.devicePixelRatio`). Optional; a missing `dpr` means 1.
+The server rasterizes at `width x dpr` by `height x dpr` physical
+pixels with resolution scaled by the same factor, and reports the
+image's *logical* size back in the output value, so text and lines
+keep their size while the raster matches the screen. That is what
+makes a plot sharp on a 2x display instead of upscaled soup.
+
+An `image` output's value is therefore
+`{src, width, height}` in logical pixels: the client sets the
+display size from it and never inspects the raster.
+
+**When to send, when not to:**
+
+- On first layout, on resize, and whenever a measured element
+  becomes visible or newly exists (a tab switch, a conditional panel
+  showing, dynamic UI arriving). Debounced by the client.
+- Only when the triple `(width, height, dpr)` differs from the last
+  one this client sent for that id. Dedup is per id, client-side.
+- **Never for a box that cannot be seen.** A hidden or detached
+  element measures zero; zero is not a size, it is the absence of
+  one, and reporting it would have the server render a 0x0 plot for
+  an element that is about to come back. The server keeps the last
+  real measurement instead.
+- A client that rebuilds its UI re-reports only what changed. The
+  server's measurements survive rebuilds because they are session
+  state, not element state.
+
+**Server side:** last write wins, per id. A measurement for an id
+the server has no renderer for is stored and harmless -- the output
+may be about to exist (dynamic UI races layout). Measurements reach
+renderers as reactive reads, so a new measurement re-renders exactly
+the outputs that depend on it. The reserved
+`..clientdata_output_*` input names are gone, and input ids starting
+with `..` are rejected so a client cannot spoof measurement state
+through the input channel.
 
 ## Theme
 
@@ -530,8 +571,14 @@ make it slower.
    invariants Flutter cannot stand in for, because only the browser
    adopts pre-rendered markup. All four invariants are
    mutation-tested: breaking any one of them fails its check.
-3. **Typed outputs.** Renderers carry `kind`; `measure` replaces the
-   `..clientdata_output_*` reserved inputs.
+3. **Typed outputs.** *(done)* `output` messages carry `kind`
+   (`update` and its DOM `property` are gone from the wire, as is
+   `update_input` in favour of `input_update`), and `measure`
+   replaces the `..clientdata_output_*` reserved inputs -- logical
+   pixels plus device pixel ratio, deduplicated per id, zero boxes
+   never sent, spoofing via `..`-prefixed inputs rejected. The dpr
+   dedup, the zero-box guard and the fixed-size no-subscribe rule
+   are all mutation-tested.
 4. **Theme and variants.**
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Flutter client grows a transport and becomes an app

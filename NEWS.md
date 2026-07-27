@@ -1,10 +1,37 @@
 # glinty (development version)
 
-Protocol v3, stages 1 and 2. The wire now carries semantic components
-rather than DOM instructions, which is what lets a frontend that is
-not a browser render a glinty app; and the bootstrap travels over the
-wire, with the browser hydrating its pre-rendered markup against a
-tree revision. See PROTOCOL.md.
+Protocol v3, stages 1 through 3. The wire now carries semantic
+components rather than DOM instructions, which is what lets a
+frontend that is not a browser render a glinty app; the bootstrap
+travels over the wire, with the browser hydrating its pre-rendered
+markup against a tree revision; and outputs are typed by what the
+renderer produced rather than by the DOM property a browser would
+patch. See PROTOCOL.md.
+
+Stage 3, typed outputs and measurement:
+
+- **Breaking**: `output` messages (`id`, `kind`, `value`) replace
+  `update` messages and their DOM `property`; `input_update`
+  replaces `update_input`. `render_plot()` sends
+  `{src, width, height}`, `render_audio()` sends `{src}`.
+- **Breaking**: `output_property()` is removed. It named a DOM
+  property, which is exactly the coupling v3 exists to end;
+  renderers say what they produce. Its one documented use (audio
+  src) is `render_audio()`.
+- Client-sized plots use `measure` messages: the element's box in
+  logical pixels plus the device pixel ratio, replacing the reserved
+  `..clientdata_output_*` inputs (which the input channel now
+  rejects). The raster is produced at `dpr` times the logical size
+  with resolution scaled to match, so plots are sharp on high-dpi
+  displays instead of upscaled. Clients deduplicate per id -- a dpr
+  change alone re-reports, a hidden (zero) box never does -- and the
+  server keeps the last real measurement across rebuilds, as session
+  state.
+- Fixed-size plots (`render_plot(width=, height=)`) do not subscribe
+  to measurements at all: they render once, at dpr 1.
+- The browser re-measures when a tab switches, a conditional panel
+  toggles, or dynamic UI arrives -- the moments a plot can appear at
+  a size the server has never heard about.
 
 Stage 2, bootstrap over the wire:
 

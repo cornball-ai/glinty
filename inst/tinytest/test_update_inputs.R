@@ -13,7 +13,7 @@ last_msg <- function() jsonlite::fromJSON(s$outgoing[[length(s$outgoing)]])
 # --- text: exact shape, NULL fields omitted ---
 update_text_input(s, "name", value = "troy")
 m <- last_msg()
-expect_equal(m$type, "update_input")
+expect_equal(m$type, "input_update")
 expect_equal(m$id, "name")
 expect_equal(m$value, "troy")
 expect_false("label" %in% names(m))
@@ -36,7 +36,7 @@ expect_equal(length(s$outgoing), n)
 # --- select: choices become {value, label} pairs ---
 update_select_input(s, "engine", choices = c(Fast = "fast", Slow = "slow"))
 m <- last_msg()
-expect_equal(m$type, "update_input")
+expect_equal(m$type, "input_update")
 expect_equal(m$choices$value, c("fast", "slow"))
 expect_equal(m$choices$label, c("Fast", "Slow"))
 # replacing choices without selected picks the first

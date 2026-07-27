@@ -153,7 +153,7 @@ expect_equal(msg$ui$component, "page")
 expect_equal(msg$ui_revision, page_rev)
 
 msg <- next_json()
-expect_equal(msg$type, "update")
+expect_equal(msg$type, "output")
 expect_equal(msg$id, "count")
 expect_equal(msg$value, "0")
 
@@ -191,7 +191,7 @@ expect_equal(msg$session, sid)
 
 # replayed output state: count is still 2, no clicks needed
 msg <- next_json()
-expect_equal(msg$type, "update")
+expect_equal(msg$type, "output")
 expect_equal(msg$id, "count")
 expect_equal(msg$value, "2")
 

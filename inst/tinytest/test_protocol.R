@@ -7,10 +7,10 @@
 new_session <- glinty:::new_session
 session_end <- glinty:::session_end
 dispatch <- glinty:::dispatch_client_message
-update_msg <- glinty:::update_msg
+output_msg <- glinty:::output_msg
 error_msg <- glinty:::error_msg
 welcome_msg <- glinty:::welcome_msg
-update_input_msg <- glinty:::update_input_msg
+input_update_msg <- glinty:::input_update_msg
 normalize_value <- glinty:::normalize_value
 component <- glinty:::component
 ui_revision <- glinty:::ui_revision
@@ -18,8 +18,8 @@ unclass_recursive <- glinty:::unclass_recursive
 
 # --- message builders produce exact JSON ---
 expect_equal(
-    update_msg("out", "textContent", "hi"),
-    '{"type":"update","id":"out","property":"textContent","value":"hi"}'
+    output_msg("out", "text", "hi"),
+    '{"type":"output","id":"out","kind":"text","value":"hi"}'
 )
 expect_equal(
     error_msg("out", "bad"),
@@ -30,8 +30,8 @@ expect_equal(
     '{"type":"error","id":null,"message":"bad"}'
 )
 expect_equal(
-    update_input_msg("name", list(value = "x")),
-    '{"type":"update_input","id":"name","value":"x"}'
+    input_update_msg("name", list(value = "x")),
+    '{"type":"input_update","id":"name","value":"x"}'
 )
 
 # --- welcome carries the session, the protocol, the tree and its ---

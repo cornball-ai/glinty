@@ -387,10 +387,12 @@ function freshPage(opts) {
     sandbox.WebSocket.OPEN = 1;
     sandbox.window = sandbox;
     sandbox.window.addEventListener = () => {};
+    if (opts && opts.dpr) sandbox.devicePixelRatio = opts.dpr;
 
     vm.createContext(sandbox);
     vm.runInContext(CLIENT_SRC, sandbox);
 
+    page.sandbox = sandbox;
     page.G = sandbox.window.Glinty;
     doc.fire("DOMContentLoaded", {});
     page.ws = () => page.sockets[page.sockets.length - 1];
@@ -617,8 +619,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("no session was adopted", page.G.sessionId() === null);
 
         const before = page.sent.length;
-        page.ws().deliver({ type: "update", id: "panel",
-                            property: "textContent", value: "late" });
+        page.ws().deliver({ type: "output", id: "panel",
+                            kind: "text", value: "late" });
         check("messages after a refusal are ignored",
               page.document.getElementById("panel") === null &&
               page.sent.length === before);
@@ -630,6 +632,94 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("and does not stack a disconnect overlay",
               page.document.getElementById("g-disconnected") === null);
         check("and never reloads the page", page.reloads === 0);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("measure: logical pixels, dpr, dedup, and staleness");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const shape = frames(transcript("measure-then-image"), "in")[0];
+        const page = freshPage({
+            metaRevision: rev,
+            dpr: 2,
+            setup: (doc, root) => {
+                prerenderDemo(doc, root);
+                const img = makeEl(doc, "img");
+                img.setAttribute("id", "scatter");
+                img.setAttribute("class", "g-plot-output");
+                img.setAttribute("data-g-output", "scatter");
+                img.setAttribute("data-g-kind", "image");
+                img.clientWidth = 640;
+                img.clientHeight = 480;
+                root.appendChild(img);
+                /* a hidden plot: zero box, must never be reported */
+                const ghost = makeEl(doc, "img");
+                ghost.setAttribute("id", "ghost");
+                ghost.setAttribute("class", "g-plot-output");
+                root.appendChild(ghost);
+            }
+        });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        const measures = () => page.frames("measure");
+        check("a visible plot reports one measure after adoption",
+              measures().length === 1);
+        check("shaped exactly as the transcript's measure frame",
+              JSON.stringify(measures()[0]) === JSON.stringify(shape));
+        check("dimensions are the logical box, dpr rides alongside",
+              measures()[0].width === 640 && measures()[0].dpr === 2);
+        check("a zero-size box is never reported",
+              !measures().some((m) => m.id === "ghost"));
+
+        /* Any input change schedules a re-measure pass (a panel may
+           have toggled); unchanged dims must dedup to silence. */
+        page.G.setInputValue("nudge", 1);
+        await sleep(300);
+        check("an unchanged box is not re-reported",
+              measures().length === 1);
+
+        /* ...but a real size change reports once. */
+        page.document.getElementById("scatter").clientWidth = 800;
+        page.G.setInputValue("nudge", 2);
+        await sleep(300);
+        check("a resized box reports the new size",
+              measures().length === 2 &&
+              measures()[1].width === 800 && measures()[1].dpr === 2);
+
+        /* Dragging a window to a monitor with a different density
+           changes dpr with the box unchanged; the raster is now
+           wrong, so dpr belongs in the dedup key. */
+        page.sandbox.devicePixelRatio = 1;
+        page.G.setInputValue("nudge", 3);
+        await sleep(300);
+        check("a dpr change alone re-reports",
+              measures().length === 3 && measures()[2].dpr === 1 &&
+              measures()[2].width === 800);
+
+        /* An image output answers in logical pixels; the client sets
+           the display size from the value, never the raster. */
+        page.ws().deliver(frames(transcript("measure-then-image"),
+                                 "out")[0]);
+        const img = page.document.getElementById("scatter");
+        check("the image lands with its logical size",
+              img.getAttribute("width") === "640" &&
+              img.getAttribute("height") === "480" &&
+              String(img.src).indexOf("data:image/png") === 0);
+
+        /* Dynamic UI can deliver a plot that has never had a box. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "plot_output", id: "late_plot" }
+        });
+        const late = page.document.getElementById("late_plot");
+        late.clientWidth = 320;
+        late.clientHeight = 240;
+        await sleep(300);
+        check("a plot arriving via dynamic UI reports its box",
+              measures().some((m) => m.id === "late_plot" &&
+                  m.width === 320 && m.height === 240));
     }
 
     /* ---------------------------------------------------------- */
@@ -655,8 +745,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             page.ws().deliver(frames(hyd, "out")[0]);
             let threw = null;
             try {
-                page.ws().deliver({ type: "update", id: "panel",
-                                    property: "ui", value: f.component });
+                page.ws().deliver({ type: "output", id: "panel",
+                                    kind: "ui", value: f.component });
             } catch (e) {
                 threw = e;
             }
@@ -676,8 +766,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.ws().deliver(frames(hyd, "out")[0]);
         const host = page.document.getElementById("panel");
         const build = (component) => {
-            page.ws().deliver({ type: "update", id: "panel",
-                                property: "ui", value: component });
+            page.ws().deliver({ type: "output", id: "panel",
+                                kind: "ui", value: component });
             return host.children[0];
         };
         const byName = (name) =>
@@ -766,7 +856,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
            client only knew the retired tag-tree format and built
            nothing from it. */
         page.ws().deliver({
-            type: "update", id: "panel", property: "ui",
+            type: "output", id: "panel", kind: "ui",
             value: {
                 component: "column",
                 children: [

@@ -153,18 +153,52 @@ wire_transcripts <- function() {
         ),
          list(
               name = "measure-then-image",
-              notes = paste("a client-sized output reporting its box, and the",
-                            "image that comes back at that size; replaces the",
-                            "reserved ..clientdata_output_* inputs"),
+              notes = paste("a client-sized output reporting its box in",
+                            "logical pixels with its device pixel ratio, and",
+                            "the image that comes back: rasterized at 2x",
+                            "behind that src, sized in logical pixels in the",
+                            "value; replaces the reserved",
+                            "..clientdata_output_* inputs"),
               frames = list(
                             list(dir = "in", message = list(
                         type = "measure", id = "scatter", width = 640L,
-                        height = 480L
+                        height = 480L, dpr = 2L
                     )),
                             list(dir = "out", message = list(
                         type = "output", id = "scatter", kind = "image",
                         value = list(src = "data:image/png;base64,AAAA",
                                      width = 640L, height = 480L)
+                    ))
+            )
+        ),
+         list(
+              name = "event-then-ui",
+              notes = paste("dynamic UI: an output whose value is a component",
+                            "tree; every client builds it the way it builds",
+                            "welcome.ui, bindings included"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event", id = "more")),
+                            list(dir = "out", message = list(
+                        type = "output", id = "panel", kind = "ui",
+                        value = unclass_recursive(component("column",
+                                children = list(
+                                    component("heading", value = "Details",
+                                        level = 4L),
+                                    component("text_input", id = "extra",
+                                        label = "Extra:")
+                                )))
+                    ))
+            )
+        ),
+         list(
+              name = "input-update",
+              notes = paste("a server-driven input change; the client applies",
+                            "it widget-aware and never echoes an input frame",
+                            "back, since the server already synced its copy"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event", id = "randomize")),
+                            list(dir = "out", message = list(
+                        type = "input_update", id = "txt", value = "corn"
                     ))
             )
         )

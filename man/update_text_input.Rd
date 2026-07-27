@@ -18,7 +18,7 @@ update_text_input(session, id, value = NULL, label = NULL)
 invisible(NULL)
 }
 \description{
-Sends a typed update_input message that the client applies without
+Sends a typed input_update message that the client applies without
 re-emitting an input event, and syncs the session's server-side
 input value so state converges without a round trip. The client
 skips the value patch when the element has focus, so it never

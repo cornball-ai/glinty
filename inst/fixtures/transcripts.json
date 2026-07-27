@@ -237,7 +237,7 @@
     },
     {
       "name": "measure-then-image",
-      "notes": "a client-sized output reporting its box, and the image that comes back at that size; replaces the reserved ..clientdata_output_* inputs",
+      "notes": "a client-sized output reporting its box in logical pixels with its device pixel ratio, and the image that comes back: rasterized at 2x behind that src, sized in logical pixels in the value; replaces the reserved ..clientdata_output_* inputs",
       "frames": [
         {
           "dir": "in",
@@ -245,7 +245,8 @@
             "type": "measure",
             "id": "scatter",
             "width": 640,
-            "height": 480
+            "height": 480,
+            "dpr": 2
           }
         },
         {
@@ -259,6 +260,65 @@
               "width": 640,
               "height": 480
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "event-then-ui",
+      "notes": "dynamic UI: an output whose value is a component tree; every client builds it the way it builds welcome.ui, bindings included",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "event",
+            "id": "more"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "output",
+            "id": "panel",
+            "kind": "ui",
+            "value": {
+              "component": "column",
+              "children": [
+                {
+                  "component": "heading",
+                  "value": "Details",
+                  "level": 4
+                },
+                {
+                  "component": "text_input",
+                  "id": "extra",
+                  "label": "Extra:",
+                  "value": "",
+                  "emit": "live"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "input-update",
+      "notes": "a server-driven input change; the client applies it widget-aware and never echoes an input frame back, since the server already synced its copy",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "event",
+            "id": "randomize"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "input_update",
+            "id": "txt",
+            "value": "corn"
           }
         }
       ]

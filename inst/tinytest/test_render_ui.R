@@ -28,7 +28,7 @@ glinty:::with_session(s, {
 flush_reactions()
 raw1 <- s$outgoing[[length(s$outgoing)]]
 m1 <- jsonlite::fromJSON(raw1, simplifyVector = FALSE)
-expect_equal(m1$property, "ui")
+expect_equal(m1$kind, "ui")
 expect_null(m1$value)
 expect_true(grepl('"value":null', raw1, fixed = TRUE))
 
@@ -86,10 +86,10 @@ visible(TRUE)
 flush_reactions()
 msgs <- lapply(s3$outgoing, function(m) jsonlite::fromJSON(m,
     simplifyVector = FALSE))
-props <- vapply(msgs, function(m) {
-    if (is.null(m$property)) "" else m$property
+kinds_seen <- vapply(msgs, function(m) {
+    if (is.null(m$kind)) "" else m$kind
 }, character(1L))
-ui_at <- which(props == "ui")
+ui_at <- which(kinds_seen == "ui")
 expect_equal(length(ui_at), 1L)
 # the ui update is followed by a replay of live_count's last state
 later <- msgs[seq_along(msgs) > ui_at]

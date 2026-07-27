@@ -1,9 +1,9 @@
 % tinyrox says don't edit this manually, but it can't stop you!
-\name{update_input_msg}
-\alias{update_input_msg}
+\name{input_update_msg}
+\alias{input_update_msg}
 \title{Create a typed input-update message}
 \usage{
-update_input_msg(id, fields)
+input_update_msg(id, fields)
 }
 \arguments{
 \item{id}{character input ID}

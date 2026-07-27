@@ -22,6 +22,7 @@ new_session <- function(id, send_fn = NULL) {
     s$grace_timer <- NULL
     s$last_sent <- new.env(parent = emptyenv())
     s$downloads <- new.env(parent = emptyenv())
+    s$measures <- new.env(parent = emptyenv())
     s$send_fn <- send_fn
 
     s$send <- function(msg) {

@@ -309,9 +309,31 @@ void main() {
       final expected = frames(transcript('measure-then-image'), 'in').first;
       final s = GlintySession();
       s.sendMeasure(expected['id'] as String, expected['width'] as int,
-          expected['height'] as int);
+          expected['height'] as int, dpr: expected['dpr'] as num);
 
       expect(s.sent.single.body, expected);
+    });
+
+    test('a ui-kind output stores its tree without being drawable', () {
+      // ui_output is on this client's unsupported list until stage 2
+      // of its own growth; the session must still accept the value
+      // rather than dying on it.
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive(serverFrame('event-then-ui', 'output'));
+
+      expect(s.refused, isFalse);
+      expect(s.values['panel'], isA<Map<String, dynamic>>());
+    });
+
+    test('input_update is ignored until this client renders inputs live',
+        () {
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive(serverFrame('input-update', 'input_update'));
+
+      expect(s.refused, isFalse);
+      expect(s.ui, isNotNull);
     });
 
     test('an unknown message type is ignored, not fatal', () {
