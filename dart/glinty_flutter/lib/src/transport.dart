@@ -269,6 +269,12 @@ class GlintyConnection extends ChangeNotifier {
   }
 
   void _onClosed() {
+    // This socket's welcome is never coming. Leaving its timer armed
+    // lets it fire during the *replacement* handshake and tear that
+    // one down instead -- a disconnect before welcome would keep
+    // killing every socket after it.
+    _welcomeTimer?.cancel();
+    _welcomeTimer = null;
     _events?.cancel();
     _events = null;
     _socket = null;

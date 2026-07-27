@@ -85,6 +85,7 @@ Map<String, dynamic> welcome({bool? resumed, String revision = 'r1'}) => {
     };
 
 void main() {
+  _round3();
   testWidgets('a tap redraws the app without a server frame',
       (tester) async {
     late FakeSocket socket;
@@ -369,3 +370,195 @@ void main() {
     expect(sockets.last.sent.single['features'], isEmpty);
   });
 }
+
+// --- Codex round 3: the five that were still wrong ---
+
+void _round3() {
+  testWidgets('a push the user typed over is spent, not deferred',
+      (tester) async {
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcome());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('name')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('name')), 'Tro');
+    await tester.pumpAndSettle();
+
+    // arrives while focused: refused
+    socket.deliver({'type': 'input_update', 'id': 'name',
+      'value': 'STALE'});
+    await tester.pumpAndSettle();
+    expect(find.text('Tro'), findsOneWidget);
+
+    // focus leaves, and any later rebuild must NOT resurrect it
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    socket.deliver({'type': 'output', 'id': 'unrelated', 'kind': 'text',
+      'value': 'x'});
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tro'), findsOneWidget,
+        reason: 'deferring instead of dropping just moves the '
+            'overwrite to the next rebuild');
+    expect(find.text('STALE'), findsNothing);
+
+    // but a NEWER push, after focus left, does land
+    socket.deliver({'type': 'input_update', 'id': 'name',
+      'value': 'FRESH'});
+    await tester.pumpAndSettle();
+    expect(find.text('FRESH'), findsOneWidget);
+  });
+
+  testWidgets('input_update relabels and rebounds a slider',
+      (tester) async {
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcomeSlider());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Points:'), findsOneWidget);
+    var slider = tester.widget<Slider>(find.byKey(const Key('n')));
+    expect(slider.max, 100);
+
+    socket.deliver({'type': 'input_update', 'id': 'n', 'value': 200,
+      'label': 'Many points:', 'min': 0, 'max': 500, 'step': 50});
+    await tester.pumpAndSettle();
+
+    expect(find.text('Many points:'), findsOneWidget);
+    slider = tester.widget<Slider>(find.byKey(const Key('n')));
+    expect(slider.max, 500);
+    expect(slider.value, 200);
+    expect(slider.divisions, 10, reason: '(500 - 0) / 50');
+  });
+
+  testWidgets('a select and a radio group show their labels',
+      (tester) async {
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcome());
+    await tester.pumpAndSettle();
+    expect(find.text('Engine:'), findsOneWidget);
+
+    socket.deliver({'type': 'input_update', 'id': 'engine',
+      'label': 'Backend:'});
+    await tester.pumpAndSettle();
+    expect(find.text('Backend:'), findsOneWidget);
+    expect(find.text('Engine:'), findsNothing);
+  });
+
+  testWidgets('a download button with nowhere to go is disabled',
+      (tester) async {
+    final dl = GlintyComponent.fromJson({
+      'component': 'download_button', 'id': 'report',
+      'label': 'Save', 'variant': 'default',
+    });
+    // no onTicket: the press could only request a ticket and throw
+    // the grant away
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (c) => GlintyRenderer().build(c, dl)),
+      ),
+    ));
+    expect(
+        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+
+    var asked = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+            builder: (c) => GlintyRenderer(
+                  onTicket: (id, purpose) => asked++,
+                ).build(c, dl)),
+      ),
+    ));
+    await tester.tap(find.byType(ElevatedButton));
+    expect(asked, 1);
+  });
+
+  testWidgets('a disconnect before welcome does not kill the retry',
+      (tester) async {
+    final sockets = <FakeSocket>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async {
+            final s = FakeSocket();
+            sockets.add(s);
+            return s;
+          },
+        ),
+      ),
+    ));
+    await tester.pump();
+    // dropped before it ever answered hello
+    sockets.last.drop();
+    await tester.pump(const Duration(seconds: 1));
+    expect(sockets, hasLength(2));
+
+    // the dead socket's welcome timer must not fire into this one
+    await tester.pump(const Duration(seconds: 16));
+    sockets.last.deliver(welcome());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Name:'), findsOneWidget,
+        reason: "the first socket's timeout would have torn this "
+            'handshake down');
+  });
+
+  test('adopting a cached tree still seeds its inputs', () {
+    final cached = GlintyComponent.fromJson(tree);
+    final s = GlintySession(cachedUi: cached, cachedRevision: 'r1');
+    s.receive(welcome());
+
+    expect(s.source, GlintyTreeSource.adopted);
+    expect(s.inputs['more'], false,
+        reason: 'an adopted tree with no seeded state leaves every '
+            'conditional reading "unset", so panels start wrong');
+    expect(s.conditionHolds(
+        {'op': 'is', 'id': 'more', 'values': [true]}), isFalse);
+  });
+}
+
+final sliderTree = {
+  'component': 'page',
+  'children': [
+    {'component': 'slider_input', 'id': 'n', 'label': 'Points:',
+      'min': 0, 'max': 100, 'value': 25, 'emit': 'live'},
+  ],
+};
+
+Map<String, dynamic> welcomeSlider() => {
+      'type': 'welcome',
+      'session': 's1',
+      'protocol': 3,
+      'ui_revision': 'rs',
+      'ui': sliderTree,
+    };

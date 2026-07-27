@@ -169,9 +169,9 @@ class GlintyRenderer {
       case 'checkbox_input':
         return _checkbox(c);
       case 'radio_buttons':
-        return _radios(c);
+        return _radios(context, c);
       case 'slider_input':
-        return _slider(c);
+        return _slider(context, c);
       case 'button':
       case 'download_button':
         return _button(context, c);
@@ -420,12 +420,30 @@ class GlintyRenderer {
     );
   }
 
+  /// A control with its label above it, when it has one. Dropdowns,
+  /// radio groups and sliders carry a label the same way text fields
+  /// do -- and it can change under an input_update.
+  Widget _labelled(BuildContext context, GlintyComponent c, Widget child) {
+    final label = _label(c);
+    if (label == null) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        child,
+      ],
+    );
+  }
+
   Widget _select(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final choices = _choices(c);
     final current = _value(id, c.str('selected'))?.toString() ??
         (choices.isNotEmpty ? choices.first.value : null);
-    return DropdownButton<String>(
+    return _labelled(context, c, DropdownButton<String>(
       key: Key(id),
       // a value the choices no longer contain would assert; fall
       // back rather than crash on a tree that changed under us
@@ -437,7 +455,7 @@ class GlintyRenderer {
       onChanged: (v) {
         if (v != null) onInput?.call(id, v);
       },
-    );
+    ));
   }
 
   Widget _checkbox(GlintyComponent c) {
@@ -450,7 +468,7 @@ class GlintyRenderer {
     );
   }
 
-  Widget _radios(GlintyComponent c) {
+  Widget _radios(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     // RadioGroup replaced per-tile groupValue/onChanged in 3.32.
     return RadioGroup<String>(
@@ -470,23 +488,27 @@ class GlintyRenderer {
       ));
   }
 
-  Widget _slider(GlintyComponent c) {
+  Widget _slider(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final min = _numField(c, "min") ?? 0;
     final max = _numField(c, "max") ?? 1;
     final step = _numField(c, "step");
     final raw = _value(id, c.number('value'));
     final current = raw is num ? raw.toDouble() : min;
-    return Slider(
-      key: Key(id),
-      min: min,
-      max: max,
-      // Flutter wants a division count where the protocol says step
-      // size. Derivable because step is a number.
-      divisions: step != null && step > 0 ? ((max - min) / step).round() : null,
-      value: current.clamp(min, max),
-      onChanged: (v) => onInput?.call(id, v),
-    );
+    return _labelled(
+        context,
+        c,
+        Slider(
+          key: Key(id),
+          min: min,
+          max: max,
+          // Flutter wants a division count where the protocol says
+          // step size. Derivable because step is a number.
+          divisions:
+              step != null && step > 0 ? ((max - min) / step).round() : null,
+          value: current.clamp(min, max),
+          onChanged: (v) => onInput?.call(id, v),
+        ));
   }
 
   Widget _button(BuildContext context, GlintyComponent c) {
@@ -501,6 +523,11 @@ class GlintyRenderer {
             label,
           ]);
     final isDownload = c.type == 'download_button';
+    // A download this client cannot deliver is a disabled button, not
+    // a live one that asks for a ticket and throws it away. The gap
+    // is the embedder's to close (onDownload); until then say so by
+    // being unpressable rather than by doing nothing visibly.
+    final dead = isDownload && onTicket == null;
     void fire() {
       if (isDownload) {
         onTicket?.call(id, 'download');
@@ -511,19 +538,19 @@ class GlintyRenderer {
 
     final scheme = Theme.of(context).colorScheme;
     return switch (_variant(c.type, c.str('variant'))) {
-      'primary' => FilledButton(key: Key(id), onPressed: fire, child: child),
+      'primary' => FilledButton(key: Key(id), onPressed: dead ? null : fire, child: child),
       'secondary' =>
-        OutlinedButton(key: Key(id), onPressed: fire, child: child),
+        OutlinedButton(key: Key(id), onPressed: dead ? null : fire, child: child),
       // danger comes from the theme's danger token, which
       // glintyThemeData maps onto the scheme's error slot
       'danger' => FilledButton(
           key: Key(id),
-          onPressed: fire,
+          onPressed: dead ? null : fire,
           style: FilledButton.styleFrom(
               backgroundColor: scheme.error, foregroundColor: scheme.onError),
           child: child),
-      'ghost' => TextButton(key: Key(id), onPressed: fire, child: child),
-      _ => ElevatedButton(key: Key(id), onPressed: fire, child: child),
+      'ghost' => TextButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+      _ => ElevatedButton(key: Key(id), onPressed: dead ? null : fire, child: child),
     };
   }
 
@@ -647,6 +674,19 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
       TextEditingController(text: widget.value);
   final FocusNode _focus = FocusNode();
 
+  /// The last server value this field has been shown. A push the
+  /// user typed over is spent, not queued.
+  late String _seen;
+
+  @override
+  void initState() {
+    super.initState();
+    // eagerly: a `late` field initialises on first *access*, which
+    // happens inside didUpdateWidget -- by then `widget` is the new
+    // one, so _seen would equal the incoming push and swallow it
+    _seen = widget.value;
+  }
+
   @override
   void didUpdateWidget(_GlintyTextField old) {
     super.didUpdateWidget(old);
@@ -654,7 +694,17 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
     // mid-word replaces what someone is in the middle of typing --
     // the browser client refuses this for the same reason
     // (`el !== document.activeElement`).
-    if (_focus.hasFocus) return;
+    //
+    // Refused, not deferred: the value is marked seen so that the
+    // next rebuild after focus leaves does not quietly apply it. A
+    // push the user typed over is spent. Only a *newer* value --
+    // one the server sent after this -- lands.
+    if (widget.value != _seen) {
+      _seen = widget.value;
+      if (_focus.hasFocus) return;
+    } else {
+      return;
+    }
     if (widget.value != _controller.text) {
       // Keep the caret where the user left it when the text is the
       // same length or longer; a server push that shortens the value

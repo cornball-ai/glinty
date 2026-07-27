@@ -294,6 +294,13 @@ class GlintySession {
       // Invariant 3, the matching half: the cached tree is the tree
       // being sent, so keep it and hold on to any widget state.
       source = GlintyTreeSource.adopted;
+      // Adopting a tree still needs its state. A client handed a
+      // cached tree it never seeded has empty inputs, so every
+      // conditional panel reads "unset matches nothing" and starts
+      // hidden -- the one case where adoption would disagree with
+      // the server about what is on screen. Only fills what is
+      // missing: an edit already made is not undone by adopting.
+      seedInputs(_ui).forEach((id, v) => inputs.putIfAbsent(id, () => v));
     } else {
       // Invariant 3, the mismatching half: whatever we cached
       // describes a different tree. Replace it. Patching a stale tree
