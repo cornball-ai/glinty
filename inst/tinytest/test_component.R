@@ -177,14 +177,22 @@ if (nzchar(path) && file.exists(path)) {
     on_disk <- paste(readLines(path, warn = FALSE), collapse = "\n")
     expect_equal(trimws(on_disk), trimws(fixture_json()))
 
-    # and it parses as the same trees
+    # and it parses as the same trees, behind a protocol marker a
+    # consumer in another language can check before rendering
     parsed <- jsonlite::fromJSON(path, simplifyVector = FALSE)
-    expect_equal(length(parsed), length(fx))
+    expect_equal(parsed$protocol, glinty:::PROTOCOL_VERSION)
+    expect_equal(length(parsed$fixtures), length(fx))
     for (i in seq_along(fx)) {
-        expect_equal(parsed[[i]]$name, fx[[i]]$name)
-        expect_equal(parsed[[i]]$component$component,
+        expect_equal(parsed$fixtures[[i]]$name, fx[[i]]$name)
+        expect_equal(parsed$fixtures[[i]]$component$component,
                      fx[[i]]$component$component)
     }
+
+    # The digest is the artifact identity a copy in another repo pins
+    # itself to. Byte-level, because canonical JSON across two
+    # languages is not a fight worth having.
+    sha <- glinty:::fixture_digest(path)
+    expect_true(is.character(sha) && nchar(sha) == 64L)
 } else {
     exit_file("fixture JSON not installed")
 }

@@ -517,3 +517,12 @@ print.glinty_component <- function(x, ...) {
         "\n")
     invisible(x)
 }
+
+#' The protocol version this glinty speaks
+#'
+#' Carried in the fixture artifact and, from stage 2, in `hello` and
+#' `welcome`, so a client can refuse a wire format it was not written
+#' against rather than rendering half of it.
+#'
+#' @keywords internal
+PROTOCOL_VERSION <- 3L

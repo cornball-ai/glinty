@@ -187,8 +187,32 @@ fixture_json <- function() {
         list(name = f$name, notes = f$notes,
              component = unclass_recursive(f$component))
     })
-    as.character(jsonlite::toJSON(payload, auto_unbox = TRUE, pretty = TRUE,
+    # Wrapped rather than a bare array so a consumer in another
+    # language can check it is answering to the protocol it was written
+    # against, instead of silently rendering a newer shape. A copy of
+    # this file that has drifted is worse than no copy: both repos pass
+    # independently, against different data.
+    as.character(jsonlite::toJSON(list(protocol = PROTOCOL_VERSION,
+                                       fixtures = payload),
+                                  auto_unbox = TRUE, pretty = TRUE,
                                   null = "null"))
+}
+
+#' Digest of the fixture file as bytes
+#'
+#' Byte-level rather than structural, because the consumers are in
+#' different languages and canonical JSON serialization is not
+#' something to litigate across two of them. The file is the artifact;
+#' its sha256 is its identity.
+#'
+#' @param path character file to hash; defaults to the installed copy
+#' @return character sha256, or NA when the file is absent
+#' @keywords internal
+fixture_digest <- function(path = fixture_json_path()) {
+    if (!nzchar(path) || !file.exists(path)) {
+        return(NA_character_)
+    }
+    digest::digest(file = path, algo = "sha256")
 }
 
 #' Path to the checked-in fixture JSON
