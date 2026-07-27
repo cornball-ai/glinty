@@ -34,10 +34,14 @@ const supportedComponents = <String>{
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
   'file_input', // needs the file_picker package, outside the SDK
-  'plot_output', // stage 3: needs the measure message round trip
+  // The protocol side of these exists (measure messages, image and
+  // ui output kinds); this renderer has not grown the client half:
+  // LayoutBuilder-driven measurement for plots, and building a
+  // ui-kind value into its slot.
+  'plot_output',
   'image_output',
+  'ui_output',
   'audio_output', // needs an audio package, outside the SDK
-  'ui_output', // stage 2: the subtree arrives at runtime
   'raw_html', // arbitrary markup has no Flutter equivalent, by design
 };
 
