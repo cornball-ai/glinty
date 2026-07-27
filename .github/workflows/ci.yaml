@@ -33,26 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: r2u and R
-        run: |
-          wget -q -O- https://eddelbuettel.github.io/r2u/assets/dirk_eddelbuettel_key.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/cranapt_key.asc > /dev/null
-          echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
-            | sudo tee /etc/apt/sources.list.d/cranapt.list
-          wget -q -O- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc > /dev/null
-          echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" \
-            | sudo tee /etc/apt/sources.list.d/cran_r.list
-          printf 'Package: *\nPin: release o=CRAN-Apt Project\nPin: release l=CRAN-Apt Packages\nPin-Priority: 700\n' \
-            | sudo tee /etc/apt/preferences.d/99cranapt
-          ok=0
-          for i in 1 2 3 4; do
-            if sudo apt-get update -qq; then ok=1; break; fi
-            echo "apt update failed, retry $i"; sleep 45
-          done
-          test "$ok" = 1 || { echo "apt update failed after 4 attempts"; exit 1; }
-          sudo apt-get install -y --no-install-recommends \
-            r-base-core r-base-dev debhelper
+      - uses: ./.github/actions/r2u
+
+      - name: Build tools for the rapt .deb
+        run: sudo apt-get install -y --no-install-recommends r-base-dev debhelper
 
       - name: rapt
         env:
@@ -118,21 +102,13 @@ jobs:
       # Dependencies come from r2u as apt binaries: openssl needs
       # libssl headers to build from source, and the site library
       # needs root either way.
-      - name: R and glinty
+      - uses: ./.github/actions/r2u
+
+      - name: glinty and its dependencies
         working-directory: .
         run: |
-          wget -q -O- https://eddelbuettel.github.io/r2u/assets/dirk_eddelbuettel_key.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/cranapt_key.asc > /dev/null
-          echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
-            | sudo tee /etc/apt/sources.list.d/cranapt.list
-          ok=0
-          for i in 1 2 3 4; do
-            if sudo apt-get update -qq; then ok=1; break; fi
-            echo "apt update failed, retry $i"; sleep 45
-          done
-          test "$ok" = 1 || { echo "apt update failed after 4 attempts"; exit 1; }
           sudo apt-get install -y --no-install-recommends \
-            r-base-core r-cran-digest r-cran-jsonlite r-cran-openssl
+            r-cran-digest r-cran-jsonlite r-cran-openssl
           sudo R CMD INSTALL .
 
       - run: flutter pub get
