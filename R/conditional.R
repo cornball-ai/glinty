@@ -14,8 +14,8 @@
 #' cond_or() and cond_not(). There is no JavaScript expression to
 #' write and nothing is eval()ed.
 #'
-#' Browser-only: the native backend renders the children unwrapped
-#' and always visible.
+#' Condition evaluation is a client capability. A frontend that does
+#' not implement it renders the children always visible.
 #'
 #' @param ... child elements
 #' @param condition a condition from input_is() and friends

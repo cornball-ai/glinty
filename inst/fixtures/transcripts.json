@@ -1,0 +1,245 @@
+{
+  "protocol": 3,
+  "transcripts": [
+    {
+      "name": "hello-welcome",
+      "notes": "the opening exchange; the client declares what it can render, the server answers with the tree and its revision",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "hello",
+            "protocol": 3,
+            "client": "example/0.0.1",
+            "components": ["page", "heading", "text_input", "text_output"],
+            "kinds": ["text"],
+            "features": ["measure"]
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "welcome",
+            "session": "s1",
+            "protocol": 3,
+            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui": {
+              "component": "page",
+              "children": [
+                {
+                  "component": "heading",
+                  "value": "Demo",
+                  "level": 1
+                },
+                {
+                  "component": "text_input",
+                  "id": "name",
+                  "label": "Name:",
+                  "value": "",
+                  "emit": "live"
+                },
+                {
+                  "component": "text_output",
+                  "id": "greeting",
+                  "variant": "normal"
+                }
+              ],
+              "title": "Demo"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "hello-welcome-hydrated",
+      "notes": "the same exchange when the client already has matching pre-rendered markup: it adopts rather than rebuilds, and sends nothing",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "hello",
+            "protocol": 3,
+            "client": "glinty-js/0.5.0",
+            "prerendered": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "welcome",
+            "session": "s2",
+            "protocol": 3,
+            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui": {
+              "component": "page",
+              "children": [
+                {
+                  "component": "heading",
+                  "value": "Demo",
+                  "level": 1
+                },
+                {
+                  "component": "text_input",
+                  "id": "name",
+                  "label": "Name:",
+                  "value": "",
+                  "emit": "live"
+                },
+                {
+                  "component": "text_output",
+                  "id": "greeting",
+                  "variant": "normal"
+                }
+              ],
+              "title": "Demo"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "revision-mismatch",
+      "notes": "pre-rendered markup from a different tree; the client must discard it and build from welcome rather than patching a stale DOM",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "hello",
+            "protocol": 3,
+            "client": "glinty-js/0.5.0",
+            "prerendered": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "welcome",
+            "session": "s3",
+            "protocol": 3,
+            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui": {
+              "component": "page",
+              "children": [
+                {
+                  "component": "heading",
+                  "value": "Demo",
+                  "level": 1
+                },
+                {
+                  "component": "text_input",
+                  "id": "name",
+                  "label": "Name:",
+                  "value": "",
+                  "emit": "live"
+                },
+                {
+                  "component": "text_output",
+                  "id": "greeting",
+                  "variant": "normal"
+                }
+              ],
+              "title": "Demo"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "protocol-mismatch",
+      "notes": "a server speaking a newer protocol; the client refuses visibly rather than rendering the half it recognises",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "hello",
+            "protocol": 3,
+            "client": "glinty-js/0.5.0"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "welcome",
+            "session": "s4",
+            "protocol": 4,
+            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui": {
+              "component": "page",
+              "children": [
+                {
+                  "component": "heading",
+                  "value": "Demo",
+                  "level": 1
+                },
+                {
+                  "component": "text_input",
+                  "id": "name",
+                  "label": "Name:",
+                  "value": "",
+                  "emit": "live"
+                },
+                {
+                  "component": "text_output",
+                  "id": "greeting",
+                  "variant": "normal"
+                }
+              ],
+              "title": "Demo"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "input-then-output",
+      "notes": "a user edit and the output it drives; the value is typed by kind, not by DOM property",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "input",
+            "id": "name",
+            "value": "Troy"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "output",
+            "id": "greeting",
+            "kind": "text",
+            "value": "Hello, Troy"
+          }
+        }
+      ]
+    },
+    {
+      "name": "measure-then-image",
+      "notes": "a client-sized output reporting its box, and the image that comes back at that size; replaces the reserved ..clientdata_output_* inputs",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "measure",
+            "id": "scatter",
+            "width": 640,
+            "height": 480
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "output",
+            "id": "scatter",
+            "kind": "image",
+            "value": {
+              "src": "data:image/png;base64,AAAA",
+              "width": 640,
+              "height": 480
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

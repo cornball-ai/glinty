@@ -2,8 +2,8 @@ library(glinty)
 
 app(
     ui = page(
-        h1("Counter"),
-        p("Each browser tab gets its own session-scoped count."),
+        heading("Counter", level = 1L),
+        txt("Each browser tab gets its own session-scoped count."),
         button("inc", "+1"),
         button("reset", "Reset"),
         text_output("count"),

@@ -30,7 +30,7 @@ library(glinty)
 
 counter <- app(
     ui = page(
-        h1("Counter"),
+        heading("Counter", level = 1L),
         button("inc", "+1"),
         text_output("count"),
         title = "Counter"
@@ -101,57 +101,37 @@ only what changed. One R process serves N tabs from a
 `socketSelect()` event loop; `invalidate_later()` timers wake it for
 clocks and polling.
 
-Custom widgets need no JavaScript: any element with an `id`, a
-`data-g-event`, and a `data-g-target` is an input, so a widget is
-just an R function returning `tag()` trees. See `?tag`.
+Layout is `row()` and `column()`, which map to flexbox in the browser
+and to Flutter's `Row`/`Column` (note `row()` masks `base::row()`
+when glinty is attached).
 
-## Native windows (flitR backend)
+Custom widgets are R functions returning component trees, so they
+work on every frontend without JavaScript. `tag()` remains for
+browser-only markup, and is trusted HTML: see `?tag` before putting
+anything into it that you did not write.
 
-With the flitR package installed (plus its engine via
-`flitR::install_engine()`), `run_app_native(app_obj)` renders the
-same app in a native window through the Flutter Engine. The native
-window is just another client of glinty's wire protocol: reactive
-core, sessions, and renderers are identical, and `render_plot()`
-draws natively through flitR's image op.
+## A second frontend (Flutter)
 
-The supported widget set covers text, headings, `text_input`,
-`password_input`, `textarea_input`, `number_input`, `select_input`,
-`button`, `checkbox_input`, `slider_input`, `text_output`,
-`verbatim_output`, `table_output` (drawn as a native grid),
-`plot_output`, `tabset` and `conditional_panel`.
+The wire carries semantic components, not DOM instructions, so a
+frontend that is not a browser can render a glinty app. `dart/glinty_flutter`
+is that frontend: it reads the same component trees and lowers them to
+Flutter widgets, which covers iOS, Android, desktop and web from the
+same R app.
 
-Two of those need a word:
+Both clients read two generated files as their contract:
+`inst/fixtures/components.json` (every component, once) and
+`inst/fixtures/transcripts.json` (the frames of an exchange, in
+order). Tests on each side assert the files match the R definitions
+they came from, so a component only counts as frontend-neutral once
+it has rendered in both.
 
-`conditional_panel()`'s condition is evaluated server-side against the
-same inputs the browser would use, so both frontends agree on what
-shows.
+A component the Flutter client cannot draw yet gets a visible
+placeholder naming it, rather than being silently dropped. `tag()`
+produces `raw_html`, which is browser-only by design: arbitrary
+markup has no widget equivalent.
 
-`tabset()` draws its nav strip and emits **only the selected panel**.
-That is the immediate-mode reading of a tab: an unselected panel is
-not hidden, it is simply not drawn this frame. So unlike the browser,
-inputs inside an unselected tab do not keep their values natively.
-A tabset needs an `id` to work natively, since that input is where
-the selection lives.
-
-`password_input()` masks with bullets via flitR, and the real string
-never leaves R: flitR's `scene()` strips the hit records that carry it
-before anything goes over the wire.
-
-Everything else is browser-only and **fails fast with a named list**
-rather than rendering something wrong: `radio_buttons`, `date_input`,
-`file_input`, `html_output`, `audio_output`, `download_button`,
-`modal_button`. Modals, progress bars and `send_custom_message()` are
-silently inert natively, since they have no native counterpart to get
-wrong.
-
-Native sessions seed inputs from widget defaults, mirroring the
-browser's init harvest. Don't `library(flitR)` alongside glinty (both
-export `app`, `text`, and friends); `run_app_native()` only needs it
-installed.
-
-Layout carries across frontends too: `row(...)` and `column(...)`
-map to flexbox in the browser and flitR's row/column natively (note
-`row()` masks `base::row()` when glinty is attached).
+See `PROTOCOL.md` for the spec. The flitR native backend that used to
+live here is retired; flitR is archived.
 
 ## Resilience
 

@@ -29,8 +29,8 @@ Conditions are built from input_is() and combined with cond_and(),
 cond_or() and cond_not(). There is no JavaScript expression to
 write and nothing is eval()ed.
 
-Browser-only: the native backend renders the children unwrapped
-and always visible.
+Condition evaluation is a client capability. A frontend that does
+not implement it renders the children always visible.
 
 }
 \examples{

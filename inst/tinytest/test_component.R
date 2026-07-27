@@ -169,9 +169,9 @@ nms <- vapply(fx, function(f) f$name, character(1L))
 expect_equal(anyDuplicated(nms), 0L)
 
 # --- the checked-in JSON matches the R definition ---
-# The Dart client lives in another repo and cannot call R, so the
-# artifact both sides consume is the file. This is what stops it
-# becoming a stale copy.
+# The Dart client cannot call R, so the artifact both sides consume is
+# the file. This test is what stops the file falling behind the R
+# definition it is generated from.
 path <- fixture_json_path()
 if (nzchar(path) && file.exists(path)) {
     on_disk <- paste(readLines(path, warn = FALSE), collapse = "\n")

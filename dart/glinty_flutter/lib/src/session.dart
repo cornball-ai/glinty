@@ -1,0 +1,204 @@
+/// The conversation, as distinct from the tree.
+///
+/// [GlintyRenderer] turns a component into widgets. This turns a
+/// stream of protocol frames into the state the renderer draws from:
+/// which tree is current, which outputs have values, and whether the
+/// server is speaking a protocol this client understands at all.
+///
+/// It owns the hydration rules from PROTOCOL.md, which exist because
+/// every one of their failure modes is silent:
+///
+///  1. one interaction produces one frame, across rebuilds
+///  2. adopting a tree emits nothing -- the server built it and
+///     already knows every default
+///  3. a revision mismatch replaces the cached tree instead of
+///     patching it
+///  4. a protocol mismatch refuses visibly
+library;
+
+import 'component.dart';
+import 'render.dart' show supportedComponents;
+
+/// The protocol version this client speaks.
+const glintyProtocolVersion = 3;
+
+/// A frame the client sends. Named rather than a bare map so tests can
+/// count what left, which is the only way to assert invariant 2.
+class GlintyOutgoing {
+  const GlintyOutgoing(this.type, this.body);
+  final String type;
+  final Map<String, dynamic> body;
+
+  @override
+  String toString() => 'GlintyOutgoing($type, $body)';
+}
+
+/// Why the client refused to render.
+///
+/// Carried rather than thrown: a refusal the user cannot see is the
+/// failure mode this exists to prevent.
+class GlintyProtocolError {
+  const GlintyProtocolError(this.expected, this.received);
+  final int expected;
+  final int received;
+
+  String get message =>
+      received > expected
+          ? 'This app speaks glinty protocol $expected, but the server '
+              'sent protocol $received. Update the app.'
+          : 'This app speaks glinty protocol $expected, but the server '
+              'sent protocol $received. Update the server.';
+}
+
+/// How the current tree arrived.
+enum GlintyTreeSource {
+  /// Nothing rendered yet.
+  none,
+
+  /// The cached tree matched `ui_revision` and was kept.
+  adopted,
+
+  /// The tree came from `welcome`, replacing anything cached.
+  rebuilt,
+}
+
+class GlintySession {
+  GlintySession({
+    this.client = 'glinty_flutter/0.0.1',
+    GlintyComponent? cachedUi,
+    String? cachedRevision,
+    void Function(GlintyOutgoing)? onSend,
+  })  : _ui = cachedUi,
+        _cachedRevision = cachedRevision,
+        _onSend = onSend;
+
+  final String client;
+  final void Function(GlintyOutgoing)? _onSend;
+
+  GlintyComponent? _ui;
+  String? _cachedRevision;
+
+  String? sessionId;
+  String? uiRevision;
+  GlintyProtocolError? error;
+  GlintyTreeSource source = GlintyTreeSource.none;
+
+  /// Every frame this client has sent, in order. The record is the
+  /// point: invariant 2 is "this list did not grow", and invariant 1
+  /// is "it grew by exactly one".
+  final List<GlintyOutgoing> sent = <GlintyOutgoing>[];
+
+  /// Latest value per output id, for the renderer to draw.
+  final Map<String, dynamic> values = <String, dynamic>{};
+
+  /// The tree to render, or null when there is nothing to draw yet.
+  GlintyComponent? get ui => error == null ? _ui : null;
+
+  /// True once the server has spoken a protocol we cannot read.
+  bool get refused => error != null;
+
+  /// The opening frame: what this client can draw.
+  ///
+  /// A declaration, not a negotiation. The server sends the whole tree
+  /// regardless; this only lets it log what will come out as a
+  /// placeholder.
+  GlintyOutgoing hello() {
+    final frame = GlintyOutgoing('hello', {
+      'type': 'hello',
+      'protocol': glintyProtocolVersion,
+      'client': client,
+      'components': supportedComponentsList,
+      // The output kinds this client can draw. `image`, `audio` and
+      // `ui` are absent because the components that carry them are,
+      // and a kind declared without a slot to put it in is a lie.
+      'kinds': const ['text', 'table'],
+      'features': const <String>[],
+      if (_cachedRevision != null) 'prerendered': _cachedRevision,
+    });
+    _emit(frame);
+    return frame;
+  }
+
+  /// Handle one server frame.
+  void receive(Map<String, dynamic> msg) {
+    if (error != null) return; // refused; nothing further is meaningful
+    switch (msg['type']) {
+      case 'welcome':
+        _welcome(msg);
+      case 'output':
+        final id = msg['id'];
+        if (id is String) values[id] = msg['value'];
+      case 'error':
+        final id = msg['id'];
+        if (id is String) values[id] = null;
+      default:
+        // Unknown message types are ignored on purpose: the protocol
+        // grows by adding them, and a client that throws here cannot
+        // talk to a server one release newer within the same version.
+        break;
+    }
+  }
+
+  void _welcome(Map<String, dynamic> msg) {
+    final protocol = msg['protocol'];
+    if (protocol is! int || protocol != glintyProtocolVersion) {
+      // Invariant 4. Refuse before touching `ui`, so a mismatched
+      // server cannot get a half-rendered tree on screen.
+      error = GlintyProtocolError(
+        glintyProtocolVersion,
+        protocol is int ? protocol : -1,
+      );
+      return;
+    }
+
+    sessionId = msg['session']?.toString();
+    final revision = msg['ui_revision']?.toString();
+    uiRevision = revision;
+
+    if (_ui != null && revision != null && revision == _cachedRevision) {
+      // Invariant 3, the matching half: the cached tree is the tree
+      // being sent, so keep it and hold on to any widget state.
+      source = GlintyTreeSource.adopted;
+    } else {
+      // Invariant 3, the mismatching half: whatever we cached
+      // describes a different tree. Replace it. Patching a stale tree
+      // is how a hydration bug becomes a data bug.
+      _ui = msg['ui'] == null ? null : GlintyComponent.fromJson(msg['ui']);
+      _cachedRevision = revision;
+      source = GlintyTreeSource.rebuilt;
+    }
+    // Invariant 2: nothing is emitted here. Adoption is not user
+    // interaction, and the server built this tree, so it already knows
+    // every default. Protocol 2 harvested inputs at init; sending them
+    // back would write the whole form on every reconnect.
+  }
+
+  /// Report an input's new value. Called by the renderer, never by
+  /// [receive].
+  void sendInput(String id, dynamic value) {
+    _emit(GlintyOutgoing('input', {'type': 'input', 'id': id, 'value': value}));
+  }
+
+  /// Report a discrete event, such as a button press.
+  void sendEvent(String id) {
+    _emit(GlintyOutgoing('event', {'type': 'event', 'id': id}));
+  }
+
+  /// Report an output's box so the server can render at that size.
+  void sendMeasure(String id, int width, int height) {
+    _emit(GlintyOutgoing('measure',
+        {'type': 'measure', 'id': id, 'width': width, 'height': height}));
+  }
+
+  void _emit(GlintyOutgoing frame) {
+    sent.add(frame);
+    _onSend?.call(frame);
+  }
+}
+
+/// The components this client draws, as a sorted list for `hello`.
+///
+/// Sorted so the frame is stable across runs; a set's iteration order
+/// is not something to make a wire format depend on.
+final List<String> supportedComponentsList =
+    (supportedComponents.toList()..sort());

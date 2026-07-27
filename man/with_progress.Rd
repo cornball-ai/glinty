@@ -32,7 +32,8 @@ straight from empty to gone. Updates only reach the browser between
 blocking calls, so split long work into steps if you want the bar
 to move.
 
-Browser-only: the native backend ignores progress messages.
+A frontend that declares no progress feature ignores these messages
+rather than failing.
 
 }
 \examples{

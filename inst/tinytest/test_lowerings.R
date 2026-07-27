@@ -1,15 +1,13 @@
 # The browser lowering, asserted against the shared fixtures.
 #
-# The second consumer of these fixtures is not in this repository: it
-# is cornball-ai/glinty-dart, which reads the same
-# inst/fixtures/components.json and renders it as Flutter widgets. That
-# repo pins itself to this file's sha256 and its CI fetches ours to
-# check the copy has not drifted.
+# The second consumer of these fixtures is dart/glinty_flutter, which
+# reads the same inst/fixtures/components.json and renders it as
+# Flutter widgets. Same repo, same commit, so there is no copy to
+# drift -- but still another language, and a second lowering is the
+# only thing that proves a component is frontend-neutral rather than
+# HTML wearing a component's name.
 #
-# So a component still only counts as frontend-neutral once it has
-# rendered in more than one lowering -- the other half just lives in
-# another repository and another language. Adding a fixture here
-# obliges that one to answer for it.
+# Adding a fixture here obliges the Dart suite to answer for it.
 
 component <- glinty:::component
 component_fixtures <- glinty:::component_fixtures

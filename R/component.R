@@ -2,8 +2,8 @@
 #
 # A component is a semantic description of a piece of UI -- text_input,
 # column, plot_output -- not an HTML tag. Each frontend lowers it to
-# its own primitives: the browser to DOM, flitR to draw ops, a future
-# Dart client to Flutter widgets. Nothing here knows about any of them.
+# its own primitives: the browser to DOM, dart/glinty_flutter to
+# Flutter widgets. Nothing here knows about either.
 
 #' Declare one component field
 #'

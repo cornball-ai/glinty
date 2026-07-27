@@ -1,11 +1,10 @@
 /// Component -> Flutter widget lowering.
 ///
-/// The third lowering, and the one the protocol was actually designed
-/// for. The browser lowering catches nothing on its own; flitR catches
-/// browser bias but is more primitive than the DOM in the opposite
-/// direction from Flutter. This is where the vocabulary meets a
-/// framework that owns layout, retains widget state, and has its own
-/// focus and text models.
+/// The second lowering, and the one the protocol was actually designed
+/// for. The browser lowering catches nothing on its own -- a component
+/// vocabulary derived from HTML lowers to HTML without complaint. This
+/// is where it meets a framework that owns layout, retains widget
+/// state, and has its own focus and text models.
 ///
 /// Anything reached for here that the component tree does not supply
 /// is a finding, not a workaround.

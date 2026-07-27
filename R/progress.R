@@ -11,7 +11,8 @@
 #' blocking calls, so split long work into steps if you want the bar
 #' to move.
 #'
-#' Browser-only: the native backend ignores progress messages.
+#' A frontend that declares no progress feature ignores these messages
+#' rather than failing.
 #'
 #' @param session a glinty_session
 #' @param expr the work to run

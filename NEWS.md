@@ -1,10 +1,34 @@
 # glinty (development version)
 
-- Native: tabset and password_input render instead of failing.
-  tabset draws its nav strip and emits only the selected panel;
-  password_input masks with bullets and the real string never leaves
-  R. Needs flitR >= 0.0.2.1. A native tabset requires an id, since
-  that input is where the selection lives.
+Protocol v3, stage 1. The wire now carries semantic components rather
+than DOM instructions, which is what lets a frontend that is not a
+browser render a glinty app. See PROTOCOL.md.
+
+- **Breaking**: every UI builder returns a component, not an HTML tag.
+  `div()`, `span()`, `p()` and `h1()`-`h4()` are removed; use
+  `column()`, `panel()`, `txt()` and `heading(level=)`. `text()` is
+  now `txt()`, because `text()` masks `graphics::text()` and a glinty
+  app calls that inside `render_plot()`.
+- **Breaking**: `tag()` takes a raw HTML string and produces
+  `raw_html`, the browser-only escape hatch. It is trusted HTML: the
+  string is inserted unescaped, so never interpolate untrusted text
+  into it. Use `txt()` for text of any provenance, or
+  `html_escape()` first.
+- **Breaking**: the flitR native backend is removed. `run_app_native()`
+  and its scene translation are gone, and flitR is archived. The
+  second frontend is now the Flutter client in `dart/glinty_flutter`,
+  which renders the same component trees as real widgets.
+- New: `inst/fixtures/components.json` and
+  `inst/fixtures/transcripts.json`, generated from R and read by both
+  clients. The first covers what a tree looks like, the second what a
+  conversation looks like: `hello`/`welcome`, both hydration
+  outcomes, the protocol refusal, an input driving an output, and a
+  `measure` driving an image. Tests on each side assert the files
+  match the definitions they came from.
+- New: `ui_revision()`, the SHA-256 of a tree's wire form, so a client
+  can tell whether markup it was handed describes the tree it was just
+  sent. Defined and pinned by the transcripts here; the server starts
+  sending it in stage 2, when `welcome` becomes the bootstrap.
 
 # glinty 0.4.1
 

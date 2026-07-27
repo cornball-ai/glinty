@@ -18,6 +18,6 @@ html_escape().
 }
 \examples{
 \dontrun{
-output$details <- render_html(function() div(h3("Result"), p("done")))
+output$details <- render_html(function() "<mark>done</mark>")
 }
 }

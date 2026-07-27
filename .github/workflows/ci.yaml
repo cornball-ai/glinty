@@ -31,8 +31,9 @@ jobs:
 
   # The second lowering. Separate from the R job because it needs the
   # Flutter SDK and nothing else here does -- but it reads the same
-  # inst/fixtures/components.json, so a component added on the R side
-  # fails here until this client answers for it.
+  # inst/fixtures/components.json and inst/fixtures/transcripts.json,
+  # so a component or an exchange added on the R side fails here until
+  # this client answers for it.
   flutter:
     runs-on: ubuntu-latest
     defaults:

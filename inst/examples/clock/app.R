@@ -2,9 +2,9 @@ library(glinty)
 
 app(
     ui = page(
-        h1("Clock and sine"),
-        p("The clock re-renders every second via invalidate_later();",
-            " the plot re-renders on slider moves."),
+        heading("Clock and sine", level = 1L),
+        txt(paste("The clock re-renders every second via invalidate_later();",
+                  "the plot re-renders on slider moves.")),
         text_output("now"),
         slider_input("n", "Wavelengths:", min = 1, max = 10, value = 2,
             step = 1),

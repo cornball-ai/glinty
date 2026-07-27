@@ -12,8 +12,13 @@ html_escape(x)
 character with &, <, >, " escaped
 }
 \description{
-Escape text for safe HTML output
+Only needed when building a string for \code{\link{tag}()}. Text
+carried by a component is escaped by the frontend that renders it,
+so escaping it here would double-escape and show the entities.
 }
 \examples{
 html_escape("a <b> & \"c\"")
+}
+\seealso{
+\code{\link{tag}}
 }

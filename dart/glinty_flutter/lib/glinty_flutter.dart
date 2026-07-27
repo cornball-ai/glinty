@@ -5,5 +5,7 @@
 /// glinty.js lowers it to DOM.
 library;
 
+export 'src/app.dart';
 export 'src/component.dart';
 export 'src/render.dart';
+export 'src/session.dart';
