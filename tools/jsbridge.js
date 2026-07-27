@@ -791,6 +791,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               gapFor("greeting") === null &&
               slot.textContent === "back" &&
               !slot.classList.contains("g-unsupported"));
+
+        /* Output ids are app-chosen text; one carrying quote or
+           bracket characters must not break the gap machinery, which
+           is why the notice is held by reference rather than found
+           by selector. */
+        const hostileId = 'x"]y[z';
+        const hostile = makeEl(page.document, "span");
+        hostile.setAttribute("id", hostileId);
+        hostile.setAttribute("data-g-output", hostileId);
+        page.root.appendChild(hostile);
+        const gaps = () => page.document.querySelectorAll(".g-kind-gap");
+        let threw = null;
+        try {
+            page.ws().deliver({ type: "output", id: hostileId,
+                                kind: "hologram", value: 1 });
+            page.ws().deliver({ type: "output", id: hostileId,
+                                kind: "text", value: "fine" });
+        } catch (e) {
+            threw = e;
+        }
+        check("a hostile output id cannot break the gap machinery",
+              threw === null && gaps().length === 0 &&
+              hostile.textContent === "fine" &&
+              !hostile.classList.contains("g-unsupported"));
     }
 
     /* ---------------------------------------------------------- */

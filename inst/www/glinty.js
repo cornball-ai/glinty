@@ -789,8 +789,11 @@
 
     /* The visible refusal for an output kind this client cannot
        display. Slot elements are not all containers -- an <img>
-       shows no textContent -- so the notice is a sibling node tied
-       to the slot's id, which is visible next to anything. */
+       shows no textContent -- so the notice is a sibling node,
+       visible next to anything. The slot holds a direct reference to
+       its notice: no selector, so no id can break one (an output id
+       is app-chosen text, not something to interpolate into query
+       syntax). The data attribute is set for inspection only. */
     function showKindGap(el, kind) {
         clearKindGap(el);
         el.classList.add("g-unsupported");
@@ -800,16 +803,20 @@
         note.textContent = "[unsupported output kind: " + kind + "]";
         if (el.parentNode) {
             el.parentNode.insertBefore(note, el.nextSibling);
+            el._gKindGap = note;
         }
     }
 
     /* A recognised value arriving later means the gap closed; the
-       notice and the marker class go with it. */
+       notice and the marker class go with it. A rebuilt slot starts
+       clean by construction: the old notice died with the old
+       subtree, and the new element carries no reference. */
     function clearKindGap(el) {
         el.classList.remove("g-unsupported");
-        var note = document.querySelector(
-            '[data-g-kind-gap="' + el.id + '"]');
-        if (note) note.remove();
+        if (el._gKindGap) {
+            el._gKindGap.remove();
+            el._gKindGap = null;
+        }
     }
 
     function buildTable(el, data) {
