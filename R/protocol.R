@@ -240,12 +240,30 @@ handle_measure <- function(session, msg) {
     # Zero is not a size, it is the absence of one; a client following
     # the spec never sends it, and one that does must not shrink a
     # plot for an element that is about to come back.
-    if (!ok(w, 1, 100000) || !ok(h, 1, 100000) || !ok(dpr, 0.1, 16)) {
+    #
+    # The upper bounds are resource caps, not layout opinions: a
+    # measurement sizes a raster the server will allocate, so the
+    # physical pixel count is the thing to bound. 8192 logical per
+    # side covers an 8K desktop; dpr 8 is past any real device; and
+    # 32 megapixels of physical area (a 4K display at dpr 2, with
+    # room) caps the buffer at ~128 MB no matter how the factors
+    # combine. Anything outside is ignored wholesale -- a hostile
+    # client gets a stale plot, not an allocation.
+    if (!ok(w, 1, 8192) || !ok(h, 1, 8192) || !ok(dpr, 0.1, 8) ||
+        !ok(w * dpr, 1, 16384) || !ok(h * dpr, 1, 16384) ||
+        !ok(w * dpr * h * dpr, 1, 33554432)) {
         return(invisible(NULL))
     }
     box <- list(width = w, height = h, dpr = dpr)
     env <- session$measures
     if (!exists(msg$id, envir = env)) {
+        # Unknown ids are stored because dynamic UI races layout, but
+        # storage is bounded: a client inventing ids must not grow
+        # session memory without limit. No real page holds hundreds
+        # of measured outputs.
+        if (length(ls(env)) >= 256L) {
+            return(invisible(NULL))
+        }
         env[[msg$id]] <- reactive_val(box)
     } else {
         env[[msg$id]](box)

@@ -345,12 +345,20 @@ display size from it and never inspects the raster.
 
 **Server side:** last write wins, per id. A measurement for an id
 the server has no renderer for is stored and harmless -- the output
-may be about to exist (dynamic UI races layout). Measurements reach
-renderers as reactive reads, so a new measurement re-renders exactly
-the outputs that depend on it. The reserved
-`..clientdata_output_*` input names are gone, and input ids starting
-with `..` are rejected so a client cannot spoof measurement state
-through the input channel.
+may be about to exist (dynamic UI races layout) -- but bounded: a
+session holds at most 256 measured ids, so a client inventing ids
+cannot grow memory without limit. Measurements reach renderers as
+reactive reads, so a new measurement re-renders exactly the outputs
+that depend on it, and fixed-size plots read the dpr from the same
+box. The reserved `..clientdata_output_*` input names are gone, and
+input ids starting with `..` are rejected so a client cannot spoof
+measurement state through the input channel.
+
+**Resource caps.** A measurement sizes a raster the server will
+allocate, so the server ignores wholesale anything outside: logical
+sides in [1, 8192], dpr in (0, 8], physical sides at most 16384, and
+physical area at most 32 megapixels (a 4K display at dpr 2, with
+room). A hostile client gets a stale plot, not an allocation.
 
 ## Theme
 
@@ -576,9 +584,12 @@ make it slower.
    `update_input` in favour of `input_update`), and `measure`
    replaces the `..clientdata_output_*` reserved inputs -- logical
    pixels plus device pixel ratio, deduplicated per id, zero boxes
-   never sent, spoofing via `..`-prefixed inputs rejected. The dpr
-   dedup, the zero-box guard and the fixed-size no-subscribe rule
-   are all mutation-tested.
+   never sent, resource-capped server-side, spoofing via
+   `..`-prefixed inputs rejected. Fixed-size plots keep their size
+   but take the client's dpr, so they stay sharp too. The dpr dedup
+   and the zero-box guard are mutation-tested; the browser layers
+   `ResizeObserver` over the manual re-measure triggers where it
+   exists.
 4. **Theme and variants.**
 5. **Auth, tickets, `/healthz`, port from the environment.**
 6. **Then** the Flutter client grows a transport and becomes an app

@@ -208,6 +208,27 @@
     }
     window.addEventListener("resize", scheduleMeasure);
 
+    /* ResizeObserver catches what the manual triggers cannot: a box
+       changed by a sibling growing, a font loading, or CSS -- none of
+       which fire a window resize or pass through glinty. Observation
+       is re-established from scratch whenever the set of measured
+       elements can have changed; disconnect-and-reobserve is cheap at
+       plot counts and never leaks an observer into a discarded tree.
+       Everything still funnels through the deduped reporter, so the
+       manual triggers staying live costs nothing, and clients without
+       ResizeObserver keep working on them alone. */
+    var resizeObserver = null;
+    function observeMeasured() {
+        if (typeof ResizeObserver === "undefined") return;
+        if (!resizeObserver) {
+            resizeObserver = new ResizeObserver(scheduleMeasure);
+        }
+        resizeObserver.disconnect();
+        document.querySelectorAll("img.g-plot-output").forEach(function (el) {
+            resizeObserver.observe(el);
+        });
+    }
+
     /* ---------- outgoing ---------- */
 
     /* Queue rather than drop: app scripts can fire before the socket
@@ -831,9 +852,16 @@
                reported a box (refreshConditionals also schedules a
                measure pass) */
             refreshConditionals();
+            observeMeasured();
             break;
         }
         default:
+            /* Visible and named, never silent -- the same rule as an
+               unknown component. A kind this client cannot display is
+               a version gap the user should see, not a console line
+               nobody reads. */
+            el.textContent = "[unsupported output kind: " + msg.kind + "]";
+            el.classList.add("g-unsupported");
             console.warn("glinty: unknown output kind", msg.kind);
         }
     }
@@ -952,6 +980,7 @@
         inputValues = {};
         harvestLocal();
         refreshConditionals();
+        observeMeasured();
     }
 
     /* The refusal, drawn. It replaces the content rather than sitting
@@ -1005,6 +1034,7 @@
                 rebuildRoot(msg.ui);
             }
             reportPlotDims();
+            observeMeasured();
         }
         /* On resume the DOM is live client state, not the initial
            tree; the welcome's ui rides along and is ignored. */

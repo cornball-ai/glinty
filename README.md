@@ -12,8 +12,8 @@ expressions, observers, a UI built in R) with a tinyverse footprint:
 - **Pure base R transport**: the HTTP server and the RFC 6455
   WebSocket layer run on `serverSocket()`/`socketSelect()`. No
   compiled code in the package.
-- **~7 KB of hand-written JavaScript**, no jQuery, no Bootstrap.
-  Shiny's `www/` tree is 6.9 MB; glinty's is under 12 KB.
+- **~48 KB of hand-written JavaScript**, no jQuery, no Bootstrap.
+  Shiny's `www/` tree is 6.9 MB; glinty's is under 60 KB.
 - **Session-scoped state**: every browser tab gets its own inputs,
   outputs, and observers, torn down on disconnect.
 
@@ -93,9 +93,11 @@ The server function takes `(input, output)` or
 
 ## How it works
 
-The initial page is rendered server-side from the `page()` tag tree.
-The browser then opens a WebSocket; input events flow up as small
-JSON messages, and DOM patches flow down. Reactive dependency
+The initial page is rendered server-side from the `page()` component
+tree. The browser then opens a WebSocket; input events flow up as
+small JSON messages, and typed output values flow down -- text,
+tables, images, component trees -- for the client to display however
+it displays them. Reactive dependency
 tracking (contexts, a flush queue, lazy cached reactives) re-runs
 only what changed. One R process serves N tabs from a
 `socketSelect()` event loop; `invalidate_later()` timers wake it for
@@ -112,11 +114,22 @@ anything into it that you did not write.
 
 ## A second frontend (Flutter)
 
-The wire carries semantic components, not DOM instructions, so a
-frontend that is not a browser can render a glinty app. `dart/glinty_flutter`
-is that frontend: it reads the same component trees and lowers them to
-Flutter widgets, which covers iOS, Android, desktop and web from the
-same R app.
+Write a glinty app much like a conventional Shiny app. It runs in
+the browser, and if it sticks to glinty's portable components and
+typed renderers, most of the work a native app needs is already
+done: the same R server and application logic drive a Flutter
+interface, and the native-specific remainder is branding,
+permissions, packaging and signing.
+
+`tag()`, `html_output()`, custom JavaScript and browser-only CSS are
+escape hatches, and escape hatches don't travel. R stays on the
+server; it is not bundled into the native app. The live Flutter
+transport and scaffolder are still under development.
+
+The wire carries semantic components, not DOM instructions, which is
+what makes that swap possible. `dart/glinty_flutter` reads the same
+component trees the browser does and lowers them to Flutter widgets,
+which covers iOS, Android, desktop and web from the same R app.
 
 Both clients read two generated files as their contract:
 `inst/fixtures/components.json` (every component, once) and

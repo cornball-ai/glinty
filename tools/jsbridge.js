@@ -388,6 +388,22 @@ function freshPage(opts) {
     sandbox.window = sandbox;
     sandbox.window.addEventListener = () => {};
     if (opts && opts.dpr) sandbox.devicePixelRatio = opts.dpr;
+    /* Off by default so every other scenario exercises the fallback
+       (manual triggers); one scenario opts in to prove the wiring. */
+    if (opts && opts.resizeObserver) {
+        page.observers = [];
+        sandbox.ResizeObserver = class ResizeObserver {
+            constructor(cb) {
+                this.cb = cb;
+                this.targets = [];
+                page.observers.push(this);
+            }
+            observe(el) {
+                if (!this.targets.includes(el)) this.targets.push(el);
+            }
+            disconnect() { this.targets = []; }
+        };
+    }
 
     vm.createContext(sandbox);
     vm.runInContext(CLIENT_SRC, sandbox);
@@ -720,6 +736,59 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("a plot arriving via dynamic UI reports its box",
               measures().some((m) => m.id === "late_plot" &&
                   m.width === 320 && m.height === 240));
+
+        /* An output kind this client cannot display is a version gap
+           the user should see -- same rule as an unknown component. */
+        page.ws().deliver({ type: "output", id: "greeting",
+                            kind: "hologram", value: 1 });
+        const slot = page.document.getElementById("greeting");
+        check("an unknown output kind is visible and named, never silent",
+              slot.textContent.includes(
+                  "[unsupported output kind: hologram]") &&
+              slot.classList.contains("g-unsupported"));
+    }
+
+    /* ---------------------------------------------------------- */
+    section("ResizeObserver watches what manual triggers cannot");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({
+            metaRevision: rev,
+            dpr: 1,
+            resizeObserver: true,
+            setup: (doc, root) => {
+                prerenderDemo(doc, root);
+                const img = makeEl(doc, "img");
+                img.setAttribute("id", "scatter");
+                img.setAttribute("class", "g-plot-output");
+                img.clientWidth = 640;
+                img.clientHeight = 480;
+                root.appendChild(img);
+            }
+        });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        const ro = page.observers[0];
+        check("hydration puts the plot under observation",
+              !!ro && ro.targets.some((t) => t.id === "scatter"));
+
+        /* A sibling grew and squeezed the plot: no window resize, no
+           glinty state change, only the observer fires. */
+        page.document.getElementById("scatter").clientWidth = 500;
+        ro.cb();
+        await sleep(300);
+        check("an observer callback alone re-measures",
+              page.frames("measure").some((m) => m.width === 500));
+
+        /* Dynamic UI re-establishes observation for new plots. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "plot_output", id: "late_plot" }
+        });
+        check("plots arriving later are observed too",
+              ro.targets.some((t) => t.id === "late_plot"));
     }
 
     /* ---------------------------------------------------------- */

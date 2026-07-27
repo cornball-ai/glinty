@@ -108,11 +108,12 @@ df_to_table <- function(df) {
 #' measurement re-renders the plot. Explicit numeric dimensions give
 #' fixed-size rendering.
 #'
-#' The client also reports its device pixel ratio. The raster is
-#' produced at `width * dpr` by `height * dpr` physical pixels with
-#' `res` scaled by the same factor, and displayed at the logical
-#' size: text and lines keep their size while the pixels match the
-#' screen, which is what keeps a plot sharp on a 2x display.
+#' The client also reports its device pixel ratio, which applies to
+#' fixed-size plots too. The raster is produced at `width * dpr` by
+#' `height * dpr` physical pixels with `res` scaled by the same
+#' factor, and displayed at the logical size: text and lines keep
+#' their size while the pixels match the screen, which is what keeps
+#' a plot sharp on a 2x display.
 #'
 #' @param fn zero-arg function that draws a plot
 #' @param width integer logical-pixel width, or NULL for client-driven
@@ -133,14 +134,13 @@ render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
     make_fn <- function(id, session) {
         function() {
             # Reading the box is the reactive subscription that makes a
-            # new measurement re-render. A plot with explicit
-            # dimensions has nothing to learn from one, so it never
-            # reads: it renders once at dpr 1 and stays put.
-            box <- if (is.null(width) || is.null(height)) {
-                measured_box(session, id)
-            } else {
-                NULL
-            }
+            # new measurement re-render. Every plot reads it: a plot
+            # with explicit dimensions ignores the measured size, but
+            # still needs the device pixel ratio, which only the
+            # client knows -- without it, fixed-size plots would stay
+            # blurry on dense displays. Its box cannot otherwise
+            # change, so the subscription only ever fires for real.
+            box <- measured_box(session, id)
             w <- if (is.null(width)) {
                 if (is.null(box)) {
                     480

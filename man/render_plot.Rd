@@ -28,11 +28,12 @@ measurement re-renders the plot. Explicit numeric dimensions give
 fixed-size rendering.
 }
 \details{
-The client also reports its device pixel ratio. The raster is
-produced at `width * dpr` by `height * dpr` physical pixels with
-`res` scaled by the same factor, and displayed at the logical
-size: text and lines keep their size while the pixels match the
-screen, which is what keeps a plot sharp on a 2x display.
+The client also reports its device pixel ratio, which applies to
+fixed-size plots too. The raster is produced at `width * dpr` by
+`height * dpr` physical pixels with `res` scaled by the same
+factor, and displayed at the logical size: text and lines keep
+their size while the pixels match the screen, which is what keeps
+a plot sharp on a 2x display.
 
 }
 \examples{

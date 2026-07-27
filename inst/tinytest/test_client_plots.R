@@ -40,9 +40,33 @@ expect_equal(isolate(measured_box(sm, "plt"))$width, 800)
 handle_measure(sm, list(id = "plt", width = 640, height = 480, dpr = 900))
 expect_equal(isolate(measured_box(sm, "plt"))$dpr, 2)
 
+# resource caps: a measurement sizes a raster, so combinations that
+# pass per-field checks but explode physically are refused wholesale
+handle_measure(sm, list(id = "plt", width = 100000, height = 100000,
+                        dpr = 16))
+expect_equal(isolate(measured_box(sm, "plt"))$width, 800)
+handle_measure(sm, list(id = "plt", width = 8192, height = 8192))
+expect_equal(isolate(measured_box(sm, "plt"))$width, 800)
+handle_measure(sm, list(id = "plt", width = 4000, height = 4000, dpr = 4))
+expect_equal(isolate(measured_box(sm, "plt"))$width, 800)
+# while a real dense-display fullscreen passes
+handle_measure(sm, list(id = "plt", width = 2560, height = 1440, dpr = 2))
+expect_equal(isolate(measured_box(sm, "plt"))$width, 2560)
+
 # a measurement for an id with no renderer is stored and harmless
 handle_measure(sm, list(id = "future", width = 100, height = 50))
 expect_equal(isolate(measured_box(sm, "future"))$width, 100)
+
+# ...but bounded: invented ids stop accumulating at the cap, while
+# ids that already have a slot keep updating
+for (i in seq_len(300L)) {
+    handle_measure(sm, list(id = paste0("spray", i), width = 10,
+                            height = 10))
+}
+expect_true(length(ls(sm$measures)) <= 256L)
+expect_null(isolate(measured_box(sm, "spray300")))
+handle_measure(sm, list(id = "plt", width = 640, height = 480))
+expect_equal(isolate(measured_box(sm, "plt"))$width, 640)
 
 # measurements are session state, off the input channel entirely
 expect_null(isolate(sm$input$plt()))
@@ -105,18 +129,22 @@ if (capabilities("png")) {
     expect_equal(png_dims(v$src), c(640, 480))
     expect_equal(c(v$width, v$height), c(320, 240))
 
-    # --- explicit dims never subscribe to measurements ---
+    # --- explicit dims win on size, but dpr still applies: a fixed ---
+    # --- plot on a dense display must not stay blurry ---
     glinty:::with_session(s, {
         s$output$fixed <- render_plot(function() plot(1:5),
             width = 400, height = 300)
     })
     flush_reactions()
-    expect_equal(png_dims(last_image(s)$src), c(400, 300))
-    n_fixed <- length(s$outgoing)
-    handle_measure(s, list(id = "fixed", width = 999, height = 999))
+    v <- last_image(s)
+    expect_equal(png_dims(v$src), c(400, 300))
+    handle_measure(s, list(id = "fixed", width = 999, height = 999,
+                           dpr = 2))
     flush_reactions()
-    # not merely the same size: no re-render happened at all
-    expect_equal(length(s$outgoing), n_fixed)
+    v <- last_image(s)
+    # the measured size is ignored, the measured density is not
+    expect_equal(png_dims(v$src), c(800, 600))
+    expect_equal(c(v$width, v$height), c(400, 300))
 
     glinty:::session_end(s)
 }

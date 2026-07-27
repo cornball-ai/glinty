@@ -27,11 +27,21 @@ Stage 3, typed outputs and measurement:
   change alone re-reports, a hidden (zero) box never does -- and the
   server keeps the last real measurement across rebuilds, as session
   state.
-- Fixed-size plots (`render_plot(width=, height=)`) do not subscribe
-  to measurements at all: they render once, at dpr 1.
+- Fixed-size plots (`render_plot(width=, height=)`) keep their
+  declared size but still render at the client's density: dpr comes
+  from the same measurement, so a fixed 400x300 on a 2x display is
+  an 800x600 raster shown at 400x300, not upscaled blur.
+- Measurements are resource-capped server-side (logical sides to
+  8192, dpr to 8, physical area to 32 megapixels, at most 256
+  measured ids per session), so a hostile client gets a stale plot,
+  not an allocation.
 - The browser re-measures when a tab switches, a conditional panel
-  toggles, or dynamic UI arrives -- the moments a plot can appear at
-  a size the server has never heard about.
+  toggles, or dynamic UI arrives -- and, where `ResizeObserver`
+  exists, whenever a plot's box changes for reasons glinty cannot
+  see: a sibling growing, a font loading, CSS.
+- An output kind the browser does not recognise draws a named
+  placeholder in the slot, same as an unknown component: a version
+  gap the user can see, never a silent console line.
 
 Stage 2, bootstrap over the wire:
 
