@@ -6,7 +6,7 @@
     "use strict";
 
     var PROTOCOL = 3;
-    var CLIENT_ID = "glinty-js/0.5.0";
+    var CLIENT_ID = "glinty-js/0.0.5";
 
     /* What this client declares in hello. A declaration, not a
        negotiation: the server sends the whole tree regardless, and a

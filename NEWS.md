@@ -363,7 +363,7 @@ Stage 1, semantic components:
   sent. Defined and pinned by the transcripts here; the server starts
   sending it in stage 2, when `welcome` becomes the bootstrap.
 
-# glinty 0.4.1
+# glinty 0.0.4
 
 - Secrets no longer reach the page. run_app() refuses to start when
   the rendered page contains the value of a secret-looking environment
@@ -377,8 +377,6 @@ Stage 1, semantic components:
   createElement() for every node, which puts SVG in the HTML namespace
   as an HTMLUnknownElement. Inline icons in dynamic UI silently
   vanished; static UI was unaffected.
-
-# glinty 0.4.0
 
 Everything an app needs beyond the reactive core: app-supplied
 assets, a two-way JavaScript bridge, and the widgets Shiny users
@@ -429,7 +427,7 @@ so every addition below is a wall one of them hit.
   frontends, with show/hide via NULL and last-state replay for
   nested outputs.
 
-# glinty 0.3.0
+# glinty 0.0.3
 
 - Native parity: select, textarea, number, and table_output render
   natively (needs flitR >= 0.0.1.3); native sessions seed inputs
@@ -439,7 +437,7 @@ so every addition below is a wall one of them hit.
 - Tables travel as structure (header + rows) instead of HTML;
   frontends render them natively.
 
-# glinty 0.2.0
+# glinty 0.0.2
 
 - flitR native backend: run_app_native() renders apps in a native
   window (Flutter Engine) from the same reactive core and protocol;
@@ -458,7 +456,7 @@ so every addition below is a wall one of them hit.
 - New inputs: `radio_buttons()` and `date_input()`, with
   `update_radio_buttons()` and `update_date_input()`.
 
-# glinty 0.1.0
+# glinty 0.0.1
 
 Initial release.
 
