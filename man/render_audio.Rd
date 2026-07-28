@@ -12,8 +12,8 @@ render_audio(fn)
 a glinty_renderer for assignment to output$id
 }
 \description{
-The value (a data URI or a /static/ path) is set as the audio
-element's src.
+Sends an `audio` output: `\{src\}`, where src is a data URI or a
+/static/ path.
 }
 \examples{
 \dontrun{

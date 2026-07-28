@@ -1,0 +1,39 @@
+name: r2u
+description: >
+  Current R plus the r2u binary repository, so R packages install as
+  apt binaries with no compilation. Shared by every job that needs R
+  -- copying the source lines by hand is how a job ends up with r2u
+  but not the CRAN repo that provides an R new enough for it.
+
+runs:
+  using: composite
+  steps:
+    - name: apt sources for r2u and CRAN
+      shell: bash
+      run: |
+        wget -q -O- https://eddelbuettel.github.io/r2u/assets/dirk_eddelbuettel_key.asc \
+          | sudo tee /etc/apt/trusted.gpg.d/cranapt_key.asc > /dev/null
+        echo "deb [arch=amd64] https://r2u.stat.illinois.edu/ubuntu noble main" \
+          | sudo tee /etc/apt/sources.list.d/cranapt.list
+        # r2u's r-cran-* require a current R; noble itself ships
+        # 4.3.3, so the CRAN repo has to come along with it.
+        wget -q -O- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
+          | sudo tee /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc > /dev/null
+        echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" \
+          | sudo tee /etc/apt/sources.list.d/cran_r.list
+        printf 'Package: *\nPin: release o=CRAN-Apt Project\nPin: release l=CRAN-Apt Packages\nPin-Priority: 700\n' \
+          | sudo tee /etc/apt/preferences.d/99cranapt
+
+    - name: apt update, with retries
+      shell: bash
+      run: |
+        ok=0
+        for i in 1 2 3 4; do
+          if sudo apt-get update -qq; then ok=1; break; fi
+          echo "apt update failed, retry $i"; sleep 45
+        done
+        test "$ok" = 1 || { echo "apt update failed after 4 attempts"; exit 1; }
+
+    - name: R
+      shell: bash
+      run: sudo apt-get install -y --no-install-recommends r-base-core

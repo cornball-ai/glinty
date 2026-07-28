@@ -12,8 +12,8 @@ render_text(fn)
 a glinty_renderer for assignment to output$id
 }
 \description{
-The value is coerced to character and set as textContent, so it
-is always displayed literally (no HTML injection).
+The value travels as a string and every frontend displays it
+literally (no HTML injection).
 }
 \examples{
 \dontrun{

@@ -3,27 +3,25 @@
 \alias{row}
 \title{Arrange children in a horizontal row}
 \usage{
-row(..., gap = NULL, align = NULL)
+row(..., gap = NULL, align = NULL, id = NULL)
 }
 \arguments{
-\item{...}{child elements}
+\item{...}{child components}
 
-\item{gap}{numeric gap between children in pixels (frontend
-default when NULL)}
+\item{gap}{integer space between children, in pixels}
 
-\item{align}{character vertical alignment: "start", "center", or
-"end" (browser only)}
+\item{align}{character "start", "center" or "end"}
+
+\item{id}{character element ID}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-Maps to a flexbox row in the browser and flitR's row layout in the
-native backend, so layouts carry across frontends. Note: masks
-base::row() (matrix row indices) when glinty is attached, the same
-way page() masks utils::page(); call base::row() qualified if you
-need it.
+Note: masks base::row() (matrix row indices) when glinty is
+attached, the same way page() masks utils::page(); call base::row()
+qualified if you need it.
 }
 \examples{
-row(button("a", "A"), button("b", "B"), gap = 24)
+row(button("a", "A"), button("b", "B"), gap = 12L)
 }

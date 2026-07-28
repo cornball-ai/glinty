@@ -2,8 +2,8 @@ library(glinty)
 
 app(
     ui = page(
-        h1("Input gallery"),
-        p("Every widget wired to a live echo table, plus server-side updates."),
+        heading("Input gallery", level = 1L),
+        txt("Every widget wired to a live echo table, plus server-side updates."),
         row(
             text_input("txt", "Text:", value = "hello"),
             number_input("num", "Number:", value = 3, min = 0, max = 10)
@@ -24,7 +24,7 @@ app(
         button("randomize", "Randomize from server"),
         checkbox_input("more", "Show dynamic panel"),
         ui_output("panel"),
-        h3("Current values"),
+        heading(level = 3L, value = "Current values"),
         table_output("values"),
         title = "glinty gallery"
     ),
@@ -50,8 +50,8 @@ app(
         })
         output$panel <- render_ui(function() {
             if (isTRUE(input$more())) {
-                div(
-                    h4("Dynamic content"),
+                column(
+                    heading(level = 4L, value = "Dynamic content"),
                     text_input("extra", "Appeared at runtime:"),
                     text_output("echo_extra")
                 )

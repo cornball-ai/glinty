@@ -1,208 +1,172 @@
-#' Create an HTML page
+# Public UI builders. Thin wrappers over component(): validation and
+# the wire format live there, so these stay readable and every one of
+# them is one call.
+
+#' Create a page
 #'
-#' The top-level UI container. The title becomes the browser tab
-#' title when the page is served.
+#' The top-level container. The title becomes the browser tab title
+#' when served, and the app name a native client shows.
 #'
-#' App assets are referenced by URL, not by file path: serve them
-#' from run_app()'s static_dir and point at them under /static/.
-#' Stylesheets are linked after glinty's own, and scripts are loaded
-#' after the JS client at the end of the body, so window.Glinty is
-#' already defined when app code runs.
+#' The asset arguments are browser-only and travel outside the
+#' component tree, since a Flutter client has no use for a stylesheet.
 #'
-#' These arguments are browser-only; the native backend ignores them.
-#'
-#' @param ... child elements
+#' @param ... child components
 #' @param title character page title
 #' @param css character vector of stylesheet URLs, e.g.
 #'   "/static/styles.css"
 #' @param js character vector of script URLs
 #' @param favicon character URL of the tab icon
-#' @param head a glinty_tag or raw character HTML appended to the
-#'   document head; the escape hatch for meta tags and anything else
-#'   glinty has no constructor for (trusted as-is, so do not pass
-#'   untrusted text)
-#' @return A UI tree (glinty_tag with title and head fields)
+#' @param head a raw character HTML string appended to the document
+#'   head; the escape hatch for meta tags. Trusted as-is.
+#' @return A UI component
 #' @examples
-#' page(h1("Hello"), title = "My app")
-#' page(h1("Hello"), css = "/static/styles.css", favicon = "/static/logo.png")
+#' page(heading("Hello"), title = "My app")
 #' @export
 page <- function(..., title = "glinty app", css = NULL, js = NULL,
                  favicon = NULL, head = NULL) {
-    ui <- tag("div", children = list(...), attrs = list(class = "g-page"))
-    ui$title <- title
-    ui$head <- page_head(css = css, js = js, favicon = favicon, extra = head)
-    ui
+    x <- component("page", children = list(...), title = title)
+    # Assets are a transport concern, not UI. Kept off the component so
+    # they never reach a client that cannot use them.
+    attr(x, "assets") <- page_head(css = css, js = js, favicon = favicon,
+                                   extra = head)
+    x
 }
 
-#' Create a generic container
+#' Display a string
 #'
-#' @param ... child elements
-#' @param class character CSS class(es)
+#' Named txt() rather than text() on purpose: text() would mask
+#' graphics::text(), and a glinty app that draws a plot calls that
+#' inside render_plot(). Masking it would break plotting in the one
+#' place glinty most needs it to work. The component is still "text"
+#' on the wire; only the R name gives way.
+#'
+#' @param value character text to show
+#' @param variant character "normal", "muted", "strong" or "heading"
 #' @param id character element ID
-#' @return A UI element
+#' @return A UI component
 #' @examples
-#' div(h2("Section"), class = "sidebar")
+#' txt("Ready.")
+#' txt("optional", variant = "muted")
 #' @export
-div <- function(..., class = NULL, id = NULL) {
-    attrs <- list()
-    if (!is.null(class)) {
-        attrs$class <- class
-    }
-    if (!is.null(id)) {
-        attrs$id <- id
-    }
-    tag("div", children = list(...), attrs = attrs)
-}
-
-#' Create a generic inline element
-#'
-#' @param ... child elements or text
-#' @param class character CSS class(es)
-#' @param id character element ID
-#' @return A UI element
-#' @examples
-#' span("status: ok", class = "muted")
-#' @export
-span <- function(..., class = NULL, id = NULL) {
-    children <- list(...)
-    text <- NULL
-    if (length(children) == 1L && is.character(children[[1L]])) {
-        text <- children[[1L]]
-        children <- list()
-    }
-    attrs <- list()
-    if (!is.null(class)) {
-        attrs$class <- class
-    }
-    if (!is.null(id)) {
-        attrs$id <- id
-    }
-    tag("span", children = children, text = text, attrs = attrs)
-}
-
-#' Create a paragraph
-#'
-#' @param ... child elements or text
-#' @param class character CSS class(es)
-#' @return A UI element
-#' @examples
-#' p("Some explanatory text.")
-#' @export
-p <- function(..., class = NULL) {
-    children <- list(...)
-    text <- NULL
-    if (length(children) == 1L && is.character(children[[1L]])) {
-        text <- children[[1L]]
-        children <- list()
-    }
-    attrs <- list()
-    if (!is.null(class)) {
-        attrs$class <- class
-    }
-    tag("p", children = children, text = text, attrs = attrs)
-}
-
-#' Create a hyperlink
-#'
-#' @param text character link text
-#' @param href character link target URL
-#' @return A UI element
-#' @examples
-#' a("cornball.ai", "https://cornball.ai")
-#' @export
-a <- function(text, href) {
-    tag("a", text = text, attrs = list(href = href))
+txt <- function(value, variant = "normal", id = NULL) {
+    component("text", value = value, variant = variant, id = id)
 }
 
 #' Create a heading
 #'
-#' @param text character heading text
-#' @return A UI element
-#' @examples
-#' h1("Title")
-#' @export
-h1 <- function(text) tag("h1", text = text)
-
-#' Create a second-level heading
+#' The level is a number rather than a tag name, so a client that has
+#' no h1..h6 can map it onto its own type scale.
 #'
-#' @param text character heading text
-#' @return A UI element
+#' @param value character heading text
+#' @param level integer 1 to 4
+#' @param id character element ID
+#' @return A UI component
 #' @examples
-#' h2("Section")
+#' heading("Results", level = 2L)
 #' @export
-h2 <- function(text) tag("h2", text = text)
+heading <- function(value, level = 2L, id = NULL) {
+    component("heading", value = value, level = level, id = id)
+}
 
-#' Create a third-level heading
+#' Create a hyperlink
 #'
-#' @param text character heading text
-#' @return A UI element
+#' @param value character link text
+#' @param href character target URL
+#' @param external logical open outside the app; a native client hands
+#'   this to the system browser
+#' @return A UI component
 #' @examples
-#' h3("Subsection")
+#' link("cornball.ai", "https://cornball.ai", external = TRUE)
 #' @export
-h3 <- function(text) tag("h3", text = text)
+link <- function(value, href, external = FALSE) {
+    component("link", value = value, href = href, external = external)
+}
 
-#' Create a fourth-level heading
+#' Create an icon
 #'
-#' @param text character heading text
-#' @return A UI element
+#' The name is a token, not artwork: each frontend supplies its own
+#' glyph. An unmapped name renders a visible placeholder rather than
+#' nothing, so a typo shows up.
+#'
+#' @param name character icon name, e.g. "play", "trash", "download"
+#' @param size integer pixel size
+#' @return A UI component
 #' @examples
-#' h4("Detail")
+#' icon("play")
 #' @export
-h4 <- function(text) tag("h4", text = text)
+icon <- function(name, size = 16L) {
+    component("icon", name = name, size = size)
+}
+
+#' Create a horizontal rule
+#'
+#' @param label character text shown in the rule, e.g. "or"
+#' @return A UI component
+#' @examples
+#' divider()
+#' divider(label = "or")
+#' @export
+divider <- function(label = NULL) {
+    component("divider", label = label,
+              variant = if (is.null(label)) "line" else "labelled")
+}
+
+#' Create empty space
+#'
+#' Sized in theme spacing units rather than pixels, so it scales with
+#' the theme instead of pinning a frontend to CSS lengths.
+#'
+#' @param size integer multiples of the theme's spacing unit
+#' @return A UI component
+#' @examples
+#' spacer(2L)
+#' @export
+spacer <- function(size = 1L) {
+    component("spacer", size = size)
+}
 
 #' Arrange children in a horizontal row
 #'
-#' Maps to a flexbox row in the browser and flitR's row layout in the
-#' native backend, so layouts carry across frontends. Note: masks
-#' base::row() (matrix row indices) when glinty is attached, the same
-#' way page() masks utils::page(); call base::row() qualified if you
-#' need it.
+#' Note: masks base::row() (matrix row indices) when glinty is
+#' attached, the same way page() masks utils::page(); call base::row()
+#' qualified if you need it.
 #'
-#' @param ... child elements
-#' @param gap numeric gap between children in pixels (frontend
-#'   default when NULL)
-#' @param align character vertical alignment: "start", "center", or
-#'   "end" (browser only)
-#' @return A UI element
+#' @param ... child components
+#' @param gap integer space between children, in pixels
+#' @param align character "start", "center" or "end"
+#' @param id character element ID
+#' @return A UI component
 #' @examples
-#' row(button("a", "A"), button("b", "B"), gap = 24)
+#' row(button("a", "A"), button("b", "B"), gap = 12L)
 #' @export
-row <- function(..., gap = NULL, align = NULL) {
-    attrs <- list(class = "g-layout-row")
-    style <- character(0L)
-    if (!is.null(gap)) {
-        attrs[["data-g-gap"]] <- as.character(gap)
-        style <- c(style, paste0("gap:", as.numeric(gap), "px;"))
-    }
-    if (!is.null(align)) {
-        align <- match.arg(align, c("start", "center", "end"))
-        style <- c(style, paste0("align-items:",
-                                 switch(align, start = "flex-start", center = "center",
-                                        end = "flex-end"), ";"))
-    }
-    if (length(style) > 0L) {
-        attrs$style <- paste(style, collapse = "")
-    }
-    tag("div", children = list(...), attrs = attrs)
+row <- function(..., gap = NULL, align = NULL, id = NULL) {
+    component("row", children = list(...), gap = gap, align = align, id = id)
 }
 
 #' Arrange children in a vertical column
 #'
-#' The explicit counterpart of row(); maps to a flexbox column in the
-#' browser and flitR's column layout natively.
-#'
-#' @param ... child elements
-#' @param gap numeric gap between children in pixels (frontend
-#'   default when NULL)
-#' @return A UI element
+#' @param ... child components
+#' @param gap integer space between children, in pixels
+#' @param id character element ID
+#' @return A UI component
 #' @examples
-#' column(h3("Stack"), text_output("a"), text_output("b"))
+#' column(heading("Stack"), text_output("a"), text_output("b"))
 #' @export
-column <- function(..., gap = NULL) {
-    attrs <- list(class = "g-layout-col")
-    if (!is.null(gap)) {
-        attrs[["data-g-gap"]] <- as.character(gap)
-        attrs$style <- paste0("gap:", as.numeric(gap), "px;")
-    }
-    tag("div", children = list(...), attrs = attrs)
+column <- function(..., gap = NULL, id = NULL) {
+    component("column", children = list(...), gap = gap, id = id)
+}
+
+#' Group children in a container
+#'
+#' @param ... child components
+#' @param variant character "plain", "card" or "sidebar"
+#' @param title character heading shown above the contents
+#' @param id character element ID
+#' @return A UI component
+#' @examples
+#' panel(txt("body"), variant = "card", title = "Results")
+#' @export
+panel <- function(..., variant = "plain", title = NULL, id = NULL) {
+    component("panel", children = list(...), variant = variant,
+              title = title, id = id)
 }

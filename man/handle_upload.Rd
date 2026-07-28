@@ -12,10 +12,12 @@ handle_upload(req)
 raw HTTP response
 }
 \description{
-POST /upload?session=<sid>&id=<input_id> with a multipart body.
-File parts are written under a per-session temp dir (removed when
-the session ends) and the input becomes a data.frame with one row
-per file: name, size, type, datapath. Dependent outputs update
-over the WebSocket on the next tick.
+POST /upload?ticket=<token> with a multipart body. The ticket was
+minted over the WebSocket and binds the session and the input id,
+so neither appears in the URL. File parts are written under a
+per-session temp dir (removed when the session ends) and the input
+becomes a data.frame with one row per file: name, size, type,
+datapath. Dependent outputs update over the WebSocket on the next
+tick.
 }
 \keyword{internal}

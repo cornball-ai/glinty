@@ -127,11 +127,8 @@ transport_rebind <- function(from_sid, to_sid) {
 #' @return character session id
 #' @keywords internal
 new_session_id <- function() {
-    if (is.null(REG$sid_counter)) {
-        REG$sid_counter <- 0L
-    }
-    REG$sid_counter <- REG$sid_counter + 1L
-    material <- paste(Sys.getpid(), sprintf("%.9f", as.numeric(Sys.time())),
-                      REG$sid_counter, tempfile(), sep = "|")
-    substr(digest::digest(material, algo = "sha1", serialize = FALSE), 1L, 32L)
+    # A session id doubles as the resume credential within the grace
+    # window, so it gets the same CSPRNG a ticket does -- hashed
+    # process state (the old recipe) is unique, not unpredictable.
+    raw_to_hex(random_bytes(16L))
 }

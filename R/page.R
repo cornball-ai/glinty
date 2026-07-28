@@ -11,15 +11,39 @@
 #' @param body_html character HTML for the page body
 #' @param title character page title
 #' @param head a page head spec (see page_head()), or NULL
+#' @param ui_revision character revision of the tree body_html was
+#'   rendered from, embedded as a meta tag so the client can tell
+#'   whether this markup describes the tree welcome sends it; NULL
+#'   omits the tag (a client without one rebuilds from welcome)
+#' @param theme_css character :root block of theme tokens (see
+#'   theme_css()), so the first paint is themed before any socket
+#'   work; NULL omits it and the stylesheet's defaults apply
 #' @return character complete HTML document
 #' @keywords internal
-full_page_html <- function(body_html, title = "glinty app", head = NULL) {
+full_page_html <- function(body_html, title = "glinty app", head = NULL,
+                           ui_revision = NULL, theme_css = NULL) {
+    revision_meta <- if (is.null(ui_revision)) {
+        ""
+    } else {
+        paste0("<meta name=\"g-ui-revision\" content=\"",
+               html_escape(ui_revision), "\">\n")
+    }
+    theme_block <- if (is.null(theme_css)) {
+        ""
+    } else {
+        # After the stylesheet link, so token values win over the
+        # stylesheet's :root defaults (and its dark-mode block: a
+        # supplied theme is exact).
+        paste0("<style id=\"g-theme\">", theme_css, "</style>\n")
+    }
     paste0(
            "<!DOCTYPE html>\n<html>\n<head>\n",
            "<meta charset=\"utf-8\">\n",
            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
+           revision_meta,
            "<title>", html_escape(title), "</title>\n",
            "<link rel=\"stylesheet\" href=\"/glinty/glinty.css\">\n",
+           theme_block,
            head_html(head),
            "</head>\n<body>\n",
            "<div id=\"glinty-root\">", body_html, "</div>\n",
@@ -37,7 +61,7 @@ full_page_html <- function(body_html, title = "glinty app", head = NULL) {
 #' @param css character vector of stylesheet URLs
 #' @param js character vector of script URLs
 #' @param favicon character icon URL
-#' @param extra a glinty_tag or raw character HTML appended to head
+#' @param extra raw character HTML appended to head
 #' @return a list, or NULL when nothing was supplied
 #' @keywords internal
 page_head <- function(css = NULL, js = NULL, favicon = NULL, extra = NULL) {
@@ -84,22 +108,19 @@ body_scripts_html <- function(head) {
 
 #' Serialize the escape-hatch head content
 #'
-#' A glinty_tag is serialized; character is trusted as-is, since the
+#' Trusted as-is, since the
 #' whole point of the escape hatch is emitting markup glinty has no
 #' constructor for.
 #'
-#' @param extra a glinty_tag, character, or NULL
+#' @param extra character, or NULL
 #' @return character HTML
 #' @keywords internal
 raw_head_html <- function(extra) {
     if (is.null(extra)) {
         return(character(0L))
     }
-    if (inherits(extra, "glinty_tag")) {
-        return(paste0(tag_to_html(extra), "\n"))
-    }
     if (is.character(extra)) {
         return(paste0(paste(extra, collapse = "\n"), "\n"))
     }
-    stop("page(head=) expects a glinty_tag, character, or NULL", call. = FALSE)
+    stop("page(head=) expects character or NULL", call. = FALSE)
 }

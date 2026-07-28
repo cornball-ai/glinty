@@ -5,6 +5,9 @@
 #'   function(input, output, session) defining reactive logic; it is
 #'   called once per connecting browser tab, each with its own
 #'   session-scoped state
+#' @param theme an app_theme(), or NULL for each frontend's own
+#'   defaults (in the browser that includes automatic dark mode,
+#'   which a supplied theme replaces with exactly its tokens)
 #' @return A glinty_app object
 #' @examples
 #' app_obj <- app(
@@ -19,11 +22,15 @@
 #'     }
 #' )
 #' @export
-app <- function(ui, server) {
+app <- function(ui, server, theme = NULL) {
     if (!is.function(server)) {
         stop("server must be a function", call. = FALSE)
     }
-    structure(list(ui = ui, server = server), class = "glinty_app")
+    if (!is.null(theme) && !inherits(theme, "glinty_theme")) {
+        stop("theme must come from app_theme(), or be NULL", call. = FALSE)
+    }
+    structure(list(ui = ui, server = server, theme = theme),
+              class = "glinty_app")
 }
 
 #' Run a glinty application
@@ -42,7 +49,14 @@ app <- function(ui, server) {
 #' for the localhost/LAN tool scope, but treat it accordingly.
 #'
 #' @param app_obj a glinty_app object
-#' @param port integer HTTP port (default 8080)
+#' @param port integer HTTP port. NULL (the default) reads
+#'   GLINTY_PORT then PORT from the environment before falling back
+#'   to 8080, so a scheduler-allocated port needs no plumbing.
+#' @param auth a function(token) verifying the opaque token a client
+#'   sends in hello: NULL from the function refuses the connection,
+#'   anything else becomes session$principal. NULL (the default)
+#'   accepts every connection with no principal. See jwt_auth() for
+#'   the JWT case.
 #' @param static_dir character directory served under /static/
 #'   (default "www" in the working directory; skipped if absent)
 #' @param check_secrets logical refuse to start when the rendered page
@@ -62,12 +76,17 @@ app <- function(ui, server) {
 #' run_app(app_obj, port = 8080)
 #' }
 #' @export
-run_app <- function(app_obj, port = 8080L, static_dir = "www",
+run_app <- function(app_obj, port = NULL, auth = NULL, static_dir = "www",
                     max_upload = 10485760L, check_secrets = TRUE,
                     quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
+    if (!is.null(auth) && !is.function(auth)) {
+        stop("auth must be a function(token), or NULL (see jwt_auth())",
+             call. = FALSE)
+    }
+    port <- resolve_port(port)
 
     old_max <- options(glinty.max_upload = as.integer(max_upload))
     on.exit(options(old_max), add = TRUE)
@@ -79,11 +98,33 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     .globals$current_session <- NULL
     .globals$timers <- list()
     .globals$progress <- list()
+    .globals$tickets <- new.env(parent = emptyenv())
+
+    # The tree and its revision are computed once: the same wire form
+    # goes into every welcome, and the revision goes into both the
+    # pre-rendered document and the welcome, which is what lets a
+    # client tell whether the markup it was handed matches the tree
+    # it was just sent.
+    .globals$welcome_ui <- unclass_recursive(app_obj$ui)
+    .globals$welcome_revision <- ui_revision(app_obj$ui)
+    # Theme tokens ride beside the tree, not in it: a palette change
+    # must not invalidate hydration, any more than a stylesheet would.
+    .globals$welcome_theme <- if (is.null(app_obj$theme)) {
+        NULL
+    } else {
+        theme_wire(app_obj$theme)
+    }
 
     page_html <- full_page_html(
-                                tag_to_html(app_obj$ui),
+                                component_to_html(app_obj$ui),
         if (!is.null(app_obj$ui$title)) app_obj$ui$title else "glinty app",
-                                app_obj$ui$head
+                                attr(app_obj$ui, "assets"),
+                                ui_revision = .globals$welcome_revision,
+                                theme_css = if (is.null(app_obj$theme)) {
+            NULL
+        } else {
+            theme_css(app_obj$theme)
+        }
     )
     # Before a single byte is served, not after.
     if (isTRUE(check_secrets)) {
@@ -96,12 +137,20 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
     }
 
     n_formals <- length(formals(app_obj$server))
+    started <- as.numeric(Sys.time())
 
-    start_session <- function(sid, resumed = NULL) {
+    start_session <- function(sid, resumed = NULL, principal = NULL) {
         s <- new_session(sid, send_fn = function(msg) {
             send_to_session(sid, msg)
         })
-        s$send(config_msg(sid, resumed = resumed))
+        s$principal <- principal
+        # Inputs seed from the tree before the server function runs:
+        # reactives read defaults on their first run, and
+        # observe_event()'s ignore_init treats them as init state
+        # rather than changes. Protocol 2 waited for the client to
+        # send these back.
+        seed_session_inputs(s, app_obj$ui)
+        s$send(welcome_msg(sid, resumed = resumed))
         with_session(s, {
             if (n_formals >= 3L) {
                 app_obj$server(s$input, s$output, s)
@@ -115,11 +164,11 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
 
     handlers <- list(
                      on_request = function(req) {
-        route_http(req, page_html, pkg_www, static_dir)
+        route_http(req, page_html, pkg_www, static_dir, started = started)
     },
                      # Sessions start on the FIRST client message, not at
-                     # upgrade: the first frame decides between a fresh
-                     # init and a resume of a detached session.
+                     # upgrade: the hello decides between a fresh
+                     # session and a resume of a detached one.
                      on_open = function(sid) invisible(NULL),
                      on_message = function(sid, txt) {
         s <- .globals$sessions[[sid]]
@@ -129,24 +178,44 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
         }
         first <- tryCatch(jsonlite::fromJSON(txt, simplifyVector = FALSE),
                           error = function(e) NULL)
-        if (!is.null(first) && identical(first$type, "resume")) {
-            old_id <- first$session_id
-            old <- if (is.character(old_id) && nzchar(old_id)) {
-                .globals$sessions[[old_id]]
-            } else {
-                NULL
-            }
+        # The first frame must be a well-formed hello before anything
+        # else happens: no verifier run, no session created, for a
+        # frame that is not the opening the protocol defines.
+        if (!well_formed_hello(first)) {
+            refuse_conn(sid, "expected a protocol 3 hello")
+            return(invisible(NULL))
+        }
+        # The gate sits before any session exists, resume included: a
+        # token that no longer verifies does not get its old session
+        # back.
+        gate <- authenticate_hello(auth, first)
+        if (!gate$ok) {
+            refuse_conn(sid, "authentication failed")
+            return(invisible(NULL))
+        }
+        resume_id <- first$resume
+        if (is.character(resume_id) && nzchar(resume_id)) {
+            old <- .globals$sessions[[resume_id]]
+            # Resume is principal-bound: a valid token for user B
+            # plus user A's session id must not replay A's outputs.
             if (!is.null(old) && isTRUE(old$detached) &&
-                     transport_rebind(sid, old_id)) {
+                     resume_allowed(old, gate$principal, auth) &&
+                     transport_rebind(sid, resume_id)) {
+                old$principal <- gate$principal
                 resume_session(old)
+                # the reconnecting client redeclares its capabilities
+                dispatch_client_message(old, txt)
             } else {
-                # unknown or expired: honest fresh session; the
-                # client reloads since its DOM may be stale
-                start_session(sid, resumed = FALSE)
+                # unknown, expired, or someone else's: honest fresh
+                # session; the client reloads since its DOM holds
+                # dead state
+                s <- start_session(sid, resumed = FALSE,
+                                   principal = gate$principal)
+                dispatch_client_message(s, txt)
             }
             return(invisible(NULL))
         }
-        s <- start_session(sid)
+        s <- start_session(sid, principal = gate$principal)
         dispatch_client_message(s, txt)
         flush_reactions()
     },
@@ -160,8 +229,68 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
 
     if (!quiet) {
         message("glinty app running at http://localhost:", port)
+        # Named in the same breath as the URL, not buried in ?run_app:
+        # base R's serverSocket() takes no bind address, so the one
+        # component that can bind selectively is the firewall or
+        # namespace around this port.
+        message("listening on all interfaces (base R sockets cannot ",
+                "bind selectively); gate sessions with auth = and ",
+                "scope the port with a firewall or namespace")
+        if (is.null(auth)) {
+            message("auth: none (every connection accepted)")
+        }
     }
     run_ws_server(port, handlers)
+    invisible(NULL)
+}
+
+#' Resolve the port to serve on
+#'
+#' An explicit port wins. NULL reads GLINTY_PORT then PORT from the
+#' environment -- a scheduler that allocates ports sets one of those
+#' -- and falls back to 8080.
+#'
+#' @param port integer or NULL
+#' @return integer port
+#' @keywords internal
+resolve_port <- function(port) {
+    if (!is.null(port)) {
+        port <- suppressWarnings(as.integer(port))
+        if (length(port) != 1L || is.na(port) || port < 1L || port > 65535L) {
+            stop("port must be a single integer in [1, 65535]", call. = FALSE)
+        }
+        return(port)
+    }
+    for (var in c("GLINTY_PORT", "PORT")) {
+        val <- Sys.getenv(var, "")
+        if (nzchar(val)) {
+            p <- suppressWarnings(as.integer(val))
+            if (length(p) == 1L && !is.na(p) && p >= 1L && p <= 65535L) {
+                return(p)
+            }
+            stop(var, " is set but not a valid port: '", val, "'",
+                 call. = FALSE)
+        }
+    }
+    8080L
+}
+
+#' Refuse a connection before any session exists
+#'
+#' Sends one error frame so the refusal is visible client-side, then
+#' marks the transport dead; the close happens at the top of the next
+#' loop tick, after the frame has been written.
+#'
+#' @param sid character transport session id
+#' @param message character reason shown to the client
+#' @return invisible(NULL)
+#' @keywords internal
+refuse_conn <- function(sid, message) {
+    send_to_session(sid, error_msg(NULL, message))
+    key <- REG$sessions[[sid]]
+    if (!is.null(key)) {
+        mark_dead(key)
+    }
     invisible(NULL)
 }
 
@@ -172,14 +301,25 @@ run_app <- function(app_obj, port = 8080L, static_dir = "www",
 #' @param pkg_www character package asset dir (served at /glinty/)
 #' @param static_dir character app asset dir (served at /static/),
 #'   or NULL
+#' @param started numeric epoch seconds the server came up, for
+#'   /healthz uptime
 #' @return raw HTTP response
 #' @keywords internal
-route_http <- function(req, page_html, pkg_www, static_dir) {
+route_http <- function(req, page_html, pkg_www, static_dir,
+                       started = as.numeric(Sys.time())) {
     if (identical(req$method, "POST") && identical(req$path, "/upload")) {
         return(handle_upload(req))
     }
     if (!identical(req$method, "GET")) {
         return(http_response_raw(404L, "text/plain", "Not found"))
+    }
+    if (identical(req$path, "/healthz")) {
+        # Session count and uptime, so a supervisor can tell
+        # "listening" from "working" without opening a WebSocket.
+        return(http_response_raw(200L, "application/json",
+                                 sprintf('{"status":"ok","sessions":%d,"uptime":%d}',
+                    length(ls(.globals$sessions)),
+                    max(0L, as.integer(as.numeric(Sys.time()) - started)))))
     }
     if (identical(req$path, "/download")) {
         return(handle_download(req))

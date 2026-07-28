@@ -9,13 +9,7 @@ env:
 
 jobs:
   ci:
-    strategy:
-      matrix:
-        include:
-          - {os: macos-latest}
-          - {os: ubuntu-latest}
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v6
@@ -28,3 +22,109 @@ jobs:
 
       - name: Test
         run: ./run.sh run_tests
+
+  # Ubuntu goes through r2u + rapt instead of r-ci's bspm bootstrap:
+  # Python-free, dogfoods cornball's own installer, and the mirror
+  # fetch (the part that actually flakes) gets explicit retries.
+  ubuntu-rapt:
+    # pinned, not -latest: the apt sources below hardcode noble
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/r2u
+
+      - name: Build tools for the rapt .deb
+        run: sudo apt-get install -y --no-install-recommends r-base-dev debhelper
+
+      - name: rapt
+        env:
+          RAPT_REF: fc71e12d8285c02b55d0408126a1be4338ded1d4
+        run: |
+          git clone https://github.com/cornball-ai/rapt /tmp/rapt
+          git -C /tmp/rapt checkout --quiet "$RAPT_REF"
+          cd /tmp/rapt/pkg
+          dpkg-buildpackage -us -uc -b
+          sudo apt-get install -y /tmp/rapt/rapt_*.deb
+          Rscript -e 'print(rapt::manager())'
+
+      # Read from DESCRIPTION rather than a hardcoded list: a
+      # hardcoded one drifts the moment a dependency is added, and
+      # then fails here as a missing-package error that looks like a
+      # CI bug rather than the omission it is.
+      - name: Dependencies (install.packages -> rapt -> apt -> r2u)
+        run: |
+          Rscript -e '
+            d <- read.dcf("DESCRIPTION", c("Depends", "Imports", "Suggests"))
+            pkgs <- trimws(unlist(strsplit(
+              gsub("\\s*\\([^)]*\\)", "", d[!is.na(d)]), ",")))
+            pkgs <- setdiff(pkgs, c("R", "", rownames(installed.packages())))
+            cat("installing:", paste(pkgs, collapse = ", "), "\n")
+            if (length(pkgs)) install.packages(pkgs)
+          '
+
+      - name: Build and check
+        run: |
+          R CMD build .
+          _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --as-cran glinty_*.tar.gz
+
+      - name: Test
+        run: |
+          sudo R CMD INSTALL glinty_*.tar.gz
+          Rscript -e 'tinytest::test_package("glinty")'
+
+  # The second lowering. Separate from the R job because it needs the
+  # Flutter SDK and nothing else here does -- but it reads the same
+  # inst/fixtures/components.json and inst/fixtures/transcripts.json,
+  # so a component or an exchange added on the R side fails here until
+  # this client answers for it.
+  flutter:
+    # pinned like ubuntu-rapt: the r2u source below hardcodes noble
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: dart/glinty_flutter
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      # R and glinty, so server_e2e_test.dart drives the real client
+      # against a real server rather than skipping. Without this the
+      # suite still passes -- which is exactly why it is here: a
+      # skipped e2e that reports green is the failure mode this
+      # protocol keeps refusing to ship.
+      #
+      # Dependencies come from r2u as apt binaries: openssl needs
+      # libssl headers to build from source, and the site library
+      # needs root either way.
+      - uses: ./.github/actions/r2u
+
+      - name: glinty and its dependencies
+        working-directory: .
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            r-cran-digest r-cran-jsonlite r-cran-openssl
+          sudo R CMD INSTALL .
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: The e2e actually ran (not skipped)
+        run: flutter test test/server_e2e_test.dart --reporter expanded
+             | tee /tmp/e2e.log
+             && ! grep -qi "skip" /tmp/e2e.log
+
+  # The browser client, driven through the same transcripts and
+  # fixtures. This is the stage 2 gate: adoption emitting nothing and
+  # one-press-one-frame can only be proven here, because only the
+  # browser adopts pre-rendered markup.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: node tools/jsbridge.js inst/www/glinty.js

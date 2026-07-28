@@ -14,8 +14,8 @@
 #' cond_or() and cond_not(). There is no JavaScript expression to
 #' write and nothing is eval()ed.
 #'
-#' Browser-only: the native backend renders the children unwrapped
-#' and always visible.
+#' Condition evaluation is a client capability. A frontend that does
+#' not implement it renders the children always visible.
 #'
 #' @param ... child elements
 #' @param condition a condition from input_is() and friends
@@ -36,13 +36,11 @@
 #' )
 #' @export
 conditional_panel <- function(..., condition) {
-    if (missing(condition) || !inherits(condition, "glinty_condition")) {
+    if (missing(condition)) {
         stop("conditional_panel() needs a condition from input_is(), ",
              "cond_and(), cond_or() or cond_not()", call. = FALSE)
     }
-    attrs <- list(class = "g-conditional")
-    attrs[["data-g-cond"]] <- condition_json(condition)
-    tag("div", children = list(...), attrs = attrs)
+    component("conditional_panel", condition = condition, children = list(...))
 }
 
 #' Test an input's value

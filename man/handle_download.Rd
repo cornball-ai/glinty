@@ -6,7 +6,7 @@
 handle_download(req)
 }
 \arguments{
-\item{req}{a parsed request with a query carrying session and id}
+\item{req}{a parsed request with a query carrying a ticket}
 }
 \value{
 raw HTTP response

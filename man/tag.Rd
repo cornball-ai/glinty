@@ -1,41 +1,49 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{tag}
 \alias{tag}
-\title{Generic tag constructor}
+\title{Emit trusted raw HTML}
 \usage{
-tag(name, children = list(), text = NULL, attrs = list(), bind = NULL)
+tag(html)
 }
 \arguments{
-\item{name}{character tag name (e.g. "div", "button")}
-
-\item{children}{list of child tags}
-
-\item{text}{character text content (takes precedence over children)}
-
-\item{attrs}{named list of HTML attributes}
-
-\item{bind}{list with event and target fields for JS event
-binding, plus an optional value field. A click bind with a value
-sets the input to that value instead of bumping an
-action-button counter, which is how one delegated handler
-serves a list of rows: every row targets the same input and
-reports which one was clicked.}
+\item{html}{character trusted raw HTML}
 }
 \value{
-A tag list with class "glinty_tag"
+A UI component
 }
 \description{
-The extensibility contract: any element with an id, a
-data-g-event, and a data-g-target (via bind) is a glinty input;
-any element with an id can be an output target. Custom widgets are
-plain R functions returning tag() trees.
+The browser-only escape hatch, for markup with no component
+equivalent.
+}
+\details{
+**The string is inserted into the page unescaped.** It is trusted
+HTML, not text: markup in it is markup, and a `<script>` in it
+runs. So the argument must be a literal you wrote, or built from
+parts you control. Never interpolate a user-supplied string, a
+request parameter, a filename, a database field or a model
+response into it. That is cross-site scripting, and glinty does
+nothing to stop it here by design -- escaping the string would
+defeat the only purpose the function has.
+
+For text of any provenance, use \code{\link{txt}()}, which travels
+as a value and is escaped by whichever frontend renders it. If you
+genuinely need markup around untrusted text, run the text through
+\code{\link{html_escape}()} before pasting it in.
+
+Any frontend other than the browser refuses it by name and draws a
+visible placeholder, since arbitrary markup cannot be translated
+into a widget tree. Content that has to appear everywhere belongs
+in the component set instead.
+
 }
 \examples{
-tag("input",
-    attrs = list(id = "col", type = "color"),
-    bind = list(event = "input", target = "col"))
+tag("<details><summary>More</summary>body</details>")
 
-# a clickable row reporting its own id
-tag("div", text = "Entry 3",
-    bind = list(event = "click", target = "row_click", value = "id-3"))
+# untrusted text needs escaping first
+name <- "<script>alert(1)</script>"
+tag(paste0("<figcaption>", html_escape(name), "</figcaption>"))
+}
+\seealso{
+\code{\link{txt}} for untrusted text,
+  \code{\link{html_escape}} to escape it
 }

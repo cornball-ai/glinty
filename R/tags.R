@@ -1,43 +1,62 @@
-#' Generic tag constructor
+# The escape hatch.
+#
+# Under protocol v2 tag() was how every widget was built. Under v3 the
+# component set is, and tag() is what remains for markup glinty has no
+# component for. It produces raw_html, which the browser renders and
+# every other frontend refuses by name -- arbitrary HTML has no
+# meaning to a Flutter widget tree.
+#
+# So anything that must render on more than one frontend comes from
+# the component set, and this is for the browser-only remainder.
+
+#' Emit trusted raw HTML
 #'
-#' The extensibility contract: any element with an id, a
-#' data-g-event, and a data-g-target (via bind) is a glinty input;
-#' any element with an id can be an output target. Custom widgets are
-#' plain R functions returning tag() trees.
+#' The browser-only escape hatch, for markup with no component
+#' equivalent.
 #'
-#' @param name character tag name (e.g. "div", "button")
-#' @param children list of child tags
-#' @param text character text content (takes precedence over children)
-#' @param attrs named list of HTML attributes
-#' @param bind list with event and target fields for JS event
-#'   binding, plus an optional value field. A click bind with a value
-#'   sets the input to that value instead of bumping an
-#'   action-button counter, which is how one delegated handler
-#'   serves a list of rows: every row targets the same input and
-#'   reports which one was clicked.
-#' @return A tag list with class "glinty_tag"
+#' **The string is inserted into the page unescaped.** It is trusted
+#' HTML, not text: markup in it is markup, and a `<script>` in it
+#' runs. So the argument must be a literal you wrote, or built from
+#' parts you control. Never interpolate a user-supplied string, a
+#' request parameter, a filename, a database field or a model
+#' response into it. That is cross-site scripting, and glinty does
+#' nothing to stop it here by design -- escaping the string would
+#' defeat the only purpose the function has.
+#'
+#' For text of any provenance, use \code{\link{txt}()}, which travels
+#' as a value and is escaped by whichever frontend renders it. If you
+#' genuinely need markup around untrusted text, run the text through
+#' \code{\link{html_escape}()} before pasting it in.
+#'
+#' Any frontend other than the browser refuses it by name and draws a
+#' visible placeholder, since arbitrary markup cannot be translated
+#' into a widget tree. Content that has to appear everywhere belongs
+#' in the component set instead.
+#'
+#' @param html character trusted raw HTML
+#' @return A UI component
+#' @seealso \code{\link{txt}} for untrusted text,
+#'   \code{\link{html_escape}} to escape it
 #' @examples
-#' tag("input",
-#'     attrs = list(id = "col", type = "color"),
-#'     bind = list(event = "input", target = "col"))
+#' tag("<details><summary>More</summary>body</details>")
 #'
-#' # a clickable row reporting its own id
-#' tag("div", text = "Entry 3",
-#'     bind = list(event = "click", target = "row_click", value = "id-3"))
+#' # untrusted text needs escaping first
+#' name <- "<script>alert(1)</script>"
+#' tag(paste0("<figcaption>", html_escape(name), "</figcaption>"))
 #' @export
-tag <- function(name, children = list(), text = NULL, attrs = list(),
-                bind = NULL) {
-    structure(
-              list(tag = name, attrs = attrs, text = text, children = children,
-                   bind = bind),
-              class = "glinty_tag"
-    )
+tag <- function(html) {
+    component("raw_html", html = html)
 }
 
 #' Escape text for safe HTML output
 #'
+#' Only needed when building a string for \code{\link{tag}()}. Text
+#' carried by a component is escaped by the frontend that renders it,
+#' so escaping it here would double-escape and show the entities.
+#'
 #' @param x character string
 #' @return character with &, <, >, " escaped
+#' @seealso \code{\link{tag}}
 #' @examples
 #' html_escape("a <b> & \"c\"")
 #' @export
@@ -47,82 +66,4 @@ html_escape <- function(x) {
     x <- gsub(">", "&gt;", x, fixed = TRUE)
     x <- gsub('"', "&quot;", x, fixed = TRUE)
     x
-}
-
-#' Convert a tag tree to an HTML string
-#'
-#' @param x a glinty_tag object or character
-#' @return character HTML string
-#' @keywords internal
-tag_to_html <- function(x) {
-    if (is.null(x)) {
-        return("")
-    }
-    if (is.character(x)) {
-        return(html_escape(x))
-    }
-
-    void <- c("input", "br", "hr", "img", "meta", "link")
-    name <- x$tag
-
-    # Build attribute string
-    attr_parts <- character(0)
-    if (length(x$attrs) > 0) {
-        for (nm in names(x$attrs)) {
-            attr_parts <- c(
-                            attr_parts,
-                            paste0(nm, '="', html_escape(as.character(x$attrs[[nm]])), '"')
-            )
-        }
-    }
-
-    # Add data attributes for event binding
-    if (!is.null(x$bind)) {
-        attr_parts <- c(
-                        attr_parts,
-                        paste0('data-g-event="', html_escape(x$bind$event), '"'),
-                        paste0('data-g-target="', html_escape(x$bind$target), '"')
-        )
-        if (!is.null(x$bind$value)) {
-            attr_parts <- c(attr_parts,
-                            paste0('data-g-value="',
-                                   html_escape(as.character(x$bind$value)), '"'))
-        }
-    }
-
-    attr_str <- if (length(attr_parts) > 0) {
-        paste0(" ", paste(attr_parts, collapse = " "))
-    } else {
-        ""
-    }
-
-    if (name %in% void) {
-        return(paste0("<", name, attr_str, ">"))
-    }
-
-    # Text takes precedence over children
-    inner <- ""
-    if (!is.null(x$text)) {
-        inner <- html_escape(x$text)
-    } else if (length(x$children) > 0) {
-        inner <- paste(
-                       vapply(x$children, tag_to_html, character(1)),
-                       collapse = ""
-        )
-    }
-
-    paste0("<", name, attr_str, ">", inner, "</", name, ">")
-}
-
-#' Print a tag as HTML
-#'
-#' @param x a glinty_tag
-#' @param ... ignored
-#' @return x, invisibly
-#' @examples
-#' print(h1("Hello"))
-#' @export
-print.glinty_tag <- function(x, ...) {
-    cat(tag_to_html(x), "\n")
-    invisible(x)
 }

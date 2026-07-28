@@ -3,17 +3,20 @@
 \alias{download_button}
 \title{Create a download button}
 \usage{
-download_button(id, label = "Download", class = NULL)
+download_button(id, label = "Download", variant = "default", icon = NULL)
 }
 \arguments{
 \item{id}{character download ID}
 
 \item{label}{character button label}
 
-\item{class}{character extra CSS class(es)}
+\item{variant}{character "default", "primary", "secondary",
+"danger" or "ghost"}
+
+\item{icon}{character icon name shown before the label}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
 Renders a link the client points at this session's download route

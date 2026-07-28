@@ -1,6 +1,6 @@
 #' Update a text input from the server
 #'
-#' Sends a typed update_input message that the client applies without
+#' Sends a typed input_update message that the client applies without
 #' re-emitting an input event, and syncs the session's server-side
 #' input value so state converges without a round trip. The client
 #' skips the value patch when the element has focus, so it never
@@ -27,18 +27,25 @@ update_text_input <- function(session, id, value = NULL, label = NULL) {
 #' @param id character input ID
 #' @param choices character vector of choices; names are display
 #'   labels (NULL leaves them alone)
-#' @param selected character value to select (NULL leaves it alone,
-#'   unless choices are replaced, in which case the first choice is
-#'   selected)
+#' @param selected character value(s) to select (NULL leaves it
+#'   alone, unless choices are replaced, in which case the first
+#'   choice is selected). More than one value means a multiple
+#'   select, and is sent as an array
+#' @param multiple logical whether this control is a multiple select.
+#'   Only needed to send one or zero selections to one: the wire form
+#'   of `selected` is an array at every length there, and a length-1
+#'   vector cannot say on its own which it meant
 #' @param label character new label text
 #' @return invisible(NULL)
 #' @examples
 #' \dontrun{
 #' update_select_input(session, "engine", choices = c("a", "b"))
+#' update_select_input(session, "tags", selected = c("a", "c"))
+#' update_select_input(session, "tags", selected = "a", multiple = TRUE)
 #' }
 #' @export
 update_select_input <- function(session, id, choices = NULL, selected = NULL,
-                                label = NULL) {
+                                label = NULL, multiple = NULL) {
     choice_list <- NULL
     if (!is.null(choices)) {
         if (is.null(names(choices))) {
@@ -51,8 +58,23 @@ update_select_input <- function(session, id, choices = NULL, selected = NULL,
             list(value = unname(choices[[i]]), label = names(choices)[[i]])
         })
     }
+    # `selected` is an array at every length for a multiple select --
+    # the same rule the component schema keeps, and for the same
+    # reason: a one-element selection that arrives as a bare string
+    # makes a client parse a list sometimes and a string other times.
+    # Two or more values say so by themselves; one or none cannot, so
+    # `multiple` is how a caller says it.
+    #
+    # NULL stays NULL throughout: it means "leave the selection
+    # alone", and turning it into an empty array here would make
+    # update_select_input(label = ) clear a selection it was never
+    # asked about. Clearing one is character(0), which says so.
+    wire <- selected
+    if (!is.null(selected) && (isTRUE(multiple) || length(selected) > 1L)) {
+        wire <- as.list(as.character(selected))
+    }
     send_input_update(session, id,
-                      list(choices = choice_list, selected = selected, label = label),
+                      list(choices = choice_list, selected = wire, label = label),
                       sync_value = selected)
 }
 
@@ -172,7 +194,7 @@ update_number_input <- function(session, id, value = NULL, min = NULL,
                       sync_value = value)
 }
 
-#' Queue an update_input message and sync server-side state
+#' Queue an input_update message and sync server-side state
 #'
 #' @param session a glinty_session
 #' @param id character input ID
@@ -187,7 +209,7 @@ send_input_update <- function(session, id, fields, sync_value = NULL) {
     if (length(fields) == 0L) {
         return(invisible(NULL))
     }
-    session$send(update_input_msg(id, fields))
+    session$send(input_update_msg(id, fields))
     if (!is.null(sync_value)) {
         handle_input(session, id, sync_value)
     }

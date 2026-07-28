@@ -6,18 +6,18 @@
 render_html(fn)
 }
 \arguments{
-\item{fn}{zero-arg function returning a glinty_tag or character}
+\item{fn}{zero-arg function returning a component or character}
 }
 \value{
 a glinty_renderer for assignment to output$id
 }
 \description{
-The value is set as innerHTML. glinty_tag trees are serialized;
-character values are trusted as-is, so escape untrusted text with
-html_escape().
+Browser-only: the value is markup the browser inserts as-is.
+Component trees are serialized; character values are trusted, so
+escape untrusted text with html_escape().
 }
 \examples{
 \dontrun{
-output$details <- render_html(function() div(h3("Result"), p("done")))
+output$details <- render_html(function() "<mark>done</mark>")
 }
 }

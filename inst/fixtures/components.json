@@ -1,0 +1,494 @@
+{
+  "protocol": 3,
+  "fixtures": [
+    {
+      "name": "text",
+      "notes": "the simplest leaf; every frontend renders it",
+      "component": {
+        "component": "text",
+        "value": "hello",
+        "variant": "normal"
+      }
+    },
+    {
+      "name": "text-muted",
+      "notes": "variant is semantic; each frontend picks its own muting",
+      "component": {
+        "component": "text",
+        "value": "quiet",
+        "variant": "muted"
+      }
+    },
+    {
+      "name": "heading",
+      "notes": "level is 1..4, not a tag name",
+      "component": {
+        "component": "heading",
+        "value": "Title",
+        "level": 1
+      }
+    },
+    {
+      "name": "link",
+      "notes": "href is data; a native frontend opens a browser",
+      "component": {
+        "component": "link",
+        "value": "cornball.ai",
+        "href": "https://cornball.ai",
+        "external": false
+      }
+    },
+    {
+      "name": "divider",
+      "notes": "no required fields; a lowering must handle the bare case",
+      "component": {
+        "component": "divider",
+        "variant": "line"
+      }
+    },
+    {
+      "name": "divider-labelled",
+      "notes": "the 'or' separator both migrated apps use",
+      "component": {
+        "component": "divider",
+        "label": "or",
+        "variant": "labelled"
+      }
+    },
+    {
+      "name": "spacer",
+      "notes": "size is in theme spacing units, not pixels",
+      "component": {
+        "component": "spacer",
+        "size": 2
+      }
+    },
+    {
+      "name": "icon",
+      "notes": "named, not a glyph or a path; frontends own the artwork",
+      "component": {
+        "component": "icon",
+        "name": "play",
+        "size": 16
+      }
+    },
+    {
+      "name": "row",
+      "notes": "nesting; gap is a number, not a CSS string",
+      "component": {
+        "component": "row",
+        "children": [
+          {
+            "component": "text",
+            "value": "a",
+            "variant": "normal"
+          },
+          {
+            "component": "text",
+            "value": "b",
+            "variant": "normal"
+          }
+        ],
+        "gap": 12
+      }
+    },
+    {
+      "name": "column-nested",
+      "notes": "recursion depth > 1, which is where lowerings drift",
+      "component": {
+        "component": "column",
+        "children": [
+          {
+            "component": "heading",
+            "value": "Section",
+            "level": 2
+          },
+          {
+            "component": "row",
+            "children": [
+              {
+                "component": "text",
+                "value": "x",
+                "variant": "normal"
+              },
+              {
+                "component": "spacer",
+                "size": 1
+              },
+              {
+                "component": "text",
+                "value": "y",
+                "variant": "normal"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "panel-card",
+      "notes": "a titled container; the browser draws a header, Flutter a Card",
+      "component": {
+        "component": "panel",
+        "children": [
+          {
+            "component": "text",
+            "value": "body",
+            "variant": "normal"
+          }
+        ],
+        "variant": "card",
+        "title": "Results"
+      }
+    },
+    {
+      "name": "empty-column",
+      "notes": "a lowering must not crash on an empty container",
+      "component": {
+        "component": "column",
+        "children": []
+      }
+    },
+    {
+      "name": "text-output",
+      "notes": "an empty slot; the value arrives later, tagged by kind",
+      "component": {
+        "component": "text_output",
+        "id": "greeting",
+        "variant": "normal"
+      }
+    },
+    {
+      "name": "plot-output-responsive",
+      "notes": "no dimensions: the client reports its box via measure",
+      "component": {
+        "component": "plot_output",
+        "id": "scatter",
+        "alt": ""
+      }
+    },
+    {
+      "name": "plot-output-fixed",
+      "notes": "explicit dimensions, which a native client needs",
+      "component": {
+        "component": "plot_output",
+        "id": "fixed",
+        "width": 400,
+        "height": 300,
+        "alt": ""
+      }
+    },
+    {
+      "name": "audio-output",
+      "notes": "browser has a player element; Flutter needs a package outside the SDK",
+      "component": {
+        "component": "audio_output",
+        "id": "player",
+        "controls": true,
+        "autoplay": false
+      }
+    },
+    {
+      "name": "text-input",
+      "notes": "emit defaults to live; browser debounces, Flutter uses onChanged",
+      "component": {
+        "component": "text_input",
+        "id": "name",
+        "label": "Name:",
+        "value": "",
+        "emit": "live"
+      }
+    },
+    {
+      "name": "select-input",
+      "notes": "choices normalize to value/label however they were written",
+      "component": {
+        "component": "select_input",
+        "id": "backend",
+        "label": "",
+        "choices": [
+          {
+            "value": "openai",
+            "label": "OpenAI"
+          },
+          {
+            "value": "local",
+            "label": "Local"
+          }
+        ],
+        "multiple": false,
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "select-multiple",
+      "notes": "its value is a list at every length; a lowering that picks one control per component silently makes this pick-one",
+      "component": {
+        "component": "select_input",
+        "id": "tags",
+        "label": "",
+        "choices": [
+          {
+            "value": "a",
+            "label": "Alpha"
+          },
+          {
+            "value": "b",
+            "label": "Beta"
+          },
+          {
+            "value": "c",
+            "label": "Gamma"
+          }
+        ],
+        "selected": [
+          "a",
+          "c"
+        ],
+        "multiple": true,
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "slider-input",
+      "notes": "numbers, not CSS strings: Flutter derives Slider divisions from step",
+      "component": {
+        "component": "slider_input",
+        "id": "speed",
+        "label": "",
+        "min": 0.5,
+        "max": 2,
+        "value": 1,
+        "step": 0.1,
+        "emit": "live"
+      }
+    },
+    {
+      "name": "button-primary",
+      "notes": "emits an event, not an input: there is no value to keep",
+      "component": {
+        "component": "button",
+        "id": "go",
+        "label": "Run",
+        "variant": "primary"
+      }
+    },
+    {
+      "name": "password-input",
+      "notes": "no value field exists, so no secret can reach the wire",
+      "component": {
+        "component": "password_input",
+        "id": "key",
+        "label": "API Key",
+        "emit": "live"
+      }
+    },
+    {
+      "name": "tabset",
+      "notes": "Flutter and the browser both retain hidden panel state",
+      "component": {
+        "component": "tabset",
+        "id": "tabs",
+        "panels": [
+          {
+            "title": "Text",
+            "children": [
+              {
+                "component": "text_output",
+                "id": "body",
+                "variant": "normal"
+              }
+            ]
+          },
+          {
+            "title": "Raw",
+            "children": [
+              {
+                "component": "verbatim_output",
+                "id": "raw"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "conditional-panel",
+      "notes": "the condition is data, evaluated by whoever renders it",
+      "component": {
+        "component": "conditional_panel",
+        "condition": {
+          "op": "is",
+          "id": "backend",
+          "values": ["openai"]
+        },
+        "children": [
+          {
+            "component": "text_input",
+            "id": "api_base",
+            "label": "API URL",
+            "value": "",
+            "emit": "live"
+          }
+        ]
+      }
+    },
+    {
+      "name": "page",
+      "notes": "the root every client is handed in welcome",
+      "component": {
+        "component": "page",
+        "children": [
+          {
+            "component": "heading",
+            "value": "Hi",
+            "level": 1
+          }
+        ],
+        "title": "Fixture page"
+      }
+    },
+    {
+      "name": "textarea-input",
+      "notes": "rows is a count, not a CSS height",
+      "component": {
+        "component": "textarea_input",
+        "id": "notes",
+        "label": "Notes:",
+        "value": "line one",
+        "rows": 6,
+        "placeholder": "why",
+        "emit": "live"
+      }
+    },
+    {
+      "name": "number-input",
+      "notes": "bounds and step are numbers a frontend may spend on a spinner, a slider, or a hint",
+      "component": {
+        "component": "number_input",
+        "id": "k",
+        "label": "Clusters:",
+        "value": 3,
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "emit": "live"
+      }
+    },
+    {
+      "name": "checkbox-input",
+      "notes": "a checkbox starts at a real boolean, never NULL",
+      "component": {
+        "component": "checkbox_input",
+        "id": "save",
+        "label": "Save results",
+        "value": true,
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "radio-buttons",
+      "notes": "one value for the group, from the selected member",
+      "component": {
+        "component": "radio_buttons",
+        "id": "mode",
+        "label": "Mode:",
+        "choices": [
+          {
+            "value": "fast",
+            "label": "Fast"
+          },
+          {
+            "value": "careful",
+            "label": "Careful"
+          }
+        ],
+        "selected": "careful",
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "date-input",
+      "notes": "a date is a YYYY-MM-DD string on the wire, not a class",
+      "component": {
+        "component": "date_input",
+        "id": "start",
+        "label": "Start:",
+        "value": "2026-07-27",
+        "min": "2026-01-01",
+        "max": "2026-12-31",
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "file-input",
+      "notes": "its value arrives over HTTP, not the socket",
+      "component": {
+        "component": "file_input",
+        "id": "dataset",
+        "label": "CSV:",
+        "accept": ".csv",
+        "multiple": true
+      }
+    },
+    {
+      "name": "download-button",
+      "notes": "a press asks for a transfer ticket, not an event: the press IS the download",
+      "component": {
+        "component": "download_button",
+        "id": "report",
+        "label": "Download",
+        "variant": "primary"
+      }
+    },
+    {
+      "name": "verbatim-output",
+      "notes": "same text kind as text_output; only the display differs",
+      "component": {
+        "component": "verbatim_output",
+        "id": "log"
+      }
+    },
+    {
+      "name": "table-output",
+      "notes": "structure on the wire (header + rows), never markup",
+      "component": {
+        "component": "table_output",
+        "id": "results"
+      }
+    },
+    {
+      "name": "image-output",
+      "notes": "an image the app supplies, unlike a plot it renders",
+      "component": {
+        "component": "image_output",
+        "id": "cover",
+        "alt": "album art"
+      }
+    },
+    {
+      "name": "html-output",
+      "notes": "browser-only: the html kind has no widget equivalent",
+      "component": {
+        "component": "html_output",
+        "id": "details"
+      }
+    },
+    {
+      "name": "ui-output",
+      "notes": "the slot render_ui() fills with a component tree",
+      "component": {
+        "component": "ui_output",
+        "id": "panel"
+      }
+    },
+    {
+      "name": "raw_html",
+      "notes": "browser renders; every other frontend must refuse by name",
+      "component": {
+        "component": "raw_html",
+        "html": "<details>x<\/details>"
+      }
+    }
+  ]
+}

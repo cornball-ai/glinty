@@ -11,7 +11,8 @@
 #' exists by the time the message arrives -- register during the
 #' glinty:connected event, which fires once per page load.
 #'
-#' Browser-only: the native backend has no JavaScript to receive it.
+#' Browser-only: the handler is JavaScript, so a frontend that runs no
+#' JavaScript has nothing to register.
 #'
 #' @param session a glinty_session
 #' @param handler character handler name registered on the client

@@ -1,28 +1,27 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{plot_output}
 \alias{plot_output}
-\title{Create a plot output placeholder}
+\title{Create a plot output slot}
 \usage{
-plot_output(id, width = NULL, height = NULL)
+plot_output(id, width = NULL, height = NULL, alt = "")
 }
 \arguments{
 \item{id}{character output ID}
 
-\item{width}{integer pixel width, or NULL for responsive}
+\item{alt}{character alternative text}
 
-\item{height}{integer pixel height, or NULL for responsive}
+\item{width,height}{integer pixel size, or NULL for client-sized}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-An img element whose src is set to a PNG data URI by
-render_plot(). With NULL width/height (the default) the element
-fills its container at a 4:3 aspect ratio and the client reports
-its rendered size, so render_plot(NULL, NULL) draws at the true
-on-screen dimensions. Explicit dimensions give a fixed-size box;
-match them to the renderer's.
+With NULL dimensions the slot fills its container and the client
+reports its rendered box back, so render_plot() can draw at the true
+on-screen size. Explicit dimensions give a fixed box, which is what
+a client that cannot measure itself needs.
 }
 \examples{
 plot_output("scatter")
+plot_output("fixed", width = 400L, height = 300L)
 }

@@ -55,13 +55,13 @@ expect_silent(check_page_secrets("<p>clean</p>"))
 # --- password_input takes no value, so it cannot carry a secret ---
 expect_false("value" %in% names(formals(password_input)))
 pw <- password_input("api_key", "API Key:", placeholder = "using OPENAI_API_KEY")
-inp <- pw$children[[2]]
-expect_equal(inp$attrs$type, "password")
-expect_equal(inp$attrs$value, "")
-expect_equal(inp$attrs$placeholder, "using OPENAI_API_KEY")
+
+expect_equal(pw$component, "password_input")
+expect_false("value" %in% names(pw))
+expect_equal(pw$placeholder, "using OPENAI_API_KEY")
 
 # a page built with it is clean even while the secret is in the env
-clean_page <- glinty:::tag_to_html(page(password_input("k", "Key:")))
+clean_page <- glinty:::component_to_html(page(password_input("k", "Key:")))
 expect_equal(length(env_secrets_in(clean_page)), 0L)
 
 # restore

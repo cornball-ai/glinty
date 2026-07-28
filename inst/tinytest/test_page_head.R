@@ -4,20 +4,32 @@ head_html <- glinty:::head_html
 body_scripts_html <- glinty:::body_scripts_html
 serve_static <- glinty:::serve_static
 
-# --- page() carries the head spec, and stays NULL when unused ---
-plain <- page(h1("Hi"))
-expect_null(plain$head)
+# --- page() carries assets beside the component, not inside it ---
+# Assets are a browser transport concern. Keeping them off the
+# component means they never reach a client that cannot use them, and
+# never appear on the wire at all.
+plain <- page(heading("Hi"))
+expect_null(attr(plain, "assets"))
 expect_equal(plain$title, "glinty app")
+expect_equal(plain$component, "page")
 
-pg <- page(h1("Hi"), title = "My app", css = "/static/styles.css",
+pg <- page(heading("Hi"), title = "My app", css = "/static/styles.css",
            js = "/static/app.js", favicon = "/static/logo.png")
-expect_equal(pg$head$css, "/static/styles.css")
-expect_equal(pg$head$js, "/static/app.js")
-expect_equal(pg$head$favicon, "/static/logo.png")
-expect_null(pg$head$extra)
-# the children are untouched by the new arguments
+assets <- attr(pg, "assets")
+expect_equal(assets$css, "/static/styles.css")
+expect_equal(assets$js, "/static/app.js")
+expect_equal(assets$favicon, "/static/logo.png")
+expect_null(assets$extra)
+
+# the children are untouched by the asset arguments
 expect_equal(length(pg$children), 1L)
-expect_equal(pg$children[[1]]$tag, "h1")
+expect_equal(pg$children[[1]]$component, "heading")
+
+# and the wire form carries no trace of them
+wire <- glinty:::unclass_recursive(pg)
+json <- as.character(jsonlite::toJSON(wire, auto_unbox = TRUE))
+expect_false(grepl("styles.css", json, fixed = TRUE))
+expect_false(grepl("logo.png", json, fixed = TRUE))
 
 # --- head_html: favicon, then stylesheets, in order ---
 expect_equal(head_html(NULL), "")
@@ -37,15 +49,13 @@ esc <- head_html(page_head(css = "/static/a\".css"))
 expect_false(grepl("a\".css", esc, fixed = TRUE))
 expect_true(grepl("&quot;", esc, fixed = TRUE))
 
-# --- the escape hatch takes a tag tree or raw markup ---
-tagged <- head_html(page_head(extra = tag("meta",
-                                          attrs = list(name = "robots",
-                                                       content = "noindex"))))
-expect_true(grepl("<meta name=\"robots\" content=\"noindex\">", tagged,
-                  fixed = TRUE))
+# --- the escape hatch takes raw markup ---
+# Under v3 this is a string rather than a tag tree: the head is
+# browser-only territory, and there is no component vocabulary for a
+# meta tag.
 raw <- head_html(page_head(extra = "<meta name=\"x\" content=\"y\">"))
 expect_true(grepl("<meta name=\"x\" content=\"y\">", raw, fixed = TRUE))
-expect_error(head_html(page_head(extra = 42)), "glinty_tag")
+expect_error(head_html(page_head(extra = 42)), "character or NULL")
 
 # --- scripts render at the end of the body, not in head ---
 expect_equal(body_scripts_html(NULL), "")

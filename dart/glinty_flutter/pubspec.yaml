@@ -1,0 +1,24 @@
+name: glinty_flutter
+description: "glinty's Flutter client: connects to a glinty server and renders its component tree as widgets."
+version: 0.0.1
+homepage: https://github.com/cornball-ai/glinty
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # dart-lang's own WebSocket abstraction: one transitive dependency
+  # (web), and the same API on the VM and in the browser. The
+  # alternative, web_socket_channel, layers four more packages on top
+  # of this one for stream semantics the client does not need.
+  web_socket: ^1.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:

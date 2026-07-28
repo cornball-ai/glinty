@@ -12,8 +12,8 @@ expressions, observers, a UI built in R) with a tinyverse footprint:
 - **Pure base R transport**: the HTTP server and the RFC 6455
   WebSocket layer run on `serverSocket()`/`socketSelect()`. No
   compiled code in the package.
-- **~7 KB of hand-written JavaScript**, no jQuery, no Bootstrap.
-  Shiny's `www/` tree is 6.9 MB; glinty's is under 12 KB.
+- **~48 KB of hand-written JavaScript**, no jQuery, no Bootstrap.
+  Shiny's `www/` tree is 6.9 MB; glinty's is under 60 KB.
 - **Session-scoped state**: every browser tab gets its own inputs,
   outputs, and observers, torn down on disconnect.
 
@@ -30,7 +30,7 @@ library(glinty)
 
 counter <- app(
     ui = page(
-        h1("Counter"),
+        heading("Counter", level = 1L),
         button("inc", "+1"),
         text_output("count"),
         title = "Counter"
@@ -93,65 +93,76 @@ The server function takes `(input, output)` or
 
 ## How it works
 
-The initial page is rendered server-side from the `page()` tag tree.
-The browser then opens a WebSocket; input events flow up as small
-JSON messages, and DOM patches flow down. Reactive dependency
+The initial page is rendered server-side from the `page()` component
+tree. The browser then opens a WebSocket; input events flow up as
+small JSON messages, and typed output values flow down -- text,
+tables, images, component trees -- for the client to display however
+it displays them. Reactive dependency
 tracking (contexts, a flush queue, lazy cached reactives) re-runs
 only what changed. One R process serves N tabs from a
 `socketSelect()` event loop; `invalidate_later()` timers wake it for
 clocks and polling.
 
-Custom widgets need no JavaScript: any element with an `id`, a
-`data-g-event`, and a `data-g-target` is an input, so a widget is
-just an R function returning `tag()` trees. See `?tag`.
+Layout is `row()` and `column()`, which map to flexbox in the browser
+and to Flutter's `Row`/`Column` (note `row()` masks `base::row()`
+when glinty is attached).
 
-## Native windows (flitR backend)
+Custom widgets are R functions returning component trees, so they
+work on every frontend without JavaScript. `tag()` remains for
+browser-only markup, and is trusted HTML: see `?tag` before putting
+anything into it that you did not write.
 
-With the flitR package installed (plus its engine via
-`flitR::install_engine()`), `run_app_native(app_obj)` renders the
-same app in a native window through the Flutter Engine. The native
-window is just another client of glinty's wire protocol: reactive
-core, sessions, and renderers are identical, and `render_plot()`
-draws natively through flitR's image op.
+Styling that should survive the trip to a non-browser frontend goes
+through `app(theme = app_theme(...))`: a closed set of semantic
+tokens (colors, spacing, radius, fonts) that the browser applies as
+CSS custom properties and Flutter maps onto `ThemeData`. Without a
+theme you get each frontend's defaults, including the browser's
+automatic dark mode. App stylesheets still work, and only affect the
+browser.
 
-The supported widget set covers text, headings, `text_input`,
-`password_input`, `textarea_input`, `number_input`, `select_input`,
-`button`, `checkbox_input`, `slider_input`, `text_output`,
-`verbatim_output`, `table_output` (drawn as a native grid),
-`plot_output`, `tabset` and `conditional_panel`.
+## A second frontend (Flutter)
 
-Two of those need a word:
+Write a glinty app much like a conventional Shiny app. It runs in
+the browser, and if it sticks to glinty's portable components and
+typed renderers, most of the work a native app needs is already
+done: the same R server and application logic drive a Flutter
+interface, and the native-specific remainder is branding,
+permissions, packaging and signing.
 
-`conditional_panel()`'s condition is evaluated server-side against the
-same inputs the browser would use, so both frontends agree on what
-shows.
+`tag()`, `html_output()`, custom JavaScript and browser-only CSS are
+escape hatches, and escape hatches don't travel. R stays on the
+server; it is not bundled into the native app.
 
-`tabset()` draws its nav strip and emits **only the selected panel**.
-That is the immediate-mode reading of a tab: an unselected panel is
-not hidden, it is simply not drawn this frame. So unlike the browser,
-inputs inside an unselected tab do not keep their values natively.
-A tabset needs an `id` to work natively, since that input is where
-the selection lives.
+The Flutter transport is live: `GlintyApp` opens the socket, sends
+`hello`, hydrates from `welcome`, reconnects with `resume` under
+bounded backoff, and refuses visibly when the server says no. It
+draws dialogs and progress reports, reports output boxes for
+client-sized plots, and redeems transfer tickets. Downloads, links
+and `custom` messages need an embedder callback, because saving a
+file, opening a URL and knowing what an app's own message means are
+all things this package cannot do on its own -- so it declares those
+features only when one is wired, and names the gap on screen rather
+than dropping the frame. There is no project scaffolder yet.
 
-`password_input()` masks with bullets via flitR, and the real string
-never leaves R: flitR's `scene()` strips the hit records that carry it
-before anything goes over the wire.
+The wire carries semantic components, not DOM instructions, which is
+what makes that swap possible. `dart/glinty_flutter` reads the same
+component trees the browser does and lowers them to Flutter widgets,
+which covers iOS, Android, desktop and web from the same R app.
 
-Everything else is browser-only and **fails fast with a named list**
-rather than rendering something wrong: `radio_buttons`, `date_input`,
-`file_input`, `html_output`, `audio_output`, `download_button`,
-`modal_button`. Modals, progress bars and `send_custom_message()` are
-silently inert natively, since they have no native counterpart to get
-wrong.
+Both clients read two generated files as their contract:
+`inst/fixtures/components.json` (every component, once) and
+`inst/fixtures/transcripts.json` (the frames of an exchange, in
+order). Tests on each side assert the files match the R definitions
+they came from, so a component only counts as frontend-neutral once
+it has rendered in both.
 
-Native sessions seed inputs from widget defaults, mirroring the
-browser's init harvest. Don't `library(flitR)` alongside glinty (both
-export `app`, `text`, and friends); `run_app_native()` only needs it
-installed.
+A component the Flutter client cannot draw yet gets a visible
+placeholder naming it, rather than being silently dropped. `tag()`
+produces `raw_html`, which is browser-only by design: arbitrary
+markup has no widget equivalent.
 
-Layout carries across frontends too: `row(...)` and `column(...)`
-map to flexbox in the browser and flitR's row/column natively (note
-`row()` masks `base::row()` when glinty is attached).
+See `PROTOCOL.md` for the spec. The flitR native backend that used to
+live here is retired; flitR is archived.
 
 ## Resilience
 
@@ -160,14 +171,30 @@ observers and timers stay warm for `getOption("glinty.resume_grace",
 60)` seconds while the client retries with backoff, then resumes
 with state intact. Expired sessions get an honest reload.
 
+## Authentication and deployment
+
+`run_app(auth = )` takes a verifier for the opaque token a client
+sends when it connects: NULL refuses the connection, anything else
+becomes `session$principal`. `jwt_auth()` covers the JWT case in one
+line (HS256 built in; RS256 with the openssl package). Uploads and
+downloads ride short-lived single-use tickets minted over the
+WebSocket, so no session credential ever appears in a URL. `GET
+/healthz` reports sessions and uptime for supervisors, and
+`run_app()` reads `GLINTY_PORT`/`PORT` from the environment when no
+port is given.
+
 ## Limits (by design)
 
 - Single-threaded: one slow computation stalls all sessions (same
   process model as one Shiny worker, minus the async escape hatches).
 - No bookmarking, no modules yet.
-- `serverSocket()` binds all interfaces; treat the port as reachable
-  from your local network, and the session id as a weak resume
-  credential within the grace window.
+- `serverSocket()` binds all interfaces -- base R sockets cannot bind
+  selectively or terminate TLS. Gate sessions with `auth =`, and
+  scope the port with a firewall, container namespace, or reverse
+  proxy; startup says this out loud.
+- The session id remains a weak resume credential within the
+  reconnect grace window (auth is re-verified on resume when
+  configured).
 
 ## Provenance
 

@@ -16,9 +16,6 @@ Closing an already-closed dialog is not an error.
 }
 \examples{
 \dontrun{
-observe_event(input$confirm, {
-    remove_modal(session)
-    download_the_thing()
-})
+observe_event(input$confirm, function() remove_modal(session))
 }
 }

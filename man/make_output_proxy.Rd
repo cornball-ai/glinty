@@ -12,9 +12,9 @@ make_output_proxy(session)
 a glinty_output proxy
 }
 \description{
-Assignments to output$id create observers that send update messages
-to this session. The DOM property defaults to textContent but can be
-overridden by registering a property via output_property() or by
-assigning a renderer created with render_html() and friends.
+Assignments to output$id create observers that send `output`
+messages to this session, typed by the renderer's kind. A bare
+function is a text renderer; anything else comes from render_text()
+and friends, which say what they produce.
 }
 \keyword{internal}

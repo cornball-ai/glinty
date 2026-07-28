@@ -9,7 +9,7 @@ modal_button(label = "Cancel")
 \item{label}{character button label}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
 The Cancel case: dismissing a dialog is not usually news. For a

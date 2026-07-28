@@ -3,7 +3,8 @@
 \alias{number_input}
 \title{Create a numeric input}
 \usage{
-number_input(id, label = "", value = NULL, min = NULL, max = NULL, step = NULL)
+number_input(id, label = "", value = NULL, min = NULL, max = NULL, step = NULL,
+             emit = "live")
 }
 \arguments{
 \item{id}{character input ID}
@@ -12,14 +13,14 @@ number_input(id, label = "", value = NULL, min = NULL, max = NULL, step = NULL)
 
 \item{value}{numeric initial value}
 
-\item{min}{numeric minimum (optional)}
+\item{step}{numeric step size}
 
-\item{max}{numeric maximum (optional)}
+\item{emit}{character "live" or "settle"}
 
-\item{step}{numeric step size (optional)}
+\item{min,max}{numeric bounds}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
 Create a numeric input

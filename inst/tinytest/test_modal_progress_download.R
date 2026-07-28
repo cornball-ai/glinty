@@ -25,7 +25,7 @@ expect_equal(mime_type(""), "application/octet-stream")
 
 # --- modals ---
 s <- new_session("m1")
-show_modal(s, p("Really?"), title = "Confirm",
+show_modal(s, txt("Really?"), title = "Confirm",
            footer = row(modal_button("Cancel"), button("ok", "OK")))
 expect_equal(length(s$outgoing), 1L)
 m <- json(s$outgoing[[1]])
@@ -33,18 +33,18 @@ expect_equal(m$type, "modal")
 expect_equal(m$action, "show")
 expect_equal(m$title, "Confirm")
 expect_true(m$easy_close)
-# the body is a list of tag trees, stripped of their R classes
+# the body is a list of components, stripped of their R classes
 expect_equal(length(m$body), 1L)
-expect_equal(m$body[[1]]$tag, "p")
-expect_equal(m$body[[1]]$text, "Really?")
-# footer binds survive, so a button in a dialog is a normal input
-expect_equal(m$footer$tag, "div")
+expect_equal(m$body[[1]]$component, "text")
+expect_equal(m$body[[1]]$value, "Really?")
+# footer components survive, so a button in a dialog is a real one
+expect_equal(m$footer$component, "row")
 ok_btn <- m$footer$children[[2]]
-expect_equal(ok_btn$bind$target, "ok")
-expect_equal(ok_btn$bind$event, "click")
+expect_equal(ok_btn$id, "ok")
+expect_equal(ok_btn$component, "button")
 
 s$outgoing <- list()
-show_modal(s, p("x"), easy_close = FALSE)
+show_modal(s, txt("x"), easy_close = FALSE)
 expect_false(json(s$outgoing[[1]])$easy_close)
 expect_null(json(s$outgoing[[1]])$title)
 
@@ -56,10 +56,10 @@ expect_equal(json(s$outgoing[[1]])$action, "hide")
 expect_error(show_modal(list()), "glinty_session")
 expect_error(remove_modal(list()), "glinty_session")
 
-# modal_button closes client-side, so it carries no bind
+# modal_button closes client-side, marked by its reserved id
 mb <- modal_button("Cancel")
-expect_null(mb$bind)
-expect_equal(mb$attrs[["data-g-modal-close"]], "1")
+expect_equal(mb$component, "button")
+expect_equal(mb$id, "..modal_close")
 session_end(s)
 
 # --- progress ---
@@ -127,17 +127,21 @@ session_end(s)
 
 # --- downloads ---
 db <- download_button("dl", "Get it")
-expect_equal(db$tag, "a")
-expect_equal(db$attrs[["data-g-download"]], "dl")
-expect_true(grepl("g-download", db$attrs$class, fixed = TRUE))
+expect_equal(db$component, "download_button")
+expect_equal(db$id, "dl")
+expect_equal(db$label, "Get it")
 
 s <- new_session("d1")
 download_handler(s, "dl",
                  filename = function() "speech.wav",
                  content = function(file) writeBin(charToRaw("RIFFDATA"), file))
 
+issue_ticket <- glinty:::issue_ticket
 req <- function(q) list(method = "GET", path = "/download", query = q)
-resp <- rawToChar(handle_download(req("session=d1&id=dl")))
+tk <- function(id, purpose = "download") {
+    paste0("ticket=", issue_ticket(s, id, purpose)$token)
+}
+resp <- rawToChar(handle_download(req(tk("dl"))))
 expect_true(grepl("200 OK", resp, fixed = TRUE))
 expect_true(grepl("Content-Type: audio/wav", resp, fixed = TRUE))
 expect_true(grepl('Content-Disposition: attachment; filename="speech.wav"',
@@ -147,34 +151,52 @@ expect_true(grepl("RIFFDATA", resp, fixed = TRUE))
 # a plain string filename works too
 download_handler(s, "dl2", filename = "notes.txt",
                  content = function(file) writeLines("hi", file))
-resp2 <- rawToChar(handle_download(req("session=d1&id=dl2")))
+resp2 <- rawToChar(handle_download(req(tk("dl2"))))
 expect_true(grepl("Content-Type: text/plain", resp2, fixed = TRUE))
 
 # a path in the filename is stripped, so a handler cannot suggest a
 # traversal target to the browser
 download_handler(s, "dl3", filename = "../../etc/passwd",
                  content = function(file) writeLines("x", file))
-resp3 <- rawToChar(handle_download(req("session=d1&id=dl3")))
+resp3 <- rawToChar(handle_download(req(tk("dl3"))))
 expect_true(grepl('filename="passwd"', resp3, fixed = TRUE))
 expect_false(grepl("..", resp3, fixed = TRUE))
 
 # failures answer honestly instead of hanging or leaking
-expect_true(grepl("400", rawToChar(handle_download(req("id=dl"))),
+expect_true(grepl("403", rawToChar(handle_download(req(""))),
                   fixed = TRUE))
-expect_true(grepl("404", rawToChar(handle_download(req("session=nope&id=dl"))),
+expect_true(grepl("403", rawToChar(handle_download(req("ticket=tk_no"))),
                   fixed = TRUE))
-expect_true(grepl("404", rawToChar(handle_download(req("session=d1&id=ghost"))),
+# a ticket minted for uploads never opens a download
+expect_true(grepl("403",
+                  rawToChar(handle_download(req(tk("dl", "upload")))),
+                  fixed = TRUE))
+# a ticket names one resource; a registered ticket for an
+# unregistered download is a 404, not a free choice
+expect_true(grepl("404", rawToChar(handle_download(req(tk("ghost")))),
+                  fixed = TRUE))
+# single use: the same ticket a second time is dead
+once <- tk("dl")
+expect_true(grepl("200", rawToChar(handle_download(req(once))),
+                  fixed = TRUE))
+expect_true(grepl("403", rawToChar(handle_download(req(once))),
+                  fixed = TRUE))
+# expiry: a ticket past its TTL is dead on arrival
+old_ttl <- options(glinty.ticket_ttl = -1)
+stale <- tk("dl")
+options(old_ttl)
+expect_true(grepl("403", rawToChar(handle_download(req(stale))),
                   fixed = TRUE))
 
 download_handler(s, "boom", filename = "x.txt",
                  content = function(file) stop("write failed"))
-expect_true(grepl("500", rawToChar(handle_download(req("session=d1&id=boom"))),
+expect_true(grepl("500", rawToChar(handle_download(req(tk("boom")))),
                   fixed = TRUE))
 
 download_handler(s, "badname", filename = function() stop("nope"),
                  content = function(file) writeLines("x", file))
 expect_true(grepl("500",
-                  rawToChar(handle_download(req("session=d1&id=badname"))),
+                  rawToChar(handle_download(req(tk("badname")))),
                   fixed = TRUE))
 
 expect_error(download_handler(list(), "x", "f", function(f) f),
@@ -186,7 +208,7 @@ expect_error(download_handler(s, "x", 42, function(f) f), "filename must be")
 
 # the HTTP router actually dispatches /download, not just the handler
 route_http <- glinty:::route_http
-routed <- rawToChar(route_http(req("session=d1&id=dl"), "<html></html>",
+routed <- rawToChar(route_http(req(tk("dl")), "<html></html>",
                                tempdir(), NULL))
 expect_true(grepl("200 OK", routed, fixed = TRUE))
 expect_true(grepl("RIFFDATA", routed, fixed = TRUE))
@@ -196,10 +218,21 @@ root_resp <- rawToChar(route_http(
     "<html>page</html>", tempdir(), NULL
 ))
 expect_true(grepl("<html>page</html>", root_resp, fixed = TRUE))
+# and answers /healthz without touching a session
+hz <- rawToChar(route_http(
+    list(method = "GET", path = "/healthz", query = ""),
+    "<html></html>", tempdir(), NULL,
+    started = as.numeric(Sys.time()) - 5
+))
+expect_true(grepl("200 OK", hz, fixed = TRUE))
+expect_true(grepl('"status":"ok"', hz, fixed = TRUE))
+expect_true(grepl('"sessions":', hz, fixed = TRUE))
+expect_true(grepl('"uptime":', hz, fixed = TRUE))
 
-# an ended session serves nothing
+# an ended session's tickets die with it
+dead <- tk("dl")
 session_end(s)
-expect_true(grepl("404", rawToChar(handle_download(req("session=d1&id=dl"))),
+expect_true(grepl("403", rawToChar(handle_download(req(dead))),
                   fixed = TRUE))
 
 # --- the client script handles the new message types ---

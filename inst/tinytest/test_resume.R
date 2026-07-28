@@ -14,15 +14,8 @@ resume_session <- glinty:::resume_session
 handle_input <- glinty:::handle_input
 run_due_timers <- glinty:::run_due_timers
 
-# --- config_msg carries protocol 2 and optional resumed ---
-expect_equal(
-    glinty:::config_msg("abc"),
-    '{"type":"config","session_id":"abc","protocol":2}'
-)
-expect_equal(
-    glinty:::config_msg("abc", resumed = TRUE),
-    '{"type":"config","session_id":"abc","protocol":2,"resumed":true}'
-)
+# welcome_msg's shape is pinned in test_protocol.R; here it only
+# matters that a resume opens with one
 
 # --- outputs record last_sent while attached ---
 s <- new_session("r1")
@@ -53,16 +46,16 @@ expect_equal(length(s$outgoing), 1L)
 expect_equal(length(glinty:::drain_session(s)), 0L)
 expect_equal(length(s$outgoing), 1L)
 
-# --- resume: config + replayed output state + buffered messages ---
+# --- resume: welcome + replayed output state + buffered messages ---
 resume_session(s)
 expect_false(s$detached)
 expect_equal(length(.g$timers), 0L)
 msgs <- lapply(s$outgoing, jsonlite::fromJSON)
-expect_equal(msgs[[1L]]$type, "config")
+expect_equal(msgs[[1L]]$type, "welcome")
 expect_true(msgs[[1L]]$resumed)
 expect_equal(msgs[[2L]]$id, "echo")
 expect_equal(msgs[[2L]]$value, "v 42")
-expect_equal(msgs[[3L]]$type, "update_input")
+expect_equal(msgs[[3L]]$type, "input_update")
 session_end(s)
 
 # --- grace expiry ends the session ---

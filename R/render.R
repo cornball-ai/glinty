@@ -1,17 +1,18 @@
 #' Construct a renderer
 #'
 #' @param fn zero-arg function producing the client-ready value
-#' @param property character DOM property the value patches
+#' @param kind character what the value is (text, html, table, image,
+#'   audio, ui) -- the `kind` field of the output message it feeds
 #' @return a glinty_renderer
 #' @keywords internal
-new_renderer <- function(fn, property) {
-    structure(list(fn = fn, property = property), class = "glinty_renderer")
+new_renderer <- function(fn, kind) {
+    structure(list(fn = fn, kind = kind), class = "glinty_renderer")
 }
 
 #' Render plain text
 #'
-#' The value is coerced to character and set as textContent, so it
-#' is always displayed literally (no HTML injection).
+#' The value travels as a string and every frontend displays it
+#' literally (no HTML injection).
 #'
 #' @param fn zero-arg function computing the value
 #' @return a glinty_renderer for assignment to output$id
@@ -21,34 +22,33 @@ new_renderer <- function(fn, property) {
 #' }
 #' @export
 render_text <- function(fn) {
-    new_renderer(function() paste(as.character(fn()), collapse = " "),
-                 "textContent")
+    new_renderer(function() paste(as.character(fn()), collapse = " "), "text")
 }
 
 #' Render HTML markup
 #'
-#' The value is set as innerHTML. glinty_tag trees are serialized;
-#' character values are trusted as-is, so escape untrusted text with
-#' html_escape().
+#' Browser-only: the value is markup the browser inserts as-is.
+#' Component trees are serialized; character values are trusted, so
+#' escape untrusted text with html_escape().
 #'
-#' @param fn zero-arg function returning a glinty_tag or character
+#' @param fn zero-arg function returning a component or character
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
-#' output$details <- render_html(function() div(h3("Result"), p("done")))
+#' output$details <- render_html(function() "<mark>done</mark>")
 #' }
 #' @export
 render_html <- function(fn) {
     new_renderer(
                  function() {
         val <- fn()
-        if (inherits(val, "glinty_tag")) {
-            tag_to_html(val)
+        if (is_component(val)) {
+            component_to_html(val)
         } else {
             paste(as.character(val), collapse = "")
         }
     },
-                 "innerHTML"
+                 "html"
     )
 }
 
@@ -100,17 +100,26 @@ df_to_table <- function(df) {
 
 #' Render a base graphics plot
 #'
-#' Runs the plotting function against a PNG device and patches the
-#' output img's src with a data URI. With NULL width/height (the
-#' default) the plot sizes itself to the client: the browser reports
-#' the rendered img box as reserved inputs and re-reports on window
-#' resize, so the plot re-renders reactively at the new size.
-#' Explicit numeric dimensions give fixed-size rendering.
+#' Runs the plotting function against a PNG device and sends an
+#' `image` output: `{src, width, height}`, dimensions in logical
+#' pixels. With NULL width/height (the default) the plot sizes itself
+#' to the client, which reports its box through `measure` messages on
+#' first layout and on resize; the read is reactive, so a new
+#' measurement re-renders the plot. Explicit numeric dimensions give
+#' fixed-size rendering.
+#'
+#' The client also reports its device pixel ratio, which applies to
+#' fixed-size plots too. The raster is produced at `width * dpr` by
+#' `height * dpr` physical pixels with `res` scaled by the same
+#' factor, and displayed at the logical size: text and lines keep
+#' their size while the pixels match the screen, which is what keeps
+#' a plot sharp on a 2x display.
 #'
 #' @param fn zero-arg function that draws a plot
-#' @param width integer pixel width, or NULL for client-driven
-#' @param height integer pixel height, or NULL for client-driven
-#' @param res numeric PNG resolution (dpi)
+#' @param width integer logical-pixel width, or NULL for client-driven
+#' @param height integer logical-pixel height, or NULL for
+#'   client-driven
+#' @param res numeric PNG resolution (dpi) at dpr 1
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
@@ -124,55 +133,54 @@ render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
     }
     make_fn <- function(id, session) {
         function() {
+            # Reading the box is the reactive subscription that makes a
+            # new measurement re-render. Every plot reads it: a plot
+            # with explicit dimensions ignores the measured size, but
+            # still needs the device pixel ratio, which only the
+            # client knows -- without it, fixed-size plots would stay
+            # blurry on dense displays. Its box cannot otherwise
+            # change, so the subscription only ever fires for real.
+            box <- measured_box(session, id)
             w <- if (is.null(width)) {
-                client_dim(session, id, "width", fallback = 480)
+                if (is.null(box)) {
+                    480
+                } else {
+                    box$width
+                }
             } else {
                 width
             }
             h <- if (is.null(height)) {
-                client_dim(session, id, "height", fallback = 360)
+                if (is.null(box)) {
+                    360
+                } else {
+                    box$height
+                }
             } else {
                 height
             }
+            if (is.null(box)) {
+                dpr <- 1
+            } else {
+                dpr <- box$dpr
+            }
             tmp <- tempfile(fileext = ".png")
             on.exit(unlink(tmp), add = TRUE)
-            grDevices::png(tmp, width = w, height = h, res = res)
+            grDevices::png(tmp, width = w * dpr, height = h * dpr,
+                           res = res * dpr)
             tryCatch(fn(), finally = grDevices::dev.off())
             bytes <- readBin(tmp, "raw", file.info(tmp)$size)
             uri <- paste0("data:image/png;base64,", jsonlite::base64_enc(bytes))
-            gsub("[\r\n]", "", uri)
+            list(src = gsub("[\r\n]", "", uri), width = w, height = h)
         }
     }
-    structure(list(bind = make_fn, property = "src"), class = "glinty_renderer")
-}
-
-#' Read a client-reported output dimension
-#'
-#' The JS client reports each plot output's rendered box as reserved
-#' inputs ..clientdata_output_<id>_width/_height (at init and on
-#' window resize). Reading them here is a tracked reactive read, so
-#' a resize re-renders the plot.
-#'
-#' @param session a glinty_session
-#' @param id character output ID
-#' @param dim character "width" or "height"
-#' @param fallback numeric size before the client has reported
-#' @return numeric pixel dimension
-#' @keywords internal
-client_dim <- function(session, id, dim, fallback) {
-    key <- paste0("..clientdata_output_", id, "_", dim)
-    val <- session$input[[key]]()
-    val <- suppressWarnings(as.numeric(val))
-    if (length(val) != 1L || !is.finite(val) || val < 1) {
-        return(fallback)
-    }
-    val
+    structure(list(bind = make_fn, kind = "image"), class = "glinty_renderer")
 }
 
 #' Render an audio source
 #'
-#' The value (a data URI or a /static/ path) is set as the audio
-#' element's src.
+#' Sends an `audio` output: `{src}`, where src is a data URI or a
+#' /static/ path.
 #'
 #' @param fn zero-arg function returning the source string
 #' @return a glinty_renderer for assignment to output$id
@@ -182,26 +190,26 @@ client_dim <- function(session, id, dim, fallback) {
 #' }
 #' @export
 render_audio <- function(fn) {
-    new_renderer(function() as.character(fn()), "src")
+    new_renderer(function() list(src = as.character(fn())), "audio")
 }
 
 #' Render a dynamic UI subtree
 #'
-#' The portable path for dynamic content: fn returns a glinty_tag
-#' (wrap several in div()/column()) or NULL to render nothing. The
-#' tag tree travels structured on the wire; the browser builds real
-#' DOM from it (event bindings included, via delegation) and the
-#' native backend translates it like static UI. Inputs that first
-#' appear inside dynamic UI start as NULL server-side until the user
-#' touches them, on both frontends. For raw markup strings use
-#' render_html() (browser-only escape hatch).
+#' The portable path for dynamic content: fn returns a component
+#' (wrap several in column() or row()) or NULL to render nothing. The
+#' component tree travels structured on the wire, so every frontend
+#' builds it the way it builds static UI -- the browser as real DOM,
+#' event bindings included via delegation. Inputs that first appear
+#' inside dynamic UI start as NULL server-side until the user touches
+#' them. For raw markup strings use render_html(), which is a
+#' browser-only escape hatch.
 #'
-#' @param fn zero-arg function returning a glinty_tag or NULL
+#' @param fn zero-arg function returning a component or NULL
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
 #' output$panel <- render_ui(function() {
-#'     if (isTRUE(input$show())) div(text_input("extra", "Extra:"))
+#'     if (isTRUE(input$show())) column(text_input("extra", "Extra:"))
 #' })
 #' }
 #' @export
@@ -212,9 +220,9 @@ render_ui <- function(fn) {
         if (is.null(val)) {
             return(NULL)
         }
-        if (!inherits(val, "glinty_tag")) {
-            stop("render_ui() expects a glinty_tag or NULL; wrap ",
-                 "multiple elements in div() or column()", call. = FALSE)
+        if (!is_component(val)) {
+            stop("render_ui() expects a component or NULL; wrap ",
+                 "several in column()", call. = FALSE)
         }
         unclass_recursive(val)
     },

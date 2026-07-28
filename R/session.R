@@ -22,6 +22,7 @@ new_session <- function(id, send_fn = NULL) {
     s$grace_timer <- NULL
     s$last_sent <- new.env(parent = emptyenv())
     s$downloads <- new.env(parent = emptyenv())
+    s$measures <- new.env(parent = emptyenv())
     s$send_fn <- send_fn
 
     s$send <- function(msg) {
@@ -106,9 +107,11 @@ detach_session <- function(session) {
 
 #' Re-attach a detached session after a resume handshake
 #'
-#' Cancels the grace timer and queues, in order: the resumed config,
-#' the last message of every output (current state, no re-render),
-#' then whatever non-output messages buffered while detached.
+#' Cancels the grace timer and queues, in order: a welcome with
+#' resumed = TRUE, the last message of every output (current state,
+#' no re-render), then whatever non-output messages buffered while
+#' detached. The client keeps its live DOM on a resumed welcome, so
+#' the tree riding along is ignored there.
 #'
 #' @param session a glinty_session
 #' @return invisible(NULL)
@@ -125,7 +128,7 @@ resume_session <- function(session) {
     replay <- lapply(ls(session$last_sent), function(id) {
         session$last_sent[[id]]
     })
-    session$outgoing <- c(list(config_msg(session$id, resumed = TRUE)),
+    session$outgoing <- c(list(welcome_msg(session$id, resumed = TRUE)),
                           replay, session$outgoing)
     invisible(NULL)
 }

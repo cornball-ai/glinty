@@ -3,38 +3,31 @@
 \alias{tabset}
 \title{Create a tabset}
 \usage{
-tabset(..., id = NULL, selected = NULL)
+tabset(..., id, selected = NULL)
 }
 \arguments{
 \item{...}{tab_panel() objects}
 
-\item{id}{character input ID reporting the selected tab, or NULL}
+\item{id}{character input ID reporting the open tab}
 
-\item{selected}{character title of the initially open tab
-(defaults to the first)}
+\item{selected}{character title of the initially open tab}
 }
 \value{
-A UI element
+A UI component
 }
 \description{
-Switching tabs is a client-side class toggle, not a round trip, so
-panel contents keep their DOM and their inputs keep their values
-while hidden. Outputs in a hidden tab still update; they are
-merely not visible.
+Given an id the tabset is also an input: its value is the title of
+the open tab.
 }
 \details{
-Given an id, the tabset is also an input: its value is the title
-of the selected tab, readable as input$id() and seeded at page
-load. Without an id it is presentation only.
-
-Tabsets nest: a panel may contain another tabset, and each is
-scoped to its own container.
+Hidden panels keep their state in the browser and in Flutter, both
+of which retain the widgets they are not showing.
 
 }
 \examples{
 tabset(
-    tab_panel("Text", verbatim_output("transcription")),
-    tab_panel("Segments", table_output("segments")),
-    id = "results_tabs"
+    tab_panel("Text", verbatim_output("body")),
+    tab_panel("Raw", verbatim_output("raw")),
+    id = "results"
 )
 }

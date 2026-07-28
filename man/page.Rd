@@ -1,13 +1,13 @@
 % tinyrox says don't edit this manually, but it can't stop you!
 \name{page}
 \alias{page}
-\title{Create an HTML page}
+\title{Create a page}
 \usage{
 page(..., title = "glinty app", css = NULL, js = NULL, favicon = NULL,
      head = NULL)
 }
 \arguments{
-\item{...}{child elements}
+\item{...}{child components}
 
 \item{title}{character page title}
 
@@ -18,29 +18,21 @@ page(..., title = "glinty app", css = NULL, js = NULL, favicon = NULL,
 
 \item{favicon}{character URL of the tab icon}
 
-\item{head}{a glinty_tag or raw character HTML appended to the
-document head; the escape hatch for meta tags and anything else
-glinty has no constructor for (trusted as-is, so do not pass
-untrusted text)}
+\item{head}{a raw character HTML string appended to the document
+head; the escape hatch for meta tags. Trusted as-is.}
 }
 \value{
-A UI tree (glinty_tag with title and head fields)
+A UI component
 }
 \description{
-The top-level UI container. The title becomes the browser tab
-title when the page is served.
+The top-level container. The title becomes the browser tab title
+when served, and the app name a native client shows.
 }
 \details{
-App assets are referenced by URL, not by file path: serve them
-from run_app()'s static_dir and point at them under /static/.
-Stylesheets are linked after glinty's own, and scripts are loaded
-after the JS client at the end of the body, so window.Glinty is
-already defined when app code runs.
-
-These arguments are browser-only; the native backend ignores them.
+The asset arguments are browser-only and travel outside the
+component tree, since a Flutter client has no use for a stylesheet.
 
 }
 \examples{
-page(h1("Hello"), title = "My app")
-page(h1("Hello"), css = "/static/styles.css", favicon = "/static/logo.png")
+page(heading("Hello"), title = "My app")
 }

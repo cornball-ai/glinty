@@ -3,7 +3,8 @@
 \alias{full_page_html}
 \title{Wrap rendered HTML in a full page}
 \usage{
-full_page_html(body_html, title = "glinty app", head = NULL)
+full_page_html(body_html, title = "glinty app", head = NULL,
+               ui_revision = NULL, theme_css = NULL)
 }
 \arguments{
 \item{body_html}{character HTML for the page body}
@@ -11,6 +12,15 @@ full_page_html(body_html, title = "glinty app", head = NULL)
 \item{title}{character page title}
 
 \item{head}{a page head spec (see page_head()), or NULL}
+
+\item{ui_revision}{character revision of the tree body_html was
+rendered from, embedded as a meta tag so the client can tell
+whether this markup describes the tree welcome sends it; NULL
+omits the tag (a client without one rebuilds from welcome)}
+
+\item{theme_css}{character :root block of theme tokens (see
+theme_css()), so the first paint is themed before any socket
+work; NULL omits it and the stylesheet's defaults apply}
 }
 \value{
 character complete HTML document
