@@ -233,6 +233,21 @@ plainrow <- component_to_html(component("row",
 expect_false(grepl("flex:", plainrow, fixed = TRUE))
 expect_false(grepl('style=""', plainrow, fixed = TRUE))
 
+# grow and width are contradictory instructions, and the two lowerings
+# resolve them differently -- the browser lets the later CSS rule win,
+# Flutter lets Expanded win. Refused rather than silently divergent.
+expect_error(component("row", grow = 1L, width = 280L,
+                       children = list()),
+             "not both")
+expect_error(component("column", grow = 1L, width = 280L,
+                       children = list()),
+             "not both")
+expect_error(component("panel", grow = 1L, width = 280L,
+                       children = list()),
+             "not both")
+# grow = 0 is "does not grow", so it does not conflict with a width
+expect_silent(component("row", grow = 0L, width = 280L, children = list()))
+
 # gap and grow compose rather than one clobbering the other
 both <- component_to_html(component("row", gap = 16L, grow = 2L,
                                     children = list(component("text",

@@ -577,6 +577,18 @@ check_field <- function(value, spec, type, nm) {
 #' @return the field list, adjusted
 #' @keywords internal
 check_component <- function(type, out) {
+    if (type %in% c("row", "column", "panel")) {
+        # Contradictory instructions, and the two lowerings resolve
+        # them differently: the browser lets the later CSS rule win
+        # (width), Flutter lets Expanded win (grow). Rather than pick
+        # one and have the other quietly disagree, refuse -- the app
+        # meant one of them.
+        if (!is.null(out$grow) && out$grow > 0L && !is.null(out$width)) {
+            stop(type, "() takes grow= or width=, not both: a container ",
+                 "cannot both fill the spare space and be a fixed size",
+                 call. = FALSE)
+        }
+    }
     if (identical(type, "link")) {
         # One or the other, and at least one. `value` alone is a text
         # link, `children` alone wraps them. Neither is a link with

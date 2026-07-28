@@ -9,6 +9,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -874,22 +875,65 @@ void _v31() {
         findsNothing);
   });
 
-  testWidgets('a grown container outside a Flex does not crash',
+  testWidgets('a grown container under a non-flex parent does not crash',
       (tester) async {
-    // Expanded outside a Row or Column throws at build time rather
-    // than laying out oddly, and render_ui() can drop a grown column
-    // into an output slot that is not in one.
-    final socket = await boot(tester, {
+    // Expanded is legal only as the direct child of a Flex. The first
+    // version asked the element tree "is there a RenderFlex above
+    // me?", which finds any ancestor -- so a grown component under a
+    // Column > Padding said yes and threw ParentDataWidget at build.
+    // A collapse puts real padding between the Column and its
+    // children, which is exactly that shape.
+    //
+    // The previous version of this test rendered no grown component
+    // at all, so it proved nothing.
+    await boot(tester, {
       'component': 'page',
       'title': 'Loose',
       'children': [
-        {'component': 'text_output', 'id': 'slot'},
+        {
+          'component': 'collapse',
+          'title': 'Settings',
+          'open': true,
+          'children': [
+            {'component': 'column', 'grow': 1, 'children': [
+              {'component': 'text', 'value': 'inside', 'variant': 'normal'}
+            ]},
+          ],
+        },
       ],
     }, 'rl2');
-    socket.deliver({
-      'type': 'output', 'id': 'slot', 'kind': 'text', 'value': 'x'});
     await tester.pumpAndSettle();
+
     expect(tester.takeException(), isNull);
+    expect(find.text('inside'), findsOneWidget);
+    // and it simply does not grow, the way flex-grow on a child of a
+    // non-flex parent does nothing in the browser
+    expect(
+        find.ancestor(of: find.text('inside'), matching: find.byType(Expanded)),
+        findsNothing);
+  });
+
+  testWidgets('a grown container in a modal footer does not crash',
+      (tester) async {
+    // The other non-flex parent a component can land under: a dialog
+    // body is a SingleChildScrollView, and render_ui() output goes
+    // wherever the app puts it.
+    final socket = await boot(tester, outputTree, 'rl3');
+    socket.deliver({
+      'type': 'modal',
+      'action': 'show',
+      'title': 'Busy',
+      'body': [
+        {'component': 'column', 'grow': 1, 'children': [
+          {'component': 'text', 'value': 'in a dialog', 'variant': 'normal'}
+        ]},
+      ],
+      'easy_close': false,
+    });
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('in a dialog'), findsOneWidget);
   });
 
   testWidgets('an image draws from a data URI at the size it was given',
@@ -907,18 +951,44 @@ void _v31() {
     expect(img.height, 32);
   });
 
-  testWidgets('an image with a relative src says so', (tester) async {
-    // A relative src is served by the glinty app; this client has no
-    // base URL to resolve it against, and the embedder does. Saying
-    // so beats a broken-image box.
-    await boot(tester, {
-      'component': 'page',
-      'title': 'Img',
-      'children': [
-        {'component': 'image', 'src': '/static/logo.png', 'alt': 'logo'},
-      ],
-    }, 'ri2');
-    expect(find.textContaining('without an absolute URL'), findsOneWidget);
+  testWidgets('a relative src resolves against the server address',
+      (tester) async {
+    // /static/logo.png is served by the same glinty app. The renderer
+    // has no idea what that is relative to; the connection does,
+    // because it is the thing holding the address.
+    //
+    // Image.network really fetches, even under the test binding, so
+    // the request is stubbed -- otherwise this asserts a 400 from a
+    // host called "x" rather than the URL the renderer built.
+    await HttpOverrides.runZoned(() async {
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Img',
+        'children': [
+          {'component': 'image', 'src': '/static/logo.png', 'alt': 'logo'},
+        ],
+      }, 'ri2');
+      final img = tester.widget<Image>(find.byType(Image));
+      expect((img.image as NetworkImage).url, 'http://x/static/logo.png');
+      expect(find.textContaining('cannot load'), findsNothing);
+    }, createHttpClient: (_) => _FakePngClient());
+  });
+
+  testWidgets('a bare renderer says it cannot resolve one', (tester) async {
+    // No connection, so no origin. Naming that beats guessing at a
+    // host or drawing a broken-image box.
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (c) => GlintyRenderer().build(
+              c,
+              GlintyComponent.fromJson({
+                'component': 'image', 'src': '/static/logo.png', 'alt': ''
+              })),
+        ),
+      ),
+    ));
+    expect(find.textContaining('no server address'), findsOneWidget);
   });
 
   testWidgets('a collapse folds and unfolds', (tester) async {
@@ -1004,4 +1074,64 @@ void _v31() {
         reason: 'an ordinary press is the whole message; a null value '
             'field would make the server decide what null means');
   });
+}
+
+/// An HttpClient that answers every GET with a 1x1 PNG.
+///
+/// Image.network really opens a socket, even under the test binding,
+/// so a test about *which URL was built* would otherwise assert a
+/// connection failure instead. Only the surface Image.network touches
+/// is implemented; anything else throws rather than pretending.
+class _FakePngClient implements HttpClient {
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async => _FakePngRequest(url);
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) async =>
+      _FakePngRequest(url);
+
+  @override
+  bool autoUncompress = true;
+  @override
+  noSuchMethod(Invocation i) => throw UnimplementedError('${i.memberName}');
+}
+
+class _FakePngRequest implements HttpClientRequest {
+  _FakePngRequest(this.uri);
+  @override
+  final Uri uri;
+  @override
+  final HttpHeaders headers = _FakeHeaders();
+  @override
+  Future<HttpClientResponse> close() async => _FakePngResponse();
+  @override
+  noSuchMethod(Invocation i) => throw UnimplementedError('${i.memberName}');
+}
+
+class _FakePngResponse implements HttpClientResponse {
+  static final _bytes = base64Decode(pngDataUri.split(',').last);
+
+  @override
+  int get statusCode => 200;
+  @override
+  int get contentLength => _bytes.length;
+  @override
+  HttpClientResponseCompressionState get compressionState =>
+      HttpClientResponseCompressionState.notCompressed;
+
+  @override
+  StreamSubscription<List<int>> listen(void Function(List<int>)? onData,
+          {Function? onError, void Function()? onDone, bool? cancelOnError}) =>
+      Stream<List<int>>.value(_bytes).listen(onData,
+          onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+
+  @override
+  noSuchMethod(Invocation i) => throw UnimplementedError('${i.memberName}');
+}
+
+class _FakeHeaders implements HttpHeaders {
+  @override
+  void add(String name, Object value, {bool preserveHeaderCase = false}) {}
+  @override
+  noSuchMethod(Invocation i) => throw UnimplementedError('${i.memberName}');
 }

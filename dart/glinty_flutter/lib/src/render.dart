@@ -11,9 +11,6 @@
 library;
 
 import 'package:flutter/material.dart';
-// RenderFlex, to ask whether an Expanded would be legal here rather
-// than assuming it.
-import 'package:flutter/rendering.dart';
 
 import 'component.dart';
 
@@ -83,6 +80,7 @@ class GlintyRenderer {
       this.onTicket,
       this.onModalClose,
       this.onMeasure,
+      this.assetBase,
       this.values = const {},
       this.kinds = const {},
       this.errors = const {},
@@ -119,6 +117,11 @@ class GlintyRenderer {
   /// locally. Null outside a dialog, which makes such a button
   /// visibly disabled rather than quietly inert.
   final VoidCallback? onModalClose;
+
+  /// What a relative src is relative to: the origin serving this
+  /// app. Null in a fixture render, where there is no server, and a
+  /// relative src is then named rather than guessed at.
+  final Uri? assetBase;
 
   /// Where a responsive plot reports its box. Null in a fixture
   /// render, where there is no server to tell -- the plot then draws
@@ -409,7 +412,15 @@ class GlintyRenderer {
       if (i > 0 && gap > 0) {
         out.add(row ? SizedBox(width: gap) : SizedBox(height: gap));
       }
-      out.add(build(context, kids[i]));
+      // `grow` becomes Expanded here and nowhere else, because this is
+      // the only place that knows it is building the direct children
+      // of a Flex -- and Expanded is only legal there. Asking the
+      // element tree instead ("is there a RenderFlex above me?") finds
+      // any ancestor, so a grown component under a Column > Padding
+      // answered yes and threw ParentDataWidget at build time.
+      final grow = kids[i].integer('grow') ?? 0;
+      final child = build(context, kids[i]);
+      out.add(grow > 0 ? Expanded(flex: grow, child: child) : child);
     }
     return out;
   }
@@ -834,23 +845,17 @@ class GlintyRenderer {
     );
   }
 
-  /// A container's share of its parent, from `grow` and `width`.
+  /// A fixed width, which is legal anywhere.
   ///
-  /// The same pair CSS spends as flex-grow and flex-basis. `Expanded`
-  /// is only legal inside a Flex, and a container is not always in
-  /// one -- a grown column at the root of a dialog, say -- so the
-  /// wrapper checks rather than assuming, because an Expanded outside
-  /// a Row or Column is a build-time crash, not a layout quirk.
+  /// `grow` is deliberately not handled here: it becomes `Expanded`,
+  /// which is only legal as the direct child of a Flex, so [_spaced]
+  /// owns it. A component that grows outside a row or column simply
+  /// does not grow -- the browser behaves the same way, since
+  /// flex-grow on a child of a non-flex parent does nothing.
   Widget _sized(GlintyComponent c, Widget child) {
     final width = c.integer('width');
-    if (width != null) {
-      child = SizedBox(width: width.toDouble(), child: child);
-    }
-    final grow = c.integer('grow') ?? 0;
-    if (grow > 0) {
-      return _MaybeExpanded(flex: grow, child: child);
-    }
-    return child;
+    if (width == null) return child;
+    return SizedBox(width: width.toDouble(), child: child);
   }
 
   /// A picture that is part of the UI, not an output.
@@ -878,11 +883,17 @@ class GlintyRenderer {
       return wrap(Image.network(src, width: w, height: h,
           fit: BoxFit.contain));
     }
-    // A relative src is served by the glinty app itself, and this
-    // client has no base URL to resolve it against -- the embedder
-    // knows the origin, the renderer does not.
+    // A relative src is served by the glinty app itself. The
+    // connection knows that origin because it is holding the address;
+    // a bare renderer (a fixture test) does not, and says so rather
+    // than guessing at a host.
+    final base = assetBase;
+    if (base != null) {
+      return wrap(Image.network(base.resolve(src).toString(),
+          width: w, height: h, fit: BoxFit.contain));
+    }
     return _problem(const Color(0xFFFFF3CD),
-        '[cannot load an image from "$src" without an absolute URL]');
+        '[cannot load "$src": no server address to resolve it against]');
   }
 
   /// A section the user can fold away.
@@ -1168,26 +1179,4 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         onChanged: _onChanged,
         onSubmitted: _onSubmitted,
       );
-}
-
-/// `Expanded`, but only where `Expanded` is legal.
-///
-/// A grown container is usually a Row or Column child, where Expanded
-/// is exactly right. It is not always: `render_ui()` can return a
-/// grown column into an output slot, and a dialog body is a
-/// SingleChildScrollView. Expanded outside a Flex throws at build
-/// time rather than laying out oddly, so this asks the element tree
-/// what it is inside instead of assuming.
-class _MaybeExpanded extends StatelessWidget {
-  const _MaybeExpanded({required this.flex, required this.child});
-
-  final int flex;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final inFlex = context.findAncestorRenderObjectOfType<RenderFlex>() != null;
-    if (!inFlex) return child;
-    return Expanded(flex: flex, child: child);
-  }
 }

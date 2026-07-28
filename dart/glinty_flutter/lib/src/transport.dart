@@ -274,6 +274,20 @@ class GlintyConnection extends ChangeNotifier {
     }
   }
 
+  /// Where this app's own assets live: the socket URL as http(s),
+  /// with no path.
+  ///
+  /// A component tree carries relative srcs -- `/static/logo.png` is
+  /// served by the same glinty app -- and a renderer has no idea what
+  /// they are relative to. The connection does, because it is the
+  /// thing holding the address.
+  Uri get assetBase => url.replace(
+        scheme: url.scheme == 'wss' ? 'https' : 'http',
+        path: '',
+        query: null,
+        fragment: null,
+      );
+
   void _deliverDownload(Map<String, dynamic> msg) {
     final token = msg['token'];
     if (token is! String) return;

@@ -10,20 +10,41 @@ grow — the Flutter one refuses `ui_output`, `audio_output` and markup
 by name, and that is implementation work behind a stable wire, not a
 protocol gap.
 
-**What forces a v4:** removing or renaming a component, changing what
-an existing field means, changing its type, or changing the shape of a
-message. Those break a client that was reading the old thing.
+**The test is not "is it additive". It is: what does a client that
+ignores this do?**
 
-**What does not:** adding a component, adding an optional field,
-adding a variant, adding a feature. All four are backwards compatible
-*because of* the honest-failure rule — a client meeting a component it
-does not know draws a visible placeholder naming it, and one meeting a
-field it does not know ignores it. A client a release behind degrades
-visibly instead of breaking, which is exactly what that rule was for.
+- If it fails *visibly* — a named placeholder, a warning, a layout
+  that is wrong but obviously so — the addition is safe. The
+  honest-failure rule is what buys this.
+- If it fails *silently* — the app looks fine and does the wrong
+  thing — it is a version bump, however optional the field is.
 
-An earlier draft of this paragraph said adding a component was a v4
-conversation. That was stricter than the design requires and would
-have made the vocabulary unable to grow at all.
+By that test:
+
+| addition | an older client... | safe? |
+|---|---|---|
+| a component | draws a placeholder naming it | yes |
+| a variant | falls back to the first listed, warns | yes |
+| a feature | the server sees it undeclared | yes |
+| `grow`, `width` | lays out wrong, plainly | yes |
+| `link.children` | draws a link with no content | **no** |
+| `button.value` | reports a press with no value, and the handler reads nothing | **no** |
+
+Two earlier drafts of this paragraph were both wrong. The first said
+adding a component was a v4 conversation, which is stricter than the
+design requires. The second said any optional field was safe because
+an older client ignores it — but *ignoring* `button.value` is exactly
+the silent wrong answer this protocol refuses everywhere else. Being
+optional is not the property that matters.
+
+**Why v3.1 did not bump the version anyway.** Protocol 3 has never
+been released: every published glinty (0.0.1 through 0.0.4) speaks
+protocol 2, and 3 exists only on `main`. Both protocol-3 clients ship
+in this repository and both implement v3.1. There is no client
+anywhere that could receive `button.value` and drop it. The additions
+below are safe *because no older protocol-3 client exists*, not
+because optional fields are safe in general — and once one does exist,
+an addition of that kind bumps to 4.
 
 ### v3.1
 
@@ -105,7 +126,7 @@ is a translation of the other.
 |---|---|---|
 | `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
 | `input` | `id`, `value` | an input changed |
-| `event` | `id` | a button press or other discrete event |
+| `event` | `id` | a button press or other discrete event; carries `value` when the button declared one |
 | `measure` | `id`, `width`, `height`, `dpr?` | a client-sized output's box, in logical pixels |
 | `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
 | `ack` | `seq` | optional flow control, reserved |
@@ -263,18 +284,20 @@ not a silent default.
 |---|---|---|
 | `text` | `value: string` | `variant`, `id` |
 | `heading` | `value: string` | `level: 1..4` (2), `id` |
-| `link` | `value: string`, `href: string` | `external: bool` (false) |
-| `icon` | `name: string` | `size: int` (16) |
+| `link` | `href: string`, and one of `value: string` or `children: []` | `external: bool` (false) |
+| `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload` | `size: int` (16) |
 | `divider` | — | `label: string`, `variant` |
 | `spacer` | — | `size: int` (1, in theme spacing units) |
-| `row` / `column` | `children: []` | `gap: int`, `align`, `id` |
-| `panel` | `children: []` | `variant`, `title: string`, `id` |
+| `row` / `column` | `children: []` | `gap: int`, `align`, `grow: int`, `width: int`, `id` |
+| `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `id` |
+| `image` | `src: string` | `alt` (""), `width: int`, `height: int` |
+| `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
 | `password_input` | `id` | `label`, `placeholder` — **never `value`** |
 | `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
 | `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
-| `button` | `id`, `label` | `variant`, `icon` |
+| `button` | `id`, `label` | `variant`, `icon`, `value: string` |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
 | `tabset` | `id`, `panels: [{title, children}]` | `selected` |
@@ -311,11 +334,11 @@ rather than an intention.
 |---|---|---|
 | `text` | `Text` | variant → `TextStyle` from theme |
 | `heading` | `Text` | level → `textTheme.headlineN` |
-| `link` | `InkWell` + `Text` | `external` → `url_launcher` |
+| `link` | `InkWell` + `Text` or children | `external` → `url_launcher` |
 | `icon` | `Icon` | name → `IconData`; needs a name→icon map |
 | `divider` | `Divider` | `labelled` → `Row` with `Expanded` rules |
 | `spacer` | `SizedBox` | size × theme spacing |
-| `row` / `column` | `Row` / `Column` | `gap` → `spacing` (Flutter 3.27+) or separators |
+| `row` / `column` | `Row` / `Column` | `gap` → separators; `grow` → `Expanded`, `width` → `SizedBox` |
 | `panel` | `Card` / `Container` | variant selects |
 | `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit |
 | `password_input` | `TextField(obscureText: true)` | |
@@ -333,6 +356,8 @@ rather than an intention.
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
 | `plot_output` | `LayoutBuilder` + `Image.memory` | always reports, fixed size included; a declared axis wins, an unbounded height becomes 4:3 |
+| `image` | `Image.memory` / `Image.network` | data:, http(s), or relative resolved against the server address |
+| `collapse` | `ExpansionTile` | `open` becomes `initiallyExpanded` |
 | `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
 | `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
 
