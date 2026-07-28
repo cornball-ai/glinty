@@ -787,21 +787,31 @@ class GlintyRenderer {
       }
     }
 
+    // The id says which handler hears this, not which widget it is.
+    // A list of rows shares one handler -- that is what `value` is
+    // for -- and duplicate keys among siblings are an error in
+    // Flutter, so a valued button keys on the pair.
+    final v = c.str('value');
+    final key = Key(v == null ? id : '$id:$v');
+
     final scheme = Theme.of(context).colorScheme;
     return switch (_variant(c.type, c.str('variant'))) {
-      'primary' => FilledButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+      'primary' =>
+        FilledButton(key: key, onPressed: dead ? null : fire, child: child),
       'secondary' =>
-        OutlinedButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+        OutlinedButton(key: key, onPressed: dead ? null : fire, child: child),
       // danger comes from the theme's danger token, which
       // glintyThemeData maps onto the scheme's error slot
       'danger' => FilledButton(
-          key: Key(id),
+          key: key,
           onPressed: dead ? null : fire,
           style: FilledButton.styleFrom(
               backgroundColor: scheme.error, foregroundColor: scheme.onError),
           child: child),
-      'ghost' => TextButton(key: Key(id), onPressed: dead ? null : fire, child: child),
-      _ => ElevatedButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+      'ghost' =>
+        TextButton(key: key, onPressed: dead ? null : fire, child: child),
+      _ =>
+        ElevatedButton(key: key, onPressed: dead ? null : fire, child: child),
     };
   }
 

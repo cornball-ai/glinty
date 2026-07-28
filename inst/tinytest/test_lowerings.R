@@ -307,6 +307,27 @@ expect_false(grepl("data-g-value",
                                                label = "Run")),
                    fixed = TRUE))
 
+# A component id says which handler hears the press, not which element
+# it is -- and the two stop being the same thing exactly when `value`
+# is in play, because that is what lets rows share a handler. Emitting
+# it as a DOM id gave every row in a list the same one.
+expect_false(grepl('id="history_view"', valued, fixed = TRUE))
+expect_true(grepl('data-g-target="history_view"', valued, fixed = TRUE))
+
+rows <- paste(vapply(c("a", "b", "c"), function(v) {
+    component_to_html(component("button", id = "history_view", label = v,
+                                value = v))
+}, character(1L)), collapse = "")
+expect_false(grepl(' id="', rows, fixed = TRUE))
+expect_equal(length(gregexpr('data-g-target="history_view"', rows)[[1]]), 3L)
+expect_equal(length(gregexpr("data-g-value=", rows)[[1]]), 3L)
+
+# an ordinary button still gets one, because it is the only one
+expect_true(grepl('id="go"',
+                  component_to_html(component("button", id = "go",
+                                              label = "Run")),
+                  fixed = TRUE))
+
 # --- what each input reports is what INPUT_META declares ---
 #
 # The declaration used to be documentation nothing checked, which is

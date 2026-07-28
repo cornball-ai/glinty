@@ -1128,7 +1128,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             value: { component: "button", id: shape.id, label: "12:04",
                      value: shape.value, variant: "default" }
         });
-        page.fire("click", page.document.getElementById(shape.id));
+        /* By target, not by id: a valued button deliberately has no
+           DOM id, because a list of rows shares the handler name. */
+        page.fire("click", page.document.querySelector(
+            '[data-g-target="' + shape.id + '"]'));
         const sent = page.frames("event").pop();
         check("the frame this client sends matches the transcript",
               sent.type === shape.type && sent.id === shape.id &&
@@ -1216,7 +1219,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               variant: "primary" }
         ] });
         const before = page.frames("event").length;
-        page.fire("click", page.document.getElementById("history_view"));
+        page.fire("click", page.document.querySelector(
+            '[data-g-target="history_view"]'));
         const valued = page.frames("event").slice(before);
         check("a valued button sends its value with the event",
               valued.length === 1 && valued[0].id === "history_view" &&
@@ -1231,6 +1235,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
            make a row id look like a form field. */
         check("a button value never lands in the input store",
               !page.frames("input").some((m) => m.value === "entry_7"));
+
+        /* A list of rows shares one handler -- that is what value is
+           for -- so emitting the component id as a DOM id gave every
+           row the same one. The id says which handler hears the press,
+           not which element it is. */
+        put({ component: "column", children: ["a", "b", "c"].map((v) => ({
+            component: "button", id: "history_view", label: v, value: v,
+            variant: "ghost"
+        })) });
+        const rowBtns = host.querySelectorAll("[data-g-target]");
+        check("a list of valued buttons shares a target",
+              rowBtns.length === 3 &&
+              rowBtns.every((b) => b.getAttribute("data-g-target") ===
+                  "history_view"));
+        check("and none of them claims a DOM id",
+              rowBtns.every((b) => b.getAttribute("id") === null));
+
+        const rowBefore = page.frames("event").length;
+        page.fire("click", rowBtns[1]);
+        const which = page.frames("event").slice(rowBefore);
+        check("clicking one reports which row it was",
+              which.length === 1 && which[0].value === "b");
     }
 
     /* ---------------------------------------------------------- */

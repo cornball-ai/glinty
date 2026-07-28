@@ -285,7 +285,18 @@ html_field_group <- function(x, control) {
 #' @keywords internal
 html_bind <- function(x) {
     meta <- INPUT_META[[x$component]]
-    out <- list(id = x$id)
+    # A component's `id` is which server handler hears it, not which
+    # element it is. Those are the same thing until a button carries a
+    # value -- the whole point of `value` is that a list of rows share
+    # one handler -- and then emitting `id` gives every row the same
+    # DOM id. data-g-target still carries the handler name, which is
+    # what the delegation reads.
+    valued <- !is.null(x$value) && identical(meta$message, "event")
+    if (valued) {
+        out <- list()
+    } else {
+        out <- list(id = x$id)
+    }
     out[["data-g-target"]] <- x$id
     out[["data-g-message"]] <- meta$message
     if (!is.null(x$emit)) {

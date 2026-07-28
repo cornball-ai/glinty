@@ -504,17 +504,20 @@
     }
 
     function bindAttrs(c, message) {
-        var attrs = { id: c.id };
-        attrs["data-g-target"] = c.id;
-        attrs["data-g-message"] = message;
-        if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
         /* A button's value rides along on the event, so one handler
            serves a list of rows. The delegated click handler already
            reads this attribute for tab buttons. */
-        if (message === "event" && c.value !== null &&
-                c.value !== undefined) {
-            attrs["data-g-value"] = c.value;
-        }
+        var valued = message === "event" && c.value !== null &&
+            c.value !== undefined;
+        var attrs = {};
+        /* The component id says which handler hears this, not which
+           element it is. A list of rows shares the handler, so
+           emitting it as a DOM id would give every row the same one. */
+        if (!valued) attrs.id = c.id;
+        attrs["data-g-target"] = c.id;
+        attrs["data-g-message"] = message;
+        if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
+        if (valued) attrs["data-g-value"] = c.value;
         return attrs;
     }
 

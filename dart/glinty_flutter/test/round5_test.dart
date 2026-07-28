@@ -1106,6 +1106,35 @@ void _v31() {
         reason: 'a logo inside a link is still a logo, not link text');
   });
 
+  testWidgets('a list of valued buttons sharing a handler renders',
+      (tester) async {
+    // The point of `value` is that rows share one handler, so a list
+    // of them shares one component id. Keying on the id alone gave
+    // every row the same key, and duplicate keys among siblings are
+    // an error in Flutter -- the widget equivalent of the duplicate
+    // DOM ids the browser lowering was emitting.
+    final socket = await boot(tester, {
+      'component': 'page',
+      'title': 'History',
+      'children': [
+        {'component': 'column', 'children': [
+          for (final v in ['a', 'b', 'c'])
+            {'component': 'button', 'id': 'history_view', 'label': 'row $v',
+              'value': v, 'variant': 'ghost'},
+        ]},
+      ],
+    }, 'rk2');
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(TextButton), findsNWidgets(3));
+
+    // and pressing one says which
+    await tester.tap(find.text('row b'));
+    await tester.pumpAndSettle();
+    expect(socket.sent.last['id'], 'history_view');
+    expect(socket.sent.last['value'], 'b');
+  });
+
   testWidgets('a valued button carries its value, a plain one does not',
       (tester) async {
     // One handler serves a list of rows: the press says which row.
