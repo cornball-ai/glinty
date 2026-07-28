@@ -243,7 +243,14 @@ class GlintyView extends StatelessWidget {
     // cleared half-typed fields, and the reconnect banner wiped the
     // very transfer refusal it appeared alongside. The app stays at
     // index 0, and layers land after it.
-    final stacked = Stack(children: [
+    //
+    // passthrough, not the default loose: the app was a direct child
+    // of whatever holds this view, and a Stack that loosens the
+    // constraints changes what "fill the space" means one level down.
+    // A page that filled its parent would start sizing to its content
+    // instead, and every plot_output under it would measure and
+    // report a different box.
+    final stacked = Stack(fit: StackFit.passthrough, children: [
       built,
       if (s.progress.isNotEmpty) _ProgressStack(reports: s.progress),
       if (s.unhandledCustom.isNotEmpty)

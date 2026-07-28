@@ -296,11 +296,12 @@ class GlintyConnection extends ChangeNotifier {
       path: '/download',
       queryParameters: {'ticket': token},
     );
-    // The button that asked has gone away, so opening its file now
-    // would be a download nobody asked for, arriving out of nowhere.
-    if (session.lastTicketAbandoned) {
-      debugPrint('glinty: a download ticket arrived for a control that '
-          'is no longer waiting - ignoring it');
+    // Either the button that asked has gone away, or nothing asked at
+    // all. Opening the file now would be a download arriving out of
+    // nowhere, with nothing on screen to explain it.
+    if (session.lastTicketUnclaimed) {
+      debugPrint('glinty: a download ticket arrived that no control is '
+          'waiting for - ignoring it');
       return;
     }
     final cb = onDownload;

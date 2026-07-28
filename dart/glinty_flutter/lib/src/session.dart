@@ -197,18 +197,22 @@ class GlintySession {
   final Map<String, List<_TicketWaiter>> _ticketWaiters =
       <String, List<_TicketWaiter>>{};
 
-  /// True when the last ticket frame answered a control that has
-  /// since gone away.
+  /// Requests sent and not yet answered, per "purpose:id".
   ///
-  /// A grant belonging to a button that no longer exists is not a
-  /// grant for anybody: the transport reads this so it does not hand
-  /// an embedder a download URL on that button's behalf, arriving out
-  /// of nowhere with nothing to explain it.
+  /// [requestTicket] is public and a client may call it without a
+  /// control behind it, so an empty waiter queue does not mean nobody
+  /// asked. This is what separates that from a `ticket` frame the
+  /// server sent unbidden -- which is not an answer to anything, and
+  /// which the browser drops.
+  final Map<String, int> _ticketsAsked = <String, int>{};
+
+  /// True when the last ticket frame answered nobody.
   ///
-  /// Only a cancelled waiter counts. An answer with no waiter at all
-  /// is [requestTicket] called directly, which is a supported way to
-  /// ask, and its grant is delivered.
-  bool lastTicketAbandoned = false;
+  /// A grant belonging to a button that no longer exists, or to no
+  /// request at all, is not a grant for anybody: the transport reads
+  /// this so it does not hand an embedder a download URL that arrives
+  /// out of nowhere with nothing on screen to explain it.
+  bool lastTicketUnclaimed = false;
 
   /// Register a control's interest in the next answer for this
   /// resource. Returns a function that cancels it, for a control that
@@ -230,18 +234,23 @@ class GlintySession {
   }
 
   void _answerTicket(String purpose, String id, String? refusal) {
-    lastTicketAbandoned = false;
-    final queue = _ticketWaiters['$purpose:$id'];
-    if (queue == null || queue.isEmpty) return;
-    // Popped whether or not anyone is still listening: this answer
-    // belongs to that request, and leaving it would shift every
-    // later answer onto the wrong control.
-    final answer = queue.removeAt(0).answer;
-    if (answer == null) {
-      lastTicketAbandoned = true;
+    final key = '$purpose:$id';
+    final asked = _ticketsAsked[key] ?? 0;
+    if (asked > 0) _ticketsAsked[key] = asked - 1;
+    final queue = _ticketWaiters[key];
+    if (queue != null && queue.isNotEmpty) {
+      // Popped whether or not anyone is still listening: this answer
+      // belongs to that request, and leaving it would shift every
+      // later answer onto the wrong control.
+      final answer = queue.removeAt(0).answer;
+      lastTicketUnclaimed = answer == null;
+      answer?.call(refusal);
       return;
     }
-    answer(refusal);
+    // No control is waiting. If this client asked, the grant is the
+    // caller's; if it did not, the server is volunteering a transfer
+    // nobody requested, and that is nobody's to act on.
+    lastTicketUnclaimed = asked == 0;
   }
 
   /// Hand every waiting control a refusal.
@@ -253,6 +262,10 @@ class GlintySession {
   void failPendingTickets(String reason) {
     final queues = _ticketWaiters.values.toList();
     _ticketWaiters.clear();
+    // Those requests died with the socket too. Left standing they
+    // would vouch for a grant that arrives after the reconnect
+    // answering nothing.
+    _ticketsAsked.clear();
     var told = false;
     for (final q in queues) {
       for (final waiter in List.of(q)) {
@@ -586,9 +599,12 @@ class GlintySession {
   /// frame and lands in [tickets] under "purpose:id"; a refusal
   /// arrives on the same frame carrying `error` instead.
   void requestTicket(String id, String purpose) {
-    // Asking again clears the last answer, so a refusal cannot outlive
-    // the attempt that earned it.
     // The control that asked clears its own last answer.
+    //
+    // Counted whether or not a control registered for the answer, so
+    // a grant can be told from one the server volunteered.
+    final key = '$purpose:$id';
+    _ticketsAsked[key] = (_ticketsAsked[key] ?? 0) + 1;
     _emit(GlintyOutgoing(
         'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
   }

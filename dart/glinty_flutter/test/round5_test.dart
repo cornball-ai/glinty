@@ -293,6 +293,35 @@ void main() {
       expect(find.textContaining('cannot display image'), findsOneWidget);
     });
 
+    testWidgets('the app still fills the box it was given', (tester) async {
+      // Making the Stack unconditional put a widget between the app
+      // and its parent, and a Stack loosens the constraints it passes
+      // down by default. An app that filled its window would start
+      // sizing to its content, so a background would stop covering
+      // the screen and a modal scrim with it. passthrough is what
+      // being a direct child meant.
+      late FakeSocket socket;
+      await tester.pumpWidget(MaterialApp(
+        home: SizedBox.expand(
+          child: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => socket = FakeSocket(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      // Short content, so a stack that shrink-wrapped would be
+      // obviously smaller than the box rather than accidentally right.
+      socket.deliver(welcomeOf(buttonTree, 'rfill'));
+      await tester.pumpAndSettle();
+
+      expect(
+          tester.getSize(find.descendant(
+              of: find.byType(GlintyView), matching: find.byType(Column))),
+          const Size(800, 600),
+          reason: "the page sizes to the box, as a direct child would");
+    });
+
     testWidgets('a dialog opening does not reset the app behind it',
         (tester) async {
       // An overlay is drawn *above* the app, so nothing about the app
@@ -1467,7 +1496,7 @@ void _ticketRefusals() {
     expect(reached, 1);
   });
 
-  test('an answer to a control that has gone is marked abandoned', () {
+  test('an answer nobody is waiting for is marked unclaimed', () {
     // What the transport reads to decide whether a granted download
     // belongs to anybody. Left set from the previous answer it would
     // suppress a live grant; left clear it would open a file for a
@@ -1479,17 +1508,49 @@ void _ticketRefusals() {
 
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
       'token': 'tk1', 'expires': 30});
-    expect(s.lastTicketAbandoned, isTrue);
+    expect(s.lastTicketUnclaimed, isTrue);
 
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
       'token': 'tk2', 'expires': 30});
-    expect(s.lastTicketAbandoned, isFalse);
+    expect(s.lastTicketUnclaimed, isFalse);
+  });
 
-    // No waiter at all is requestTicket() called straight, which is a
-    // supported way to ask -- and its grant is nobody's to withhold.
+  test('a grant nothing asked for is not a grant', () {
+    // The client asks, the server answers. A ticket that answers no
+    // request is the server volunteering a transfer -- which the
+    // browser drops on the floor, and which this client would have
+    // handed to the embedder to open.
+    final s = GlintySession(onSend: (_) {});
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
-      'token': 'tk3', 'expires': 30});
-    expect(s.lastTicketAbandoned, isFalse);
+      'token': 'unbidden', 'expires': 30});
+    expect(s.lastTicketUnclaimed, isTrue);
+
+    // requestTicket() straight, with no control behind it, is a
+    // supported way to ask -- and its grant is nobody's to withhold.
+    s.requestTicket('report', 'download');
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'asked-for', 'expires': 30});
+    expect(s.lastTicketUnclaimed, isFalse);
+
+    // and that request is spent: the next unbidden one is refused
+    // again rather than riding on it.
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'unbidden-again', 'expires': 30});
+    expect(s.lastTicketUnclaimed, isTrue);
+  });
+
+  test('a request does not outlive the socket that carried it', () {
+    // The wire it went out on is gone, so it will never be answered.
+    // Left standing it vouches for whatever the *next* socket says
+    // first -- a grant that answers nothing, waved through on the
+    // strength of a request that died with the connection.
+    final s = GlintySession(onSend: (_) {});
+    s.requestTicket('report', 'download');
+    s.failPendingTickets('the connection dropped');
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'from-the-new-socket', 'expires': 30});
+    expect(s.lastTicketUnclaimed, isTrue);
   });
 
   testWidgets('a grant for a control that has gone away is not opened',

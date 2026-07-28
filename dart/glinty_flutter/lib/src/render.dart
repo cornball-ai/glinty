@@ -1333,13 +1333,22 @@ class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
 
   void _press() {
     final id = widget.component.str('id')!;
+    final queue = widget.awaitTicket;
+    if (queue == null) {
+      // Nothing to wait in. An embedder can wire onTicket without
+      // awaitTicket -- GlintyRenderer takes them separately -- and
+      // then no answer ever reaches this button. Waiting for one it
+      // cannot hear would disable it after a single press, for good.
+      widget.request(id, 'download');
+      return;
+    }
     setState(() {
       // Asking again clears the last answer: a refusal belongs to the
       // attempt that earned it.
       _refusal = null;
       _waiting = true;
     });
-    _cancel = widget.awaitTicket?.call(id, 'download', (refusal) {
+    _cancel = queue(id, 'download', (refusal) {
       _cancel = null;
       if (!mounted) return;
       setState(() {
