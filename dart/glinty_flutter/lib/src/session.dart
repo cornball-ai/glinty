@@ -184,27 +184,23 @@ class GlintySession {
   final Map<String, Map<String, dynamic>> tickets =
       <String, Map<String, dynamic>>{};
 
-  /// Controls waiting on a ticket, in the order they asked, per
-  /// "purpose:id".
+  /// Requests sent and not yet answered, in the order they went out,
+  /// per "purpose:id".
   ///
-  /// A queue rather than one slot per id, because several controls
-  /// may carry the same id -- that is the whole reason a button's id
-  /// is routing rather than identity. The server answers requests for
-  /// a given resource in order, so the front of the queue is whose
-  /// answer this is. Keyed against the *control*, not the id, or a
-  /// refusal earned by one download button would appear under every
-  /// button sharing its name.
-  final Map<String, List<_TicketWaiter>> _ticketWaiters =
-      <String, List<_TicketWaiter>>{};
-
-  /// Requests sent and not yet answered, per "purpose:id".
+  /// One ledger, not a queue of waiters beside a count of requests.
+  /// Two orderings cannot be kept in step: a direct [requestTicket]
+  /// followed by a button's would put the direct one first on the
+  /// wire and the button first in the queue, so the button was handed
+  /// an answer to a question it never asked. Every way of asking
+  /// appends here, and the front of the list is whose answer this is.
   ///
-  /// [requestTicket] is public and a client may call it without a
-  /// control behind it, so an empty waiter queue does not mean nobody
-  /// asked. This is what separates that from a `ticket` frame the
-  /// server sent unbidden -- which is not an answer to anything, and
-  /// which the browser drops.
-  final Map<String, int> _ticketsAsked = <String, int>{};
+  /// A list rather than one slot per id, because several controls may
+  /// carry the same id -- that is the whole reason a button's id is
+  /// routing rather than identity. Keyed against the *request*, not
+  /// the id, or a refusal earned by one download button would appear
+  /// under every button sharing its name.
+  final Map<String, List<_TicketRequest>> _ticketRequests =
+      <String, List<_TicketRequest>>{};
 
   /// True when the last ticket frame answered nobody.
   ///
@@ -214,64 +210,82 @@ class GlintySession {
   /// out of nowhere with nothing on screen to explain it.
   bool lastTicketUnclaimed = false;
 
-  /// Register a control's interest in the next answer for this
-  /// resource. Returns a function that cancels it, for a control that
+  /// The credential from the last ticket frame, when that frame was a
+  /// grant and a live request claimed it. Null for anything else.
+  ///
+  /// The frame is classified once, here, and the transport reads the
+  /// verdict rather than looking at the frame again. Two readings of
+  /// one frame can disagree: a malformed answer carrying both an
+  /// error and a token was a refusal to the control that asked and a
+  /// download to the transport, so one press did both.
+  String? lastTicketGrant;
+
+  /// Ask for a ticket and register a control's interest in the
+  /// answer. Returns a function that cancels it, for a control that
   /// goes away before the answer arrives.
   ///
+  /// Asking and registering are one step on purpose. Split apart they
+  /// are two orderings that have to be kept in step, and a caller who
+  /// did one without the other put the ledger out of line with the
+  /// wire.
+  ///
   /// Cancelling leaves a tombstone rather than removing the entry.
-  /// The queue's positions correspond to requests already on the
+  /// The ledger's positions correspond to requests already on the
   /// wire, and the server will answer every one of them; dropping an
-  /// entry shortens the queue but not the stream, so the next control
+  /// entry shortens the ledger but not the stream, so the next control
   /// in line would be handed the departed one's answer. A tombstone
   /// consumes its own reply and throws it away.
   void Function() awaitTicket(
       String id, String purpose, void Function(String? refusal) answer) {
-    final key = '$purpose:$id';
-    final queue = _ticketWaiters[key] ??= <_TicketWaiter>[];
-    final waiter = _TicketWaiter(answer);
-    queue.add(waiter);
-    return () => waiter.answer = null;
+    final request = _askForTicket(id, purpose, answer);
+    return () {
+      request.answer = null;
+      request.wanted = false;
+    };
+  }
+
+  _TicketRequest _askForTicket(
+      String id, String purpose, void Function(String? refusal)? answer) {
+    final request = _TicketRequest(answer);
+    (_ticketRequests['$purpose:$id'] ??= <_TicketRequest>[]).add(request);
+    _emit(GlintyOutgoing(
+        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
+    return request;
   }
 
   void _answerTicket(String purpose, String id, String? refusal) {
-    final key = '$purpose:$id';
-    final asked = _ticketsAsked[key] ?? 0;
-    if (asked > 0) _ticketsAsked[key] = asked - 1;
-    final queue = _ticketWaiters[key];
-    if (queue != null && queue.isNotEmpty) {
-      // Popped whether or not anyone is still listening: this answer
-      // belongs to that request, and leaving it would shift every
-      // later answer onto the wrong control.
-      final answer = queue.removeAt(0).answer;
-      lastTicketUnclaimed = answer == null;
-      answer?.call(refusal);
+    final queue = _ticketRequests['$purpose:$id'];
+    if (queue == null || queue.isEmpty) {
+      // Nothing asked for this. The server is volunteering a transfer
+      // nobody requested, which is nobody's to act on -- and which
+      // the browser drops on the floor for the same reason.
+      lastTicketUnclaimed = true;
       return;
     }
-    // No control is waiting. If this client asked, the grant is the
-    // caller's; if it did not, the server is volunteering a transfer
-    // nobody requested, and that is nobody's to act on.
-    lastTicketUnclaimed = asked == 0;
+    // Popped whether or not anyone is still listening: this answer
+    // belongs to that request, and leaving it would shift every
+    // later answer onto the wrong control.
+    final request = queue.removeAt(0);
+    lastTicketUnclaimed = !request.wanted;
+    request.answer?.call(refusal);
   }
 
   /// Hand every waiting control a refusal.
   ///
-  /// The socket that was going to answer is gone. A waiter left in
-  /// the queue keeps its control disabled forever, and the next
+  /// The socket that was going to answer is gone. A request left in
+  /// the ledger keeps its control disabled forever, and the next
   /// socket's first reply would go to it rather than to whoever asked
   /// after the reconnect.
   void failPendingTickets(String reason) {
-    final queues = _ticketWaiters.values.toList();
-    _ticketWaiters.clear();
-    // Those requests died with the socket too. Left standing they
-    // would vouch for a grant that arrives after the reconnect
-    // answering nothing.
-    _ticketsAsked.clear();
+    final queues = _ticketRequests.values.toList();
+    _ticketRequests.clear();
     var told = false;
     for (final q in queues) {
-      for (final waiter in List.of(q)) {
-        // Tombstones need nothing: their control is gone, and the
-        // requests they stood for are gone with the socket.
-        final answer = waiter.answer;
+      for (final request in List.of(q)) {
+        // A tombstone has nobody to tell, and a direct request has
+        // nowhere to say it: both are gone with the socket either
+        // way.
+        final answer = request.answer;
         if (answer == null) continue;
         told = true;
         answer(reason);
@@ -368,6 +382,11 @@ class GlintySession {
       case 'ticket':
         final id = msg['id'];
         final purpose = msg['purpose'];
+        // Cleared for every ticket frame, including one too malformed
+        // to route: a verdict left over from the last frame would let
+        // an unroutable one open the previous grant all over again.
+        lastTicketGrant = null;
+        lastTicketUnclaimed = true;
         if (id is String && purpose is String) {
           // A refusal answers the request that asked, so it goes to
           // the waiter that asked. Sent as an `error` frame it was
@@ -391,6 +410,8 @@ class GlintySession {
           } else {
             tickets['$purpose:$id'] = msg;
             _answerTicket(purpose, id, null);
+            // A grant, but only the claimed one is anybody's to use.
+            if (!lastTicketUnclaimed) lastTicketGrant = token;
           }
         }
       case 'input_update':
@@ -598,16 +619,14 @@ class GlintySession {
   /// Ask for a transfer ticket. The grant arrives as a `ticket`
   /// frame and lands in [tickets] under "purpose:id"; a refusal
   /// arrives on the same frame carrying `error` instead.
-  void requestTicket(String id, String purpose) {
-    // The control that asked clears its own last answer.
-    //
-    // Counted whether or not a control registered for the answer, so
-    // a grant can be told from one the server volunteered.
-    final key = '$purpose:$id';
-    _ticketsAsked[key] = (_ticketsAsked[key] ?? 0) + 1;
-    _emit(GlintyOutgoing(
-        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
-  }
+  /// Ask for a ticket with no control behind it.
+  ///
+  /// Recorded in the same ledger as [awaitTicket]'s, in wire order,
+  /// with nobody to call back. Its grant still belongs to whoever
+  /// asked, which is what separates it from a frame the server
+  /// volunteered.
+  void requestTicket(String id, String purpose) =>
+      _askForTicket(id, purpose, null);
 
   /// Report an output's box so the server can render at that size.
   ///
@@ -668,13 +687,22 @@ class GlintySession {
 final List<String> supportedComponentsList =
     (supportedComponents.toList()..sort());
 
-/// One control's place in the queue for a resource's ticket answers.
+/// One request's place in the ledger for a resource's ticket answers.
 ///
 /// A position, not just a callback. Cancelling clears [answer] and
-/// leaves the entry: the queue's positions correspond to requests
+/// leaves the entry: the ledger's positions correspond to requests
 /// already on the wire, so an entry that disappears takes the next
 /// control's answer with it.
-class _TicketWaiter {
-  _TicketWaiter(this.answer);
+class _TicketRequest {
+  _TicketRequest(this.answer);
+
+  /// The control waiting on this answer. Null for a request made
+  /// without one, and for a control that has since gone away -- which
+  /// is why it does not tell those two apart on its own.
   void Function(String? refusal)? answer;
+
+  /// Whether the answer is still anybody's. False once the control
+  /// that asked has gone; a request made with no control never had
+  /// one to lose, and its grant belongs to whoever asked.
+  bool wanted = true;
 }

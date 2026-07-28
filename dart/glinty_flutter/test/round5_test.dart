@@ -1539,6 +1539,76 @@ void _ticketRefusals() {
     expect(s.lastTicketUnclaimed, isTrue);
   });
 
+  test('answers follow the order the requests went out in', () {
+    // A direct request and a button's, for the same resource. Kept as
+    // a count beside a queue these were two orderings: the direct one
+    // went out first and the button sat first in the queue, so the
+    // button was handed an answer to a question it never asked -- and
+    // then its own answer went to nobody.
+    final s = GlintySession(onSend: (_) {});
+    s.requestTicket('report', 'download');
+    final got = <String?>[];
+    s.awaitTicket('report', 'download', got.add);
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'the direct one'});
+    expect(got, isEmpty, reason: 'that answer was not the button\'s');
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'the button one'});
+    expect(got, ['the button one']);
+  });
+
+  test('a waiter cannot vouch for a grant nothing asked for', () {
+    // awaitTicket() asks as it registers, so a control cannot be
+    // waiting on a request that was never sent. Were registering
+    // separate from asking, a waiter alone would legitimise a ticket
+    // the server volunteered.
+    final s = GlintySession(onSend: (_) {});
+    s.awaitTicket('report', 'download', (_) {});
+    expect(s.sent.where((f) => f.type == 'ticket'), hasLength(1),
+        reason: 'registering is asking');
+  });
+
+  test('an answer that is both a refusal and a grant is not a grant', () {
+    // Classified once. Read separately, the session called this a
+    // refusal and told the button so, while the transport found a
+    // token and opened it: one press that both failed and downloaded.
+    final s = GlintySession(onSend: (_) {});
+    String? told;
+    s.awaitTicket('report', 'download', (r) => told = r);
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'at the cap', 'token': 'tk_should_not_open', 'expires': 30});
+
+    expect(told, 'at the cap');
+    expect(s.lastTicketGrant, isNull);
+  });
+
+  test('an empty credential is not a credential', () {
+    final s = GlintySession(onSend: (_) {});
+    String? told;
+    s.awaitTicket('report', 'download', (r) => told = r);
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': '', 'expires': 30});
+
+    expect(told, isNotNull, reason: 'the request is over either way');
+    expect(s.lastTicketGrant, isNull);
+  });
+
+  test('a ticket frame too malformed to route clears the last verdict', () {
+    // Without an id there is nothing to answer, so the frame is
+    // dropped -- but a verdict left over from the previous one would
+    // let it open that grant a second time.
+    final s = GlintySession(onSend: (_) {});
+    s.awaitTicket('report', 'download', (_) {});
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk_real', 'expires': 30});
+    expect(s.lastTicketGrant, 'tk_real');
+
+    s.receive({'type': 'ticket', 'purpose': 'download', 'token': 'tk_real'});
+    expect(s.lastTicketGrant, isNull);
+  });
+
   test('a request does not outlive the socket that carried it', () {
     // The wire it went out on is gone, so it will never be answered.
     // Left standing it vouches for whatever the *next* socket says
@@ -1551,6 +1621,39 @@ void _ticketRefusals() {
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
       'token': 'from-the-new-socket', 'expires': 30});
     expect(s.lastTicketUnclaimed, isTrue);
+  });
+
+  testWidgets('an answer that refuses does not also download',
+      (tester) async {
+    // Both an error and a token in one frame. The session read it as
+    // a refusal and said so under the button; the transport read the
+    // same frame for itself, found a token, and opened it. One press,
+    // refused and downloaded at once.
+    final grants = <Uri>[];
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+          onDownload: grants.add,
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcomeOf(downloadTree, 'rt1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    socket.deliver({
+      'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'at the cap', 'token': 'tk_should_not_open', 'expires': 30,
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('at the cap'), findsOneWidget);
+    expect(grants, isEmpty, reason: 'a refusal is not also a grant');
   });
 
   testWidgets('a grant for a control that has gone away is not opened',

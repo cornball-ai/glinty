@@ -1333,8 +1333,8 @@ class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
 
   void _press() {
     final id = widget.component.str('id')!;
-    final queue = widget.awaitTicket;
-    if (queue == null) {
+    final ask = widget.awaitTicket;
+    if (ask == null) {
       // Nothing to wait in. An embedder can wire onTicket without
       // awaitTicket -- GlintyRenderer takes them separately -- and
       // then no answer ever reaches this button. Waiting for one it
@@ -1348,7 +1348,10 @@ class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
       _refusal = null;
       _waiting = true;
     });
-    _cancel = queue(id, 'download', (refusal) {
+    // Asks and registers in one step. Asking separately would put the
+    // request on the wire in one order and in the ledger in another,
+    // and the answers would cross.
+    _cancel = ask(id, 'download', (refusal) {
       _cancel = null;
       if (!mounted) return;
       setState(() {
@@ -1356,7 +1359,6 @@ class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
         _waiting = false;
       });
     });
-    widget.request(id, 'download');
   }
 
   // Unpressable while it waits. Two presses are two requests, and the

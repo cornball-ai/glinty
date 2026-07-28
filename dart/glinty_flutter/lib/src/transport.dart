@@ -260,7 +260,7 @@ class GlintyConnection extends ChangeNotifier {
           _flushPending();
         }
         if (msg['type'] == 'ticket' && msg['purpose'] == 'download') {
-          _deliverDownload(msg);
+          _deliverDownload();
         }
         if (session.refused) {
           _stop(session.refusalMessage ?? session.error?.message);
@@ -288,22 +288,27 @@ class GlintyConnection extends ChangeNotifier {
         fragment: null,
       );
 
-  void _deliverDownload(Map<String, dynamic> msg) {
-    final token = msg['token'];
-    if (token is! String) return;
+  void _deliverDownload() {
+    // The session classified the frame; this reads the verdict rather
+    // than the frame. Reading it again here is how a malformed answer
+    // carrying both an error and a token became a refusal under the
+    // button and a download at the same time.
+    //
+    // Null covers all three ways of not being a grant to act on: a
+    // refusal, an answer with no usable credential, and a grant
+    // claimed by nobody -- either a control that has gone away or no
+    // request at all.
+    final token = session.lastTicketGrant;
+    if (token == null) {
+      debugPrint('glinty: a download ticket arrived that no control is '
+          'waiting for - ignoring it');
+      return;
+    }
     final target = url.replace(
       scheme: url.scheme == 'wss' ? 'https' : 'http',
       path: '/download',
       queryParameters: {'ticket': token},
     );
-    // Either the button that asked has gone away, or nothing asked at
-    // all. Opening the file now would be a download arriving out of
-    // nowhere, with nothing on screen to explain it.
-    if (session.lastTicketUnclaimed) {
-      debugPrint('glinty: a download ticket arrived that no control is '
-          'waiting for - ignoring it');
-      return;
-    }
     final cb = onDownload;
     if (cb == null) {
       debugPrint('glinty: download ready at $target, but no onDownload '
