@@ -275,6 +275,40 @@ void main() {
     c.conn.dispose();
   });
 
+  test('a refusal gives back the controls waiting on a transfer', () async {
+    // Terminal on a socket that is still open, so this is the one
+    // stop that does not come through the close path. A request made
+    // before the welcome is queued rather than sent, and a refusal
+    // means it never will be -- so its waiter is told, rather than
+    // left holding a callback on a wire that is finished.
+    final c = makeConn();
+    await c.conn.start();
+    String? told;
+    c.conn.session.awaitTicket('report', 'download', (r) => told = r);
+
+    c.sockets.single.deliver(serverFrame('hello-refused', 'error'));
+    await pump();
+
+    expect(c.conn.state, GlintyConnectionState.stopped);
+    expect(told, isNotNull, reason: 'nothing is coming; say so');
+    c.conn.dispose();
+  });
+
+  test('disposing gives back the controls waiting on a transfer', () async {
+    // The app is torn down with a request in flight. Nothing here
+    // will ever answer again, and a waiter left behind holds a
+    // closure over widgets that are on their way out.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    String? told;
+    c.conn.session.awaitTicket('report', 'download', (r) => told = r);
+
+    c.conn.dispose();
+    expect(told, isNotNull);
+  });
+
   test('a download grant becomes an http URL for the embedder', () async {
     Uri? got;
     final c = makeConn(onDownload: (u) => got = u);

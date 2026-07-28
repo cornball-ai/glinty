@@ -296,6 +296,13 @@ class GlintyConnection extends ChangeNotifier {
       path: '/download',
       queryParameters: {'ticket': token},
     );
+    // The button that asked has gone away, so opening its file now
+    // would be a download nobody asked for, arriving out of nowhere.
+    if (session.lastTicketAbandoned) {
+      debugPrint('glinty: a download ticket arrived for a control that '
+          'is no longer waiting - ignoring it');
+      return;
+    }
     final cb = onDownload;
     if (cb == null) {
       debugPrint('glinty: download ready at $target, but no onDownload '
@@ -320,6 +327,11 @@ class GlintyConnection extends ChangeNotifier {
     _events?.cancel();
     _events = null;
     _socket = null;
+    // Every transfer request this socket carried died with it. A
+    // control still waiting would wait forever, disabled, with no
+    // sign of why -- so it is told, and can be pressed again once
+    // the retry lands.
+    session.failPendingTickets('the connection dropped');
     if (_disposed || _state == GlintyConnectionState.stopped) return;
     if (session.refused) {
       // The server said no. It will say no again; retrying would
@@ -361,6 +373,10 @@ class GlintyConnection extends ChangeNotifier {
     unawaited(_socket?.close().catchError((_) {}));
     _socket = null;
     _pending.clear();
+    // A refusal arrives on a socket that is still open, so this is
+    // not always reached through _onClosed. Terminal means no answer
+    // is coming, for transfers as much as for anything else.
+    session.failPendingTickets(reason ?? 'the connection ended');
     _stoppedReason = reason;
     _setState(GlintyConnectionState.stopped);
   }
@@ -374,6 +390,10 @@ class GlintyConnection extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // Nothing here will ever answer again. A control that outlives
+    // this connection -- one being torn down in some other order --
+    // gets told rather than left waiting on a dead wire.
+    session.failPendingTickets('the connection ended');
     _retryTimer?.cancel();
     _welcomeTimer?.cancel();
     _events?.cancel();

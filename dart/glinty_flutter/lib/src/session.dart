@@ -194,24 +194,54 @@ class GlintySession {
   /// answer this is. Keyed against the *control*, not the id, or a
   /// refusal earned by one download button would appear under every
   /// button sharing its name.
-  final Map<String, List<void Function(String?)>> _ticketWaiters =
-      <String, List<void Function(String?)>>{};
+  final Map<String, List<_TicketWaiter>> _ticketWaiters =
+      <String, List<_TicketWaiter>>{};
+
+  /// True when the last ticket frame answered a control that has
+  /// since gone away.
+  ///
+  /// A grant belonging to a button that no longer exists is not a
+  /// grant for anybody: the transport reads this so it does not hand
+  /// an embedder a download URL on that button's behalf, arriving out
+  /// of nowhere with nothing to explain it.
+  ///
+  /// Only a cancelled waiter counts. An answer with no waiter at all
+  /// is [requestTicket] called directly, which is a supported way to
+  /// ask, and its grant is delivered.
+  bool lastTicketAbandoned = false;
 
   /// Register a control's interest in the next answer for this
   /// resource. Returns a function that cancels it, for a control that
   /// goes away before the answer arrives.
+  ///
+  /// Cancelling leaves a tombstone rather than removing the entry.
+  /// The queue's positions correspond to requests already on the
+  /// wire, and the server will answer every one of them; dropping an
+  /// entry shortens the queue but not the stream, so the next control
+  /// in line would be handed the departed one's answer. A tombstone
+  /// consumes its own reply and throws it away.
   void Function() awaitTicket(
       String id, String purpose, void Function(String? refusal) answer) {
     final key = '$purpose:$id';
-    final queue = _ticketWaiters[key] ??= <void Function(String?)>[];
-    queue.add(answer);
-    return () => queue.remove(answer);
+    final queue = _ticketWaiters[key] ??= <_TicketWaiter>[];
+    final waiter = _TicketWaiter(answer);
+    queue.add(waiter);
+    return () => waiter.answer = null;
   }
 
   void _answerTicket(String purpose, String id, String? refusal) {
+    lastTicketAbandoned = false;
     final queue = _ticketWaiters['$purpose:$id'];
     if (queue == null || queue.isEmpty) return;
-    queue.removeAt(0)(refusal);
+    // Popped whether or not anyone is still listening: this answer
+    // belongs to that request, and leaving it would shift every
+    // later answer onto the wrong control.
+    final answer = queue.removeAt(0).answer;
+    if (answer == null) {
+      lastTicketAbandoned = true;
+      return;
+    }
+    answer(refusal);
   }
 
   /// Hand every waiting control a refusal.
@@ -223,11 +253,18 @@ class GlintySession {
   void failPendingTickets(String reason) {
     final queues = _ticketWaiters.values.toList();
     _ticketWaiters.clear();
+    var told = false;
     for (final q in queues) {
-      for (final answer in List.of(q)) {
+      for (final waiter in List.of(q)) {
+        // Tombstones need nothing: their control is gone, and the
+        // requests they stood for are gone with the socket.
+        final answer = waiter.answer;
+        if (answer == null) continue;
+        told = true;
         answer(reason);
       }
     }
+    if (told) _changed();
   }
 
   /// The open dialog's frame, or null. One at a time, because
@@ -614,3 +651,14 @@ class GlintySession {
 /// is not something to make a wire format depend on.
 final List<String> supportedComponentsList =
     (supportedComponents.toList()..sort());
+
+/// One control's place in the queue for a resource's ticket answers.
+///
+/// A position, not just a callback. Cancelling clears [answer] and
+/// leaves the entry: the queue's positions correspond to requests
+/// already on the wire, so an entry that disappears takes the next
+/// control's answer with it.
+class _TicketWaiter {
+  _TicketWaiter(this.answer);
+  void Function(String? refusal)? answer;
+}

@@ -234,7 +234,16 @@ class GlintyView extends StatelessWidget {
     // not parts of it, and both arrive as frames rather than tree
     // nodes. Building them here is what stops show_modal() and
     // with_progress() from being no-ops against this client.
-    final layers = <Widget>[
+    //
+    // Always a Stack, even with nothing above the tree. An overlay
+    // that comes and goes must not change the shape of the tree
+    // *underneath* it: wrapping the app in a Stack only when a layer
+    // appears reparents every widget in it, and Flutter answers a
+    // reparent by throwing the old elements away. So opening a dialog
+    // cleared half-typed fields, and the reconnect banner wiped the
+    // very transfer refusal it appeared alongside. The app stays at
+    // index 0, and layers land after it.
+    final stacked = Stack(children: [
       built,
       if (s.progress.isNotEmpty) _ProgressStack(reports: s.progress),
       if (s.unhandledCustom.isNotEmpty)
@@ -246,20 +255,18 @@ class GlintyView extends StatelessWidget {
           generation: s.generation,
           onDismiss: dismiss,
         ),
-    ];
-    final stacked =
-        layers.length == 1 ? built : Stack(children: layers);
+      // A reconnect in progress is honest, not hidden: the app stays
+      // usable and says what is happening.
+      if (conn != null && conn.state == GlintyConnectionState.reconnecting)
+        const _ReconnectBanner(),
+    ]);
 
+    // Not conditional in the same way: the theme arrives with the
+    // welcome, and the tree does not render before one.
     final tokens = s.theme;
-    final themed = tokens == null
+    return tokens == null
         ? stacked
         : Theme(data: glintyThemeData(tokens), child: stacked);
-    // A reconnect in progress is honest, not hidden: the app stays
-    // usable and says what is happening.
-    if (conn != null && conn.state == GlintyConnectionState.reconnecting) {
-      return Stack(children: [themed, const _ReconnectBanner()]);
-    }
-    return themed;
   }
 }
 

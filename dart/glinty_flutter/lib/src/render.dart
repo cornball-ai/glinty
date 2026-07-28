@@ -770,8 +770,8 @@ class GlintyRenderer {
     if (c.type == 'download_button' && onTicket != null) {
       return _GlintyDownloadButton(
         component: c,
-        build: (context, fire, refusal) =>
-            _buttonBody(context, c, fire, refusal),
+        build: (context, fire, refusal, waiting) =>
+            _buttonBody(context, c, fire, refusal, waiting: waiting),
         awaitTicket: awaitTicket,
         request: onTicket!,
       );
@@ -781,10 +781,14 @@ class GlintyRenderer {
 
   /// The button itself, and the refusal beneath it when there is one.
   ///
-  /// [fire] overrides what a press does, which is how the stateful
+  /// [onPress] overrides what a press does, which is how the stateful
   /// download wrapper registers its own waiter before asking.
+  /// [waiting] disables it: a control with a request in flight has
+  /// nothing to press, because the answer coming back is already
+  /// spoken for.
   Widget _buttonBody(BuildContext context, GlintyComponent c,
-      VoidCallback? onPress, String? refusal) {
+      VoidCallback? onPress, String? refusal,
+      {bool waiting = false}) {
     final id = c.str('id')!;
     final label = Text(c.str('label') ?? '');
     final icon = c.str('icon');
@@ -806,7 +810,8 @@ class GlintyRenderer {
     // is the embedder's to close (onDownload); until then say so by
     // being unpressable rather than by doing nothing visibly. A close
     // button with nowhere to send the dismissal is dead the same way.
-    final dead = (isDownload && onTicket == null) ||
+    final dead = waiting ||
+        (isDownload && onTicket == null) ||
         (closes && onModalClose == null);
     void fire() {
       if (onPress != null) {
@@ -1299,9 +1304,9 @@ class _GlintyDownloadButton extends StatefulWidget {
 
   final GlintyComponent component;
 
-  /// Draws the button, given what a press does and the refusal to
-  /// show beneath it.
-  final Widget Function(BuildContext, VoidCallback, String?) build;
+  /// Draws the button, given what a press does, the refusal to show
+  /// beneath it, and whether a request of its own is in flight.
+  final Widget Function(BuildContext, VoidCallback, String?, bool) build;
 
   final void Function() Function(
       String, String, void Function(String?))? awaitTicket;
@@ -1314,31 +1319,42 @@ class _GlintyDownloadButton extends StatefulWidget {
 class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
   String? _refusal;
   void Function()? _cancel;
+  bool _waiting = false;
 
   @override
   void dispose() {
-    // A control that goes away before its answer arrives must leave
-    // the queue, or it consumes the answer meant for whoever asked
-    // next.
+    // A control that goes away before its answer arrives cancels,
+    // which leaves a tombstone: the request is still on the wire and
+    // its answer still has to be consumed, or the next control in
+    // line is handed it.
     _cancel?.call();
     super.dispose();
   }
 
   void _press() {
     final id = widget.component.str('id')!;
-    // Asking again clears the last answer: a refusal belongs to the
-    // attempt that earned it.
-    setState(() => _refusal = null);
-    _cancel?.call();
+    setState(() {
+      // Asking again clears the last answer: a refusal belongs to the
+      // attempt that earned it.
+      _refusal = null;
+      _waiting = true;
+    });
     _cancel = widget.awaitTicket?.call(id, 'download', (refusal) {
       _cancel = null;
       if (!mounted) return;
-      setState(() => _refusal = refusal);
+      setState(() {
+        _refusal = refusal;
+        _waiting = false;
+      });
     });
     widget.request(id, 'download');
   }
 
+  // Unpressable while it waits. Two presses are two requests, and the
+  // second cancels the first's waiter to take its place -- so answer
+  // one lands on press two. There is one of this control, and it can
+  // only be waiting for one thing.
   @override
   Widget build(BuildContext context) =>
-      widget.build(context, _press, _refusal);
+      widget.build(context, _press, _refusal, _waiting);
 }

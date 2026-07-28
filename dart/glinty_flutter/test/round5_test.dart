@@ -26,6 +26,15 @@ class FakeSocket implements WebSocket {
   void deliver(Map<String, dynamic> msg) =>
       _events.add(TextDataReceived(jsonEncode(msg)));
 
+  /// The wire going away under the app, rather than either side
+  /// closing it.
+  void drop() {
+    if (closed) return;
+    closed = true;
+    _events.add(CloseReceived(1006, 'gone'));
+    unawaited(_events.close());
+  }
+
   @override
   void sendText(String s) {
     if (closed) throw WebSocketConnectionClosed();
@@ -141,6 +150,24 @@ final buttonTree = {
   'children': [
     {'component': 'button', 'id': 'run', 'label': 'Run',
       'variant': 'primary'},
+  ],
+};
+
+/// A section the user opens themselves: state no frame carries, so
+/// losing it can only come from the client throwing the tree away.
+final collapsedTree = {
+  'component': 'page',
+  'title': 'Collapse',
+  'children': [
+    {
+      'component': 'collapse',
+      'id': 'details',
+      'title': 'Details',
+      'open': false,
+      'children': [
+        {'component': 'text', 'value': 'the fine print', 'variant': 'normal'},
+      ],
+    },
   ],
 };
 
@@ -264,6 +291,42 @@ void main() {
       });
       await tester.pumpAndSettle();
       expect(find.textContaining('cannot display image'), findsOneWidget);
+    });
+
+    testWidgets('a dialog opening does not reset the app behind it',
+        (tester) async {
+      // An overlay is drawn *above* the app, so nothing about the app
+      // changed. But wrapping it in a Stack only once a layer exists
+      // moves every widget in it to a new place in the element tree,
+      // and Flutter answers a move by throwing the old elements away
+      // -- taking expanded sections, scroll positions and transfer
+      // refusals with it. What the user opened is theirs, and the
+      // server never said to close it.
+      final socket = await boot(tester, collapsedTree, 'rc');
+      expect(find.text('the fine print'), findsNothing);
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      expect(find.text('the fine print'), findsOneWidget);
+
+      socket.deliver({
+        'type': 'modal',
+        'action': 'show',
+        'title': 'Are you sure?',
+        'body': [
+          {'component': 'text', 'value': 'It cannot be undone.',
+            'variant': 'normal'}
+        ],
+        'easy_close': true,
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Are you sure?'), findsOneWidget);
+      expect(find.text('the fine print'), findsOneWidget,
+          reason: 'the dialog is above the app, not instead of it');
+
+      socket.deliver({'type': 'modal', 'action': 'hide'});
+      await tester.pumpAndSettle();
+      expect(find.text('the fine print'), findsOneWidget,
+          reason: 'and closing it is not a change to the app either');
     });
 
     testWidgets('show_modal draws a dialog, hide takes it away',
@@ -1380,20 +1443,85 @@ void _ticketRefusals() {
     expect(got.containsKey('second'), isTrue);
   });
 
-  test('a cancelled waiter does not eat the next answer', () {
-    // A control that goes away before its answer arrives must leave
-    // the queue, or it consumes what the next one asked for.
+  test('a cancelled waiter still consumes the answer it asked for', () {
+    // Cancelling gets rid of the control, not of the request: it is
+    // on the wire and the server will answer it. Dropping the waiter
+    // out of the queue slides everyone behind it forward a place, so
+    // the next control is handed an answer to a question it never
+    // asked -- exactly the misrouting the queue exists to prevent.
     final s = GlintySession();
-    var reached = false;
+    var reached = 0;
     final cancel = s.awaitTicket('report', 'download', (_) {
       throw StateError('a disposed control must not be answered');
     });
     cancel();
-    s.awaitTicket('report', 'download', (_) => reached = true);
+    s.awaitTicket('report', 'download', (_) => reached++);
 
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
-      'error': 'nope'});
-    expect(reached, isTrue);
+      'error': 'first'});
+    expect(reached, 0,
+        reason: 'the first answer belongs to the request that is gone');
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'second'});
+    expect(reached, 1);
+  });
+
+  test('an answer to a control that has gone is marked abandoned', () {
+    // What the transport reads to decide whether a granted download
+    // belongs to anybody. Left set from the previous answer it would
+    // suppress a live grant; left clear it would open a file for a
+    // button that is not on screen any more.
+    final s = GlintySession();
+    final cancel = s.awaitTicket('report', 'download', (_) {});
+    s.awaitTicket('report', 'download', (_) {});
+    cancel();
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk1', 'expires': 30});
+    expect(s.lastTicketAbandoned, isTrue);
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk2', 'expires': 30});
+    expect(s.lastTicketAbandoned, isFalse);
+
+    // No waiter at all is requestTicket() called straight, which is a
+    // supported way to ask -- and its grant is nobody's to withhold.
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk3', 'expires': 30});
+    expect(s.lastTicketAbandoned, isFalse);
+  });
+
+  testWidgets('a grant for a control that has gone away is not opened',
+      (tester) async {
+    // The request outlives the button. Its answer must not become a
+    // download the user never asked for and cannot explain.
+    final grants = <Uri>[];
+    late FakeSocket socket;
+    final conn = GlintyConnection(
+      url: Uri.parse('ws://x/ws'),
+      open: (_) async => socket = FakeSocket(),
+      onDownload: grants.add,
+    );
+    addTearDown(conn.dispose);
+    conn.start();
+    await tester.pump();
+    socket.deliver(welcomeOf(downloadTree, 'rt1'));
+    await tester.pump();
+
+    final cancel = conn.session.awaitTicket('report', 'download', (_) {});
+    cancel();
+    socket.deliver({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk_orphan', 'expires': 30});
+    await tester.pump();
+    expect(grants, isEmpty);
+
+    // and the suppression is about that waiter, not about grants
+    conn.session.awaitTicket('report', 'download', (_) {});
+    socket.deliver({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk_real', 'expires': 30});
+    await tester.pump();
+    expect(grants.single.queryParameters['ticket'], 'tk_real');
   });
 
   testWidgets('a malformed answer is a refusal, not a grant', (tester) async {
@@ -1409,29 +1537,68 @@ void _ticketRefusals() {
     expect(find.textContaining('without a ticket'), findsOneWidget);
   });
 
-  testWidgets('a dropped connection gives every waiting control back',
+  testWidgets('a dropped connection gives the waiting control back',
       (tester) async {
-    // The socket that was going to answer is gone. A waiter left in
-    // the queue keeps its control waiting forever, and the next
-    // socket's first reply would go to it rather than to whoever
-    // asked after the reconnect.
-    final socket = await bootDownload(tester);
+    // The socket that was going to answer is gone. Left in the queue,
+    // the button waits forever with nothing said and nothing to press,
+    // and the next socket's first reply goes to it rather than to
+    // whoever asks after the reconnect.
+    final sockets = <FakeSocket>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async {
+            sockets.add(FakeSocket());
+            return sockets.last;
+          },
+          onDownload: (_) {},
+        ),
+      ),
+    ));
+    await tester.pump();
+    sockets.last.deliver(welcomeOf(downloadTree, 'rt1'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    final s = GlintySession();
-    var told = 0;
-    s.awaitTicket('a', 'download', (_) => told++);
-    s.awaitTicket('b', 'upload', (_) => told++);
-    s.failPendingTickets('the connection dropped');
-    expect(told, 2);
+    sockets.last.drop();
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('the connection dropped'), findsOneWidget);
 
-    // and the queue is empty, so a later answer is not misrouted
-    var late = 0;
-    s.receive({'type': 'ticket', 'id': 'a', 'purpose': 'download',
-      'error': 'x'});
-    expect(late, 0);
-    expect(socket.sent.last['type'], 'ticket');
+    // and it is pressable again, so the retry can carry a new request
+    await tester.pump(const Duration(seconds: 1));
+    expect(sockets, hasLength(2));
+    sockets.last.deliver(welcomeOf(downloadTree, 'rt1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(sockets.last.sent.where((m) => m['type'] == 'ticket'),
+        hasLength(1));
+  });
+
+  testWidgets('a control waiting on a transfer cannot ask twice',
+      (tester) async {
+    // Two presses are two requests, and the first press cancels its
+    // own waiter to make room for the second -- so answer one lands
+    // on waiter two, and the button reports a refusal it did not
+    // earn (or opens a file for a press that was refused).
+    final socket = await bootDownload(tester);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(socket.sent.where((m) => m['type'] == 'ticket'), hasLength(1),
+        reason: 'there is one of it, and it is already waiting');
+
+    // its answer frees it
+    socket.deliver({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'at the cap'});
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(socket.sent.where((m) => m['type'] == 'ticket'), hasLength(2));
   });
 
   testWidgets('a grant is not a refusal', (tester) async {
