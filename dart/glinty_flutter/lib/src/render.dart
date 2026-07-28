@@ -821,37 +821,41 @@ class GlintyRenderer {
   /// pixel ratio beside it, and the server rasterizes at their
   /// product.
   ///
-  /// A plot with explicit dimensions is not measured: the app already
-  /// said how big it is, and reporting a box would ask the server to
-  /// re-answer a question it has already answered.
+  /// **Every** plot is measured, including a fixed one. The size is
+  /// only half of what a measurement carries; the other half is the
+  /// device pixel ratio, which the app cannot know and the server
+  /// needs. A 400x300 plot that never reports is rasterized at
+  /// 400x300 and drawn on a 2x screen at half the resolution it
+  /// should be -- the app said how big, not how sharp. The browser
+  /// walks every `img.g-plot-output` for exactly this reason.
+  ///
+  /// Declared dimensions win over the box on the axis that has one,
+  /// which is also how a width-only plot works: the app fixed the
+  /// width, the height is still the client's to decide.
   Widget _plot(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
-    final w = c.integer('width');
-    final h = c.integer('height');
-    if (w != null && h != null) {
-      return SizedBox(
-          width: w.toDouble(), height: h.toDouble(), child: _image(c));
-    }
+    final declaredW = c.integer('width')?.toDouble();
+    final declaredH = c.integer('height')?.toDouble();
     return LayoutBuilder(builder: (context, box) {
-      // Width comes from the parent. Height usually does not: a
-      // Column gives its children an unbounded main axis, so a plot
-      // in the ordinary case is asked how tall it wants to be. The
-      // client owns that answer -- "renders at the size the client
-      // gives it" is the whole point of measure -- so an unbounded
-      // height becomes a 4:3 box off the width rather than a report
-      // the server cannot rasterize.
-      if (!box.maxWidth.isFinite) {
-        // Neither axis bounded: nothing to measure from. Draw what
-        // arrived, if anything, and wait for a parent that has an
-        // opinion about width.
+      final width = declaredW ??
+          (box.maxWidth.isFinite ? box.maxWidth : double.infinity);
+      if (!width.isFinite) {
+        // No declared width and an unbounded one: nothing to measure
+        // from. Draw what arrived, if anything, and wait for a parent
+        // with an opinion about width.
         return _image(c);
       }
-      final height =
-          box.maxHeight.isFinite ? box.maxHeight : box.maxWidth * 3 / 4;
+      // Height usually does not come from the parent: a Column lays
+      // its children out with an unbounded main axis, so a plot is
+      // routinely asked how tall it wants to be. The client owns that
+      // answer -- "renders at the size the client gives it" is the
+      // point of measure -- so it becomes a 4:3 box off the width,
+      // which is the same ratio the browser's CSS commits to.
+      final height = declaredH ??
+          (box.maxHeight.isFinite ? box.maxHeight : width * 3 / 4);
       onMeasure?.call(
-          id, box.maxWidth, height, MediaQuery.devicePixelRatioOf(context));
-      return SizedBox(
-          width: box.maxWidth, height: height, child: _image(c));
+          id, width, height, MediaQuery.devicePixelRatioOf(context));
+      return SizedBox(width: width, height: height, child: _image(c));
     });
   }
 
@@ -861,6 +865,16 @@ class GlintyRenderer {
   /// an http(s) URL for an image an app supplied. Both decode inside
   /// the SDK; anything else is named rather than drawn, because a
   /// broken image icon says nothing about why.
+  ///
+  /// `width` and `height` are the value's own, in **logical** pixels,
+  /// and the protocol is explicit that the client sets the display
+  /// size from them and never inspects the raster. Flutter's default
+  /// is the opposite: an [Image] with no size lays out at the
+  /// raster's pixel count, so a plot rasterized at dpr 2 for a
+  /// 400x300 box would draw 800x600 logical -- twice the size it was
+  /// asked for. Inside a plot's SizedBox the constraint hides that;
+  /// a bare image_output has no such constraint, so the size has to
+  /// come from the wire.
   Widget _image(GlintyComponent c) {
     final v = values[c.str('id')];
     if (v is! Map) return const SizedBox.shrink();
@@ -868,13 +882,17 @@ class GlintyRenderer {
     final alt = v['alt'] ?? c.str('alt');
     if (src is! String || src.isEmpty) return const SizedBox.shrink();
     final label = alt is String ? alt : null;
+    final w = v['width'];
+    final h = v['height'];
+    final width = w is num ? w.toDouble() : null;
+    final height = h is num ? h.toDouble() : null;
     if (src.startsWith('data:')) {
       try {
         return Semantics(
           label: label,
           image: true,
           child: Image.memory(UriData.parse(src).contentAsBytes(),
-              fit: BoxFit.contain),
+              width: width, height: height, fit: BoxFit.contain),
         );
       } on FormatException {
         return _problem(const Color(0xFFF8D7DA),
@@ -885,7 +903,8 @@ class GlintyRenderer {
       return Semantics(
         label: label,
         image: true,
-        child: Image.network(src, fit: BoxFit.contain),
+        child: Image.network(src,
+            width: width, height: height, fit: BoxFit.contain),
       );
     }
     return _problem(const Color(0xFFFFF3CD),

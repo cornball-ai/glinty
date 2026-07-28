@@ -274,8 +274,8 @@ rather than an intention.
 | `tabset` | `TabBar` + `TabBarView` | both retain hidden child state |
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
-| `plot_output` | `LayoutBuilder` + `Image.memory` | reports its box; an unbounded height becomes 4:3 off the width |
-| `image_output` | `Image.memory` / `Image.network` | data: and http(s); any other scheme is named, not a broken-image icon |
+| `plot_output` | `LayoutBuilder` + `Image.memory` | always reports, fixed size included; a declared axis wins, an unbounded height becomes 4:3 |
+| `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
 | `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
 
 Of the three this table flagged before any Dart existed, one is
@@ -303,9 +303,17 @@ A word on who sizes a plot. `measure` says the client picks, so an
 unbounded height is the client's to answer, not the server's. Flutter
 lays a `Column` out with an infinite main axis, so a responsive plot
 is routinely asked how tall it wants to be; it answers 4:3 off the
-measured width. The browser answers the same question with
-`height: auto`. Neither answer is in the protocol, and neither should
+measured width, which is the ratio the browser's CSS commits to for
+the same case. Neither answer is in the protocol, and neither should
 be.
+
+**A fixed-size plot is measured too.** The size is only half of what
+a measurement carries; the other half is the device pixel ratio,
+which the app cannot know and the server needs. `plot_output(width =
+400, height = 300)` that never reports is rasterized at 400x300 and
+drawn on a 2x screen at half the resolution it should be — the app
+said how big, not how sharp. Both clients report every plot for this
+reason, and the dedup means a fixed one reports once.
 
 ### Frames beyond the tree
 

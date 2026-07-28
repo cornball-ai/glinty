@@ -677,11 +677,69 @@ void _round7() {
     expect(measures.last['width'], isNot(measures.first['width']));
   });
 
-  testWidgets('a fixed-size plot is not measured', (tester) async {
+  testWidgets('a fixed-size plot still reports, for the dpr',
+      (tester) async {
+    // Size is only half of a measurement. The other half is the
+    // device pixel ratio, which the app cannot know and the server
+    // needs: a 400x300 plot that never reports is rasterized at
+    // 400x300 and drawn on a 2x screen at half the resolution it
+    // should be. The app said how big, not how sharp. The browser
+    // walks every img.g-plot-output for exactly this reason.
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
     final socket = await boot(tester, fixedPlotTree, 'rf');
-    expect(socket.sent.where((f) => f['type'] == 'measure'), isEmpty,
-        reason: 'the app already said how big it is; asking the '
-            'server to re-answer that is noise');
+
+    final measures =
+        socket.sent.where((f) => f['type'] == 'measure').toList();
+    expect(measures, hasLength(1));
+    expect(measures.single['id'], 'fixed');
+    expect(measures.single['width'], 400);
+    expect(measures.single['height'], 300);
+    expect(measures.single['dpr'], 2.0,
+        reason: 'this is the whole point of measuring a fixed plot');
+  });
+
+  testWidgets('a width-only plot keeps its width and picks a height',
+      (tester) async {
+    final socket = await boot(tester, {
+      'component': 'page',
+      'title': 'Plots',
+      'children': [
+        {'component': 'plot_output', 'id': 'half', 'width': 200},
+      ],
+    }, 'rw');
+
+    final m = socket.sent.firstWhere((f) => f['type'] == 'measure');
+    expect(m['width'], 200,
+        reason: 'the declared axis wins over the box on that axis');
+    // 4:3 off the declared width, the same ratio the browser's CSS
+    // commits to for a plot with no dimensions
+    expect(m['height'], 150);
+  });
+
+  testWidgets('an image_output draws at the size the wire gave it',
+      (tester) async {
+    // Flutter sizes an Image to the raster's pixel count when no size
+    // is set, so a plot rasterized at dpr 2 for a 400x300 box would
+    // draw 800x600 logical. The protocol says the opposite: the
+    // client sets the display size from the value and never inspects
+    // the raster.
+    final socket = await boot(tester, {
+      'component': 'page',
+      'title': 'Image',
+      'children': [
+        {'component': 'image_output', 'id': 'cover', 'alt': 'art'},
+      ],
+    }, 'ri');
+    socket.deliver({
+      'type': 'output', 'id': 'cover', 'kind': 'image',
+      'value': {'src': pngDataUri, 'width': 120, 'height': 90},
+    });
+    await tester.pumpAndSettle();
+
+    final img = tester.widget<Image>(find.byType(Image));
+    expect(img.width, 120);
+    expect(img.height, 90);
   });
 
   testWidgets('an image src this client cannot load is named',
