@@ -1,9 +1,9 @@
 # glinty protocol v3
 
-Status: **frozen**, on the `design/protocol-v3` branch. Implemented
-and unreleased. Three independent lowerings render it: R to HTML for
-the server-rendered first paint, `inst/www/glinty.js` to DOM, and
-`dart/glinty_flutter` to Flutter widgets. Protocol 2 is gone.
+Status: **frozen**. On `main`, unreleased. Three independent
+lowerings render it: R to HTML for the server-rendered first paint,
+`inst/www/glinty.js` to DOM, and `dart/glinty_flutter` to Flutter
+widgets. Protocol 2 is gone.
 
 Frozen means the component vocabulary, the message types and their
 field shapes are settled. Clients may still grow — the Flutter one

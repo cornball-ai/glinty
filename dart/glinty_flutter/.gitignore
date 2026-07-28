@@ -2,3 +2,9 @@
 .packages
 build/
 pubspec.lock
+
+# IntelliJ/Android Studio project files. Machine-specific: the Dart
+# SDK library entry is a list of absolute paths into whoever ran the
+# IDE last, and workspace.xml is per-user editor state.
+.idea/
+*.iml
