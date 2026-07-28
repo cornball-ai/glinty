@@ -1312,6 +1312,128 @@ void _ticketRefusals() {
         reason: 'a refusal belongs to the attempt that earned it');
   });
 
+  testWidgets('a refusal reaches the button that asked, not its twin',
+      (tester) async {
+    // Two download buttons sharing a handler id, which the protocol
+    // allows -- the id is routing, not identity. Held against the id,
+    // one button's refusal appeared under both.
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+          onDownload: (_) {},
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcomeOf({
+      'component': 'page',
+      'title': 'Two',
+      'children': [
+        {'component': 'download_button', 'id': 'report', 'label': 'Top',
+          'variant': 'ghost'},
+        {'component': 'download_button', 'id': 'report', 'label': 'Bottom',
+          'variant': 'ghost'},
+      ],
+    }, 'rt2'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Bottom'));
+    await tester.pumpAndSettle();
+    socket.deliver({
+      'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'at the cap',
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('at the cap'), findsOneWidget,
+        reason: 'one button asked, so one refusal is shown');
+    // and it is under the one that asked
+    final under = find.descendant(
+        of: find.ancestor(
+            of: find.text('Bottom'), matching: find.byType(Column)).first,
+        matching: find.text('at the cap'));
+    expect(under, findsOneWidget);
+  });
+
+  test('answers go to waiters in the order they asked', () {
+    // Two controls waiting on the same resource. The server answers
+    // requests for a resource in order, so the front of the queue is
+    // whose answer this is -- handing it to all of them would put one
+    // control's refusal under another that is still waiting.
+    final s = GlintySession();
+    final got = <String, String?>{};
+    s.awaitTicket('report', 'download', (r) => got['first'] = r);
+    s.awaitTicket('report', 'download', (r) => got['second'] = r);
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'first refusal'});
+    expect(got, {'first': 'first refusal'});
+    expect(got.containsKey('second'), isFalse,
+        reason: 'the second is still waiting on its own answer');
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk', 'expires': 30});
+    expect(got['second'], isNull, reason: 'a grant is not a refusal');
+    expect(got.containsKey('second'), isTrue);
+  });
+
+  test('a cancelled waiter does not eat the next answer', () {
+    // A control that goes away before its answer arrives must leave
+    // the queue, or it consumes what the next one asked for.
+    final s = GlintySession();
+    var reached = false;
+    final cancel = s.awaitTicket('report', 'download', (_) {
+      throw StateError('a disposed control must not be answered');
+    });
+    cancel();
+    s.awaitTicket('report', 'download', (_) => reached = true);
+
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'nope'});
+    expect(reached, isTrue);
+  });
+
+  testWidgets('a malformed answer is a refusal, not a grant', (tester) async {
+    // Neither token nor error. Passed through as a grant it reached
+    // the transport, which found no token and dropped it -- the
+    // control stayed waiting and nothing said why.
+    final socket = await bootDownload(tester);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    socket.deliver(
+        {'type': 'ticket', 'id': 'report', 'purpose': 'download'});
+    await tester.pumpAndSettle();
+    expect(find.textContaining('without a ticket'), findsOneWidget);
+  });
+
+  testWidgets('a dropped connection gives every waiting control back',
+      (tester) async {
+    // The socket that was going to answer is gone. A waiter left in
+    // the queue keeps its control waiting forever, and the next
+    // socket's first reply would go to it rather than to whoever
+    // asked after the reconnect.
+    final socket = await bootDownload(tester);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    final s = GlintySession();
+    var told = 0;
+    s.awaitTicket('a', 'download', (_) => told++);
+    s.awaitTicket('b', 'upload', (_) => told++);
+    s.failPendingTickets('the connection dropped');
+    expect(told, 2);
+
+    // and the queue is empty, so a later answer is not misrouted
+    var late = 0;
+    s.receive({'type': 'ticket', 'id': 'a', 'purpose': 'download',
+      'error': 'x'});
+    expect(late, 0);
+    expect(socket.sent.last['type'], 'ticket');
+  });
+
   testWidgets('a grant is not a refusal', (tester) async {
     final socket = await bootDownload(tester);
     await tester.tap(find.text('Save'));
@@ -1327,8 +1449,12 @@ void _ticketRefusals() {
   test('the refusal frame matches the shared transcript', () {
     final expected = frames(transcript('ticket-refused'), 'out').first;
     final s = GlintySession();
+    String? got;
+    // The control that asked registers as the waiter, so the answer
+    // goes to it rather than to every control sharing the id.
+    s.awaitTicket(expected['id'] as String, 'download', (r) => got = r);
     s.receive(expected);
-    expect(s.transferErrors[expected['id']], expected['error']);
+    expect(got, expected['error']);
     expect(s.tickets, isEmpty,
         reason: 'a refusal is not a credential');
   });

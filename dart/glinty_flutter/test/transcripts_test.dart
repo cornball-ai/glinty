@@ -542,9 +542,11 @@ void main() {
       // download_button is not an output, so it was invisible.
       final refusal = frames(transcript('ticket-refused'), 'out').first;
       final s = GlintySession();
+      String? got;
+      s.awaitTicket(refusal['id'] as String, 'download', (r) => got = r);
       s.receive(refusal);
 
-      expect(s.transferErrors[refusal['id']], refusal['error']);
+      expect(got, refusal['error']);
       expect(s.tickets, isEmpty);
       expect(s.errors, isEmpty,
           reason: 'a refused transfer is not a render failure');

@@ -1865,6 +1865,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.fire("click", dl);
         check("and pressing again clears it", noteFor("report") === null);
 
+        /* A waiter must not outlive the socket that owed it an
+           answer. Left in the queue it keeps its control disabled
+           forever, and the next socket's first reply goes to it
+           rather than to whoever asked after the reconnect -- one
+           stale entry misroutes everything behind it. */
+        /* Rebuild the control: the panel has been replaced since,
+           and a detached element is listening to nothing. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "file_input", id: "dataset", label: "CSV:" }
+        });
+        const up2 = page.document.getElementById("dataset");
+        up2.files = [{ name: "c.bin" }];
+        page.fire("change", up2);
+        check("the control waits again", up2.disabled === true);
+
+        page.ws().close();
+        check("a dropped socket gives every waiting control back",
+              up2.disabled === false && noteFor("dataset") !== null);
+
+        /* and the queue is empty, so the next socket's answer is not
+           swallowed by the request the last one never answered */
+        up2.files = [{ name: "d.bin" }];
+        page.fire("change", up2);
+        page.ws().deliver({ type: "ticket", id: "dataset",
+                            purpose: "upload", error: "still at the cap" });
+        check("and the next request gets its own answer",
+              noteFor("dataset") !== null &&
+              noteFor("dataset").textContent === "still at the cap");
+
         /* An `error` frame is now only ever a render failure, which
            is what the spec says and what every client assumes. */
         page.ws().deliver({

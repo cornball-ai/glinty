@@ -184,12 +184,51 @@ class GlintySession {
   final Map<String, Map<String, dynamic>> tickets =
       <String, Map<String, dynamic>>{};
 
-  /// Why a transfer was refused, per resource id.
+  /// Controls waiting on a ticket, in the order they asked, per
+  /// "purpose:id".
   ///
-  /// Separate from [errors], which are render failures scoped to an
-  /// output. A refused ticket belongs to the control that asked, and
-  /// clears when it asks again.
-  final Map<String, String> transferErrors = <String, String>{};
+  /// A queue rather than one slot per id, because several controls
+  /// may carry the same id -- that is the whole reason a button's id
+  /// is routing rather than identity. The server answers requests for
+  /// a given resource in order, so the front of the queue is whose
+  /// answer this is. Keyed against the *control*, not the id, or a
+  /// refusal earned by one download button would appear under every
+  /// button sharing its name.
+  final Map<String, List<void Function(String?)>> _ticketWaiters =
+      <String, List<void Function(String?)>>{};
+
+  /// Register a control's interest in the next answer for this
+  /// resource. Returns a function that cancels it, for a control that
+  /// goes away before the answer arrives.
+  void Function() awaitTicket(
+      String id, String purpose, void Function(String? refusal) answer) {
+    final key = '$purpose:$id';
+    final queue = _ticketWaiters[key] ??= <void Function(String?)>[];
+    queue.add(answer);
+    return () => queue.remove(answer);
+  }
+
+  void _answerTicket(String purpose, String id, String? refusal) {
+    final queue = _ticketWaiters['$purpose:$id'];
+    if (queue == null || queue.isEmpty) return;
+    queue.removeAt(0)(refusal);
+  }
+
+  /// Hand every waiting control a refusal.
+  ///
+  /// The socket that was going to answer is gone. A waiter left in
+  /// the queue keeps its control disabled forever, and the next
+  /// socket's first reply would go to it rather than to whoever asked
+  /// after the reconnect.
+  void failPendingTickets(String reason) {
+    final queues = _ticketWaiters.values.toList();
+    _ticketWaiters.clear();
+    for (final q in queues) {
+      for (final answer in List.of(q)) {
+        answer(reason);
+      }
+    }
+  }
 
   /// The open dialog's frame, or null. One at a time, because
   /// show_modal() replaces rather than stacks.
@@ -280,18 +319,28 @@ class GlintySession {
         final id = msg['id'];
         final purpose = msg['purpose'];
         if (id is String && purpose is String) {
+          // A refusal answers the request that asked, so it goes to
+          // the waiter that asked. Sent as an `error` frame it was
+          // invisible here entirely: this client stores those against
+          // output ids, and a download_button is not an output.
+          //
+          // An answer with neither a credential nor a reason is
+          // malformed, and is a refusal rather than a grant: the
+          // request is over either way and the control has to come
+          // back. Passed on as a grant it reached the transport,
+          // which found no token and dropped it silently.
           final refusal = msg['error'];
-          if (refusal != null) {
-            // A refusal answers the request that asked, so it lands
-            // where that request's control can see it. Sent as an
-            // `error` frame it was invisible here entirely: this
-            // client stores those against output ids, and a
-            // download_button is not an output.
-            transferErrors[id] = refusal.toString();
+          final token = msg['token'];
+          if (refusal != null || token is! String || token.isEmpty) {
             tickets.remove('$purpose:$id');
+            _answerTicket(
+                purpose,
+                id,
+                refusal?.toString() ??
+                    'the server answered without a ticket');
           } else {
-            transferErrors.remove(id);
             tickets['$purpose:$id'] = msg;
+            _answerTicket(purpose, id, null);
           }
         }
       case 'input_update':
@@ -406,8 +455,8 @@ class GlintySession {
       pushes.clear();
       modal = null;
       progress.clear();
-      transferErrors.clear();
       unhandledCustom.clear();
+      failPendingTickets("that session is gone");
       // The new session has never been told a box. Keeping the old
       // dedup keys would leave every plot unmeasured until something
       // happened to resize it.
@@ -502,7 +551,7 @@ class GlintySession {
   void requestTicket(String id, String purpose) {
     // Asking again clears the last answer, so a refusal cannot outlive
     // the attempt that earned it.
-    if (transferErrors.remove(id) != null) _changed();
+    // The control that asked clears its own last answer.
     _emit(GlintyOutgoing(
         'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
   }

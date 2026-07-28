@@ -411,13 +411,14 @@
     /* The server can refuse a grant (too many pending transfers).
        Waiters have to hear about it: a control disabled while it
        waits for a grant that never comes stays disabled forever. */
-    function refuseTickets(id, message) {
-        ["upload", "download"].forEach(function (purpose) {
-            var queue = ticketWaiters[purpose + ":" + id];
+    function drainTicketWaiters(message) {
+        Object.keys(ticketWaiters).forEach(function (key) {
+            var queue = ticketWaiters[key];
             while (queue && queue.length) {
                 var waiter = queue.shift();
                 if (waiter.refused) waiter.refused(message);
             }
+            delete ticketWaiters[key];
         });
     }
 
@@ -1706,6 +1707,13 @@
     }
 
     function handleClose() {
+        /* The socket that was going to answer these is gone. A waiter
+           left in the queue keeps its control disabled forever, and
+           the next socket's first reply would be handed to it rather
+           than to whoever asked after the reconnect -- one stale
+           entry misroutes every answer behind it. */
+        drainTicketWaiters("the connection dropped before the server "
+                           + "answered");
         if (refused) return; /* a refused session has nothing to resume */
         if (!sessionId) {
             /* never had a session: nothing to resume */

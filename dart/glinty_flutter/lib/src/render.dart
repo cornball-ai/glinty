@@ -81,7 +81,7 @@ class GlintyRenderer {
       this.onModalClose,
       this.onMeasure,
       this.assetBase,
-      this.transferErrors = const {},
+      this.awaitTicket,
       this.values = const {},
       this.kinds = const {},
       this.errors = const {},
@@ -193,10 +193,11 @@ class GlintyRenderer {
   /// an image would render as `{src: data:image/png;base64,iVBOR...`.
   final Map<String, String> kinds;
 
-  /// Why a transfer was refused, per resource id. Separate from
-  /// [errors]: a render failure belongs to an output slot, a refused
-  /// ticket belongs to the control that asked for it.
-  final Map<String, String> transferErrors;
+  /// Registers a control as waiting on the next ticket answer for a
+  /// resource, and returns a canceller. Null in a fixture render,
+  /// where there is no session to ask.
+  final void Function() Function(String, String, void Function(String?))?
+      awaitTicket;
 
   /// Render errors per output id. The server said why the value is
   /// missing, so the slot shows that rather than sitting blank.
@@ -760,6 +761,30 @@ class GlintyRenderer {
   }
 
   Widget _button(BuildContext context, GlintyComponent c) {
+    // A download owns the answer to its own request, so it is
+    // stateful. Keying it off the component id would put a refusal
+    // earned by one button under every button sharing that id --
+    // the id is routing, and several controls may share one. Flutter
+    // matches unkeyed siblings positionally, which keeps each
+    // button's State with the button that pressed.
+    if (c.type == 'download_button' && onTicket != null) {
+      return _GlintyDownloadButton(
+        component: c,
+        build: (context, fire, refusal) =>
+            _buttonBody(context, c, fire, refusal),
+        awaitTicket: awaitTicket,
+        request: onTicket!,
+      );
+    }
+    return _buttonBody(context, c, null, null);
+  }
+
+  /// The button itself, and the refusal beneath it when there is one.
+  ///
+  /// [fire] overrides what a press does, which is how the stateful
+  /// download wrapper registers its own waiter before asking.
+  Widget _buttonBody(BuildContext context, GlintyComponent c,
+      VoidCallback? onPress, String? refusal) {
     final id = c.str('id')!;
     final label = Text(c.str('label') ?? '');
     final icon = c.str('icon');
@@ -784,7 +809,9 @@ class GlintyRenderer {
     final dead = (isDownload && onTicket == null) ||
         (closes && onModalClose == null);
     void fire() {
-      if (closes) {
+      if (onPress != null) {
+        onPress();
+      } else if (closes) {
         onModalClose?.call();
       } else if (isDownload) {
         onTicket?.call(id, 'download');
@@ -830,7 +857,6 @@ class GlintyRenderer {
     // A refused transfer, beside the control that asked. The label
     // stays its own -- overwriting it with an error string loses the
     // control -- and the message goes when the next attempt clears it.
-    final refusal = transferErrors[id];
     if (refusal == null) return button;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1253,4 +1279,66 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         onChanged: _onChanged,
         onSubmitted: _onSubmitted,
       );
+}
+
+/// A download button that owns the answer to its own request.
+///
+/// Stateful because the answer belongs to the press, not to the id.
+/// A button's id is routing -- several controls may carry the same
+/// one -- so a refusal held against the id would appear under every
+/// button sharing that name. State stays with the widget that pressed,
+/// which is what Flutter's positional matching of unkeyed siblings
+/// gives for free.
+class _GlintyDownloadButton extends StatefulWidget {
+  const _GlintyDownloadButton({
+    required this.component,
+    required this.build,
+    required this.awaitTicket,
+    required this.request,
+  });
+
+  final GlintyComponent component;
+
+  /// Draws the button, given what a press does and the refusal to
+  /// show beneath it.
+  final Widget Function(BuildContext, VoidCallback, String?) build;
+
+  final void Function() Function(
+      String, String, void Function(String?))? awaitTicket;
+  final GlintyTicketSink request;
+
+  @override
+  State<_GlintyDownloadButton> createState() => _GlintyDownloadButtonState();
+}
+
+class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
+  String? _refusal;
+  void Function()? _cancel;
+
+  @override
+  void dispose() {
+    // A control that goes away before its answer arrives must leave
+    // the queue, or it consumes the answer meant for whoever asked
+    // next.
+    _cancel?.call();
+    super.dispose();
+  }
+
+  void _press() {
+    final id = widget.component.str('id')!;
+    // Asking again clears the last answer: a refusal belongs to the
+    // attempt that earned it.
+    setState(() => _refusal = null);
+    _cancel?.call();
+    _cancel = widget.awaitTicket?.call(id, 'download', (refusal) {
+      _cancel = null;
+      if (!mounted) return;
+      setState(() => _refusal = refusal);
+    });
+    widget.request(id, 'download');
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      widget.build(context, _press, _refusal);
 }
