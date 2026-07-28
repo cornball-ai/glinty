@@ -1543,6 +1543,37 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
+    section("an audio value says what it is, not only where");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const grant = frames(transcript("audio-output"), "out")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        /* The slot arrives through render_ui here, which is how both
+           apps build theirs. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "audio_output", id: "player",
+                     controls: true, autoplay: false }
+        });
+        const player = page.document.getElementById("player");
+        check("the audio slot is an audio element",
+              player !== null && player.tagName === "AUDIO");
+
+        page.ws().deliver(grant);
+        check("the source lands", player.src === grant.value.src);
+        /* The browser sniffs the bytes, so mime is not something it
+           has to act on -- but it is carried for the clients that do,
+           and a client that silently required it would have found
+           nothing here. */
+        check("and the value carried its media type",
+              grant.value.mime === "audio/wav");
+    }
+
+    /* ---------------------------------------------------------- */
     section("a multiple select is plural end to end");
     {
         const hyd = transcript("hello-welcome-hydrated");

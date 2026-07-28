@@ -277,6 +277,23 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "audio-output",
+              notes = paste("an audio value carries what it is, not just",
+                            "where it is: a browser sniffs the bytes and",
+                            "needs no media type, which is how the field",
+                            "went missing, but a native client hands the",
+                            "source to a platform player that asks"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event",
+                        id = "generate")),
+                            list(dir = "out", message = list(
+                        type = "output", id = "player", kind = "audio",
+                        value = list(src = "data:audio/wav;base64,UklGRg",
+                                     mime = "audio/wav", duration = 1.5)
+                    ))
+            )
+        ),
+         list(
               name = "event-then-ui",
               notes = paste("dynamic UI: an output whose value is a component",
                             "tree; every client builds it the way it builds",

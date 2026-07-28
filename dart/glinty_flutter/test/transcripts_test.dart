@@ -573,6 +573,25 @@ void main() {
       expect(s.sent.single.body, expected);
     });
 
+    test('an audio value keeps what it is, not only where it is', () {
+      // This client cannot play it -- audio_output is a named
+      // refusal until it grows a platform player -- but the value
+      // has to survive intact, because the type is the whole reason
+      // a native client can hand it to one. The browser sniffs the
+      // bytes and never needed the field, which is exactly how it
+      // went missing from render_audio() for so long.
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive(serverFrame('audio-output', 'output'));
+
+      expect(s.refused, isFalse);
+      expect(s.kinds['player'], 'audio');
+      final value = s.values['player'] as Map<String, dynamic>;
+      expect(value['src'], startsWith('data:audio/wav'));
+      expect(value['mime'], 'audio/wav');
+      expect(value['duration'], 1.5);
+    });
+
     test('a ui-kind output stores its tree without being drawable', () {
       // ui_output is on this client's unsupported list until stage 2
       // of its own growth; the session must still accept the value

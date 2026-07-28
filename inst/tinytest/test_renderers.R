@@ -85,7 +85,13 @@ expect_equal(m$type, "error")
 expect_equal(m$id, "boom")
 expect_true(grepl("kapow", m$message))
 
-# --- render_audio: kind audio, value {src} ---
+# --- render_audio: kind audio, value {src, mime, duration?} ---
+#
+# mime is not optional. A browser sniffs the bytes and never asks,
+# which is how the field went missing; a native client hands the
+# source to a platform player that does. So the src alone is enough
+# to call it -- the type is read out of the extension or out of the
+# data URI, both of which state it -- but it always goes on the wire.
 with_session(s, {
     s$output$snd <- render_audio(function() "/static/chime.wav")
 })
@@ -93,6 +99,42 @@ flush_reactions()
 m <- last_msg(s)
 expect_equal(m$kind, "audio")
 expect_equal(m$value$src, "/static/chime.wav")
+expect_equal(m$value$mime, "audio/wav")
+expect_null(m$value$duration)
+
+# a data URI declares its own type, so that is what is used
+with_session(s, {
+    s$output$snd2 <- render_audio(function() "data:audio/mpeg;base64,SUQz")
+})
+flush_reactions()
+expect_equal(last_msg(s)$value$mime, "audio/mpeg")
+
+# and an app that knows says so, duration included
+with_session(s, {
+    s$output$snd3 <- render_audio(function() {
+        list(src = "/gen/out.bin", mime = "audio/flac", duration = 12.5)
+    })
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$value$mime, "audio/flac")
+expect_equal(m$value$duration, 12.5)
+
+# a source whose type cannot be read is an error naming the fix, not
+# a media type invented to fill a required field
+expect_error(glinty:::audio_mime("/gen/out.bin"), "list(src = , mime = )",
+             fixed = TRUE)
+expect_error(glinty:::audio_mime("data:;base64,AAAA"), "declares no media type")
+# query strings and fragments are not part of the extension
+expect_equal(glinty:::audio_mime("/static/a.ogg?v=2"), "audio/ogg")
+expect_equal(glinty:::audio_mime("/static/A.MP3"), "audio/mpeg")
+
+# NULL is still "nothing to play", not a value with no source
+with_session(s, {
+    s$output$snd4 <- render_audio(function() NULL)
+})
+flush_reactions()
+expect_null(last_msg(s)$value)
 
 # --- render_plot: kind image, value {src, width, height} ---
 if (capabilities("png")) {

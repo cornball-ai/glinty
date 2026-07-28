@@ -179,10 +179,26 @@ render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
 
 #' Render an audio source
 #'
-#' Sends an `audio` output: `{src}`, where src is a data URI or a
-#' /static/ path.
+#' Sends an `audio` output: `{src, mime, duration?}`, where src is a
+#' data URI or a /static/ path.
 #'
-#' @param fn zero-arg function returning the source string
+#' `mime` is not optional. A browser sniffs the bytes and does not
+#' need it, which is why it went missing for so long; a native client
+#' has to hand the source to a platform player that asks what it is.
+#' So fn may return the src alone and let this read the type out of
+#' the data URI or off the file extension -- neither is a guess, both
+#' are stated in the string -- or return a list to say outright:
+#'
+#' \preformatted{
+#' render_audio(function() list(src = uri, mime = "audio/wav",
+#'                              duration = 12.5))
+#' }
+#'
+#' An extension this does not know is an error naming the fix rather
+#' than a value invented to fill the field.
+#'
+#' @param fn zero-arg function returning the source string, or a list
+#'   with `src` and optionally `mime` and `duration` (seconds)
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
@@ -190,7 +206,55 @@ render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
 #' }
 #' @export
 render_audio <- function(fn) {
-    new_renderer(function() list(src = as.character(fn())), "audio")
+    new_renderer(function() {
+        v <- fn()
+        if (is.null(v)) {
+            return(NULL)
+        }
+        if (!is.list(v)) {
+            v <- list(src = v)
+        }
+        src <- as.character(v$src)
+        mime <- if (is.null(v$mime)) audio_mime(src) else as.character(v$mime)
+        out <- list(src = src, mime = mime)
+        if (!is.null(v$duration)) {
+            out$duration <- as.numeric(v$duration)
+        }
+        out
+    }, "audio")
+}
+
+# Media types glinty can name without being told. Every format a
+# browser plays, which is the set an app can reasonably hand over.
+AUDIO_MIME <- c(wav = "audio/wav", wave = "audio/wav", mp3 = "audio/mpeg",
+                ogg = "audio/ogg", oga = "audio/ogg", opus = "audio/ogg",
+                m4a = "audio/mp4", mp4 = "audio/mp4", aac = "audio/aac",
+                flac = "audio/flac", webm = "audio/webm")
+
+#' The media type of an audio source
+#'
+#' Read out of the source rather than guessed at: a data URI declares
+#' its own type, and a path's extension is the only thing anyone has
+#' to go on. Neither is inference -- both are written in the string.
+#'
+#' @param src character data URI or path
+#' @return character media type
+#' @keywords internal
+audio_mime <- function(src) {
+    if (grepl("^data:", src)) {
+        declared <- sub("^data:([^;,]+).*$", "\\1", src)
+        if (nzchar(declared) && !identical(declared, src)) {
+            return(declared)
+        }
+        stop("audio data URI declares no media type; pass mime = ",
+             call. = FALSE)
+    }
+    ext <- tolower(tools::file_ext(sub("[?#].*$", "", src)))
+    if (!ext %in% names(AUDIO_MIME)) {
+        stop("cannot name the media type of \"", src,
+             "\"; return list(src = , mime = ) instead", call. = FALSE)
+    }
+    unname(AUDIO_MIME[[ext]])
 }
 
 #' Render a dynamic UI subtree
