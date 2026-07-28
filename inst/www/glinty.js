@@ -992,11 +992,24 @@
        bound controls carry data-g-target, so look there too rather
        than dropping a message whose element is findable by the name
        it was actually addressed with. */
-    function elementFor(id) {
-        if (id === null || id === undefined) return null;
-        return document.getElementById(id) ||
-            document.querySelector('[data-g-output="' + id + '"]') ||
-            document.querySelector('[data-g-target="' + id + '"]');
+    function elementsFor(id) {
+        if (id === null || id === undefined) return [];
+        var byId = document.getElementById(id);
+        if (byId) return [byId];
+        /* Compared, not interpolated. An id is app-chosen text, and
+           building a selector out of it lets a quote or a bracket
+           throw out of querySelector -- or match something else. The
+           attribute value is read back and compared exactly instead,
+           which needs no escaping and cannot be tricked. */
+        var out = [];
+        document.querySelectorAll("[data-g-output]").forEach(function (el) {
+            if (el.getAttribute("data-g-output") === id) out.push(el);
+        });
+        if (out.length) return out;
+        document.querySelectorAll("[data-g-target]").forEach(function (el) {
+            if (el.getAttribute("data-g-target") === id) out.push(el);
+        });
+        return out;
     }
 
     function clearError(el) {
@@ -1070,7 +1083,7 @@
        the wire; this is the only place that knows text means
        textContent here. */
     function applyOutput(msg) {
-        var el = elementFor(msg.id);
+        var el = elementsFor(msg.id)[0];
         if (!el) return;
         clearError(el);
         switch (msg.kind) {
@@ -1157,7 +1170,7 @@
     }
 
     function applyInputUpdate(msg) {
-        var el = elementFor(msg.id);
+        var el = elementsFor(msg.id)[0];
         if (!el) return;
 
         /* A server-driven update is a value change like any other, so
@@ -1227,11 +1240,26 @@
             console.error("glinty:", msg.message);
             return;
         }
-        var el = elementFor(msg.id);
-        if (!el) return;
-        el.classList.add("g-error");
-        el.textContent = "Error: " + msg.message;
-        el.title = msg.message;
+        /* Every control routing to this id, not the first one found.
+           An error is scoped to a *handler*: if three buttons share
+           `report`, the server has no way to say which press failed
+           and all three are equally affected. Marking an arbitrary
+           one would put the message on a control the user did not
+           touch.
+
+           A button's label is its own, so the message goes in the
+           title rather than over the text -- replacing a button's
+           label with an error string loses the control. Output slots
+           exist to be filled, so those still take the text. */
+        var els = elementsFor(msg.id);
+        if (!els.length) return;
+        els.forEach(function (el) {
+            el.classList.add("g-error");
+            el.title = msg.message;
+            if (el.dataset.gMessage !== "event") {
+                el.textContent = "Error: " + msg.message;
+            }
+        });
     }
 
     /* ---------- hydration ---------- */

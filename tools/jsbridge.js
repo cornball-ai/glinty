@@ -1330,6 +1330,44 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const dlBtn = host.querySelector('[data-g-target="report"]');
         check("an error scoped to a button still reaches it",
               dlBtn.classList.contains("g-error"));
+        check("and goes in the title rather than over the label",
+              dlBtn.title === "too many pending transfers" &&
+              dlBtn.textContent === "Save");
+
+        /* An error names a handler, not a press. If several controls
+           route to one id the server cannot say which failed, so all
+           of them are equally affected -- marking an arbitrary first
+           would put the message on a control nobody touched. */
+        put({ component: "column", children: [
+            { component: "download_button", id: "report", label: "Top",
+              variant: "ghost" },
+            { component: "download_button", id: "report", label: "Bottom",
+              variant: "ghost" }
+        ] });
+        page.ws().deliver({ type: "error", id: "report",
+                            message: "at the cap" });
+        const both = host.querySelectorAll('[data-g-target="report"]');
+        check("an error reaches every control routing to that id",
+              both.length === 2 &&
+              both.every((b) => b.classList.contains("g-error") &&
+                  b.title === "at the cap"));
+
+        /* An id is app-chosen text. Building a selector out of it lets
+           a quote or a bracket throw out of querySelector, or match
+           something else entirely; the attribute is compared instead. */
+        const hostile = 'a"][data-g-target="b';
+        put({ component: "text_output", id: hostile });
+        let threw = null;
+        try {
+            page.ws().deliver({ type: "output", id: hostile, kind: "text",
+                                value: "survived" });
+        } catch (e) { threw = e; }
+        check("an id full of selector syntax does not throw",
+              threw === null);
+        const odd = host.querySelectorAll("[data-g-output]")
+            .filter((el) => el.getAttribute("data-g-output") === hostile);
+        check("and the message still lands on it",
+              odd.length === 1 && odd[0].textContent === "survived");
     }
 
     /* ---------------------------------------------------------- */
