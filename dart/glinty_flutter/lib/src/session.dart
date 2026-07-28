@@ -16,6 +16,7 @@
 ///  4. a protocol mismatch refuses visibly
 library;
 
+import 'dart:async';
 import 'component.dart';
 import 'inputs.dart';
 import 'render.dart' show supportedComponents;
@@ -70,7 +71,7 @@ class GlintySession {
     this.features = const <String>[],
     GlintyComponent? cachedUi,
     String? cachedRevision,
-    void Function(GlintyOutgoing)? onSend,
+    bool Function(GlintyOutgoing)? onSend,
     void Function()? onChanged,
   })  : _ui = cachedUi,
         _cachedRevision = cachedRevision,
@@ -90,7 +91,13 @@ class GlintySession {
   /// gets one error frame and a closed socket.
   final String? token;
 
-  final void Function(GlintyOutgoing)? _onSend;
+  /// Hands a frame to the wire. Returns whether the transport took
+  /// responsibility for it -- sent now, or queued to send on the next
+  /// connection. False means it was dropped and will never go out,
+  /// which a request that recorded itself before emitting has to hear
+  /// about: an entry in the ledger for a frame nobody sent waits on an
+  /// answer the server was never asked for.
+  final bool Function(GlintyOutgoing)? _onSend;
 
   /// Fires whenever session state changes, including from a local
   /// edit. Without it a checkbox updates the store and the UI never
@@ -238,18 +245,27 @@ class GlintySession {
   void Function() awaitTicket(
       String id, String purpose, void Function(String? refusal) answer) {
     final request = _askForTicket(id, purpose, answer);
-    return () {
-      request.answer = null;
-      request.wanted = false;
-    };
+    return () => request.answer = null;
   }
 
   _TicketRequest _askForTicket(
-      String id, String purpose, void Function(String? refusal)? answer) {
+      String id, String purpose, void Function(String? refusal) answer) {
+    final key = '$purpose:$id';
     final request = _TicketRequest(answer);
-    (_ticketRequests['$purpose:$id'] ??= <_TicketRequest>[]).add(request);
-    _emit(GlintyOutgoing(
-        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
+    final queue = _ticketRequests[key] ??= <_TicketRequest>[];
+    queue.add(request);
+    // Recorded first, because a frame the transport sends now can be
+    // answered before this returns. If the wire would not take it,
+    // the entry comes straight back out -- nothing is behind it yet,
+    // so removing it shifts nobody, and a request that never went out
+    // will never be answered.
+    if (!_emit(GlintyOutgoing(
+        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}))) {
+      queue.remove(request);
+      final tell = request.answer;
+      request.answer = null;
+      tell?.call('the app is too far behind to ask for that right now');
+    }
     return request;
   }
 
@@ -265,9 +281,9 @@ class GlintySession {
     // Popped whether or not anyone is still listening: this answer
     // belongs to that request, and leaving it would shift every
     // later answer onto the wrong control.
-    final request = queue.removeAt(0);
-    lastTicketUnclaimed = !request.wanted;
-    request.answer?.call(refusal);
+    final answer = queue.removeAt(0).answer;
+    lastTicketUnclaimed = answer == null;
+    answer?.call(refusal);
   }
 
   /// Hand every waiting control a refusal.
@@ -282,11 +298,11 @@ class GlintySession {
     var told = false;
     for (final q in queues) {
       for (final request in List.of(q)) {
-        // A tombstone has nobody to tell, and a direct request has
-        // nowhere to say it: both are gone with the socket either
-        // way.
+        // A tombstone has nobody to tell: its control is gone, and
+        // the request it stood for is gone with the socket.
         final answer = request.answer;
         if (answer == null) continue;
+        request.answer = null;
         told = true;
         answer(reason);
       }
@@ -621,12 +637,22 @@ class GlintySession {
   /// arrives on the same frame carrying `error` instead.
   /// Ask for a ticket with no control behind it.
   ///
-  /// Recorded in the same ledger as [awaitTicket]'s, in wire order,
-  /// with nobody to call back. Its grant still belongs to whoever
-  /// asked, which is what separates it from a frame the server
-  /// volunteered.
-  void requestTicket(String id, String purpose) =>
-      _askForTicket(id, purpose, null);
+  /// Recorded in the same ledger as [awaitTicket]'s, in wire order.
+  /// Its grant belongs to whoever asked, which is what separates it
+  /// from a frame the server volunteered.
+  ///
+  /// The future completes with null when the ticket was granted (read
+  /// the credential from [tickets], or let the transport turn it into
+  /// a URL), and with the reason when it was refused, dropped, or
+  /// lost with the connection. It never completes with an error, so
+  /// ignoring it is safe -- but a refusal a caller cannot see is a
+  /// failure that looks like nothing happening, which is the whole
+  /// thing this queue exists to stop.
+  Future<String?> requestTicket(String id, String purpose) {
+    final answer = Completer<String?>();
+    _askForTicket(id, purpose, answer.complete);
+    return answer.future;
+  }
 
   /// Report an output's box so the server can render at that size.
   ///
@@ -674,9 +700,12 @@ class GlintySession {
     sendMeasure(id, w, h, dpr: dpr);
   }
 
-  void _emit(GlintyOutgoing frame) {
+  /// Returns whether the wire took the frame. With no transport
+  /// wired -- a session driven straight, as the fixture and protocol
+  /// tests do -- there is nothing to drop it, so it counts as taken.
+  bool _emit(GlintyOutgoing frame) {
     sent.add(frame);
-    _onSend?.call(frame);
+    return _onSend?.call(frame) ?? true;
   }
 }
 
@@ -696,13 +725,9 @@ final List<String> supportedComponentsList =
 class _TicketRequest {
   _TicketRequest(this.answer);
 
-  /// The control waiting on this answer. Null for a request made
-  /// without one, and for a control that has since gone away -- which
-  /// is why it does not tell those two apart on its own.
+  /// Whoever is owed this answer: a control's callback, or the
+  /// completer behind a direct [GlintySession.requestTicket]. Every
+  /// request has one when it is made, so null means exactly one
+  /// thing -- the asker has gone, and the answer is nobody's.
   void Function(String? refusal)? answer;
-
-  /// Whether the answer is still anybody's. False once the control
-  /// that asked has gone; a request made with no control never had
-  /// one to lose, and its grant belongs to whoever asked.
-  bool wanted = true;
 }

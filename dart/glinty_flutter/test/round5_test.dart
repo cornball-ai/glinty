@@ -1520,7 +1520,7 @@ void _ticketRefusals() {
     // request is the server volunteering a transfer -- which the
     // browser drops on the floor, and which this client would have
     // handed to the embedder to open.
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
       'token': 'unbidden', 'expires': 30});
     expect(s.lastTicketUnclaimed, isTrue);
@@ -1545,7 +1545,7 @@ void _ticketRefusals() {
     // went out first and the button sat first in the queue, so the
     // button was handed an answer to a question it never asked -- and
     // then its own answer went to nobody.
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     s.requestTicket('report', 'download');
     final got = <String?>[];
     s.awaitTicket('report', 'download', got.add);
@@ -1564,7 +1564,7 @@ void _ticketRefusals() {
     // waiting on a request that was never sent. Were registering
     // separate from asking, a waiter alone would legitimise a ticket
     // the server volunteered.
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     s.awaitTicket('report', 'download', (_) {});
     expect(s.sent.where((f) => f.type == 'ticket'), hasLength(1),
         reason: 'registering is asking');
@@ -1574,7 +1574,7 @@ void _ticketRefusals() {
     // Classified once. Read separately, the session called this a
     // refusal and told the button so, while the transport found a
     // token and opened it: one press that both failed and downloaded.
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     String? told;
     s.awaitTicket('report', 'download', (r) => told = r);
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
@@ -1585,7 +1585,7 @@ void _ticketRefusals() {
   });
 
   test('an empty credential is not a credential', () {
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     String? told;
     s.awaitTicket('report', 'download', (r) => told = r);
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
@@ -1599,7 +1599,7 @@ void _ticketRefusals() {
     // Without an id there is nothing to answer, so the frame is
     // dropped -- but a verdict left over from the previous one would
     // let it open that grant a second time.
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     s.awaitTicket('report', 'download', (_) {});
     s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
       'token': 'tk_real', 'expires': 30});
@@ -1609,12 +1609,60 @@ void _ticketRefusals() {
     expect(s.lastTicketGrant, isNull);
   });
 
+  test('a request the wire would not take is not a request', () {
+    // The send queue is capped, and a frame past the cap is dropped.
+    // Recorded in the ledger anyway, that entry stands for a question
+    // the server was never asked -- so it waits forever, and it eats
+    // the answer meant for the next control in line.
+    var takes = false;
+    final s = GlintySession(onSend: (_) => takes);
+    String? told;
+    s.awaitTicket('report', 'download', (r) => told = r);
+    expect(told, isNotNull, reason: 'a control cannot wait on nothing');
+
+    // and it left no entry behind, so the next request -- once the
+    // wire is taking frames again -- is first in line for its own
+    // answer rather than second behind a ghost.
+    takes = true;
+    String? next;
+    s.awaitTicket('report', 'download', (r) => next = r);
+    s.receive({'type': 'ticket', 'id': 'report',
+      'purpose': 'download', 'error': 'mine'});
+    expect(next, 'mine');
+  });
+
+  test('a direct request can see its own refusal', () {
+    // requestTicket() has no control behind it, so a refusal had
+    // nowhere to land: the caller saw a future that never completed
+    // and a transfer that never happened, with nothing said.
+    final s = GlintySession(onSend: (_) => true);
+    final granted = s.requestTicket('report', 'download');
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'at the cap'});
+    expect(granted, completion('at the cap'));
+
+    final ok = s.requestTicket('report', 'download');
+    s.receive({'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk', 'expires': 30});
+    expect(ok, completion(isNull), reason: 'null is granted');
+
+    // and a dropped connection is an answer too, rather than a
+    // future that never settles
+    final lost = s.requestTicket('report', 'download');
+    s.failPendingTickets('the connection dropped');
+    expect(lost, completion('the connection dropped'));
+
+    // and so is being unable to ask at all
+    final unsent = GlintySession(onSend: (_) => false);
+    expect(unsent.requestTicket('report', 'download'), completion(isNotNull));
+  });
+
   test('a request does not outlive the socket that carried it', () {
     // The wire it went out on is gone, so it will never be answered.
     // Left standing it vouches for whatever the *next* socket says
     // first -- a grant that answers nothing, waved through on the
     // strength of a request that died with the connection.
-    final s = GlintySession(onSend: (_) {});
+    final s = GlintySession(onSend: (_) => true);
     s.requestTicket('report', 'download');
     s.failPendingTickets('the connection dropped');
 

@@ -294,6 +294,67 @@ void main() {
     c.conn.dispose();
   });
 
+  test('a request past the send queue cap is refused, not dropped',
+      () async {
+    // The queue is capped so a user tapping at a dead app cannot grow
+    // memory without limit, and a frame past the cap is thrown away.
+    // The control that asked heard nothing about it: it sat disabled
+    // waiting for an answer to a question the server was never asked.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    // fill it, without letting the retry timer in
+    for (var i = 0; i < 64; i++) {
+      c.conn.session.sendInput('field$i', i);
+    }
+    String? told;
+    c.conn.session.awaitTicket('report', 'download', (r) => told = r);
+
+    expect(told, isNotNull, reason: 'it will never be asked, so say so');
+    c.conn.dispose();
+  });
+
+  test('a dropped transfer request is not replayed after the reconnect',
+      () async {
+    // The ledger is cleared on a drop, so nothing is left to answer
+    // these. Replayed onto the next socket they draw replies that
+    // then get handed to whoever asked *after* the reconnect -- one
+    // control's answer under another's control.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+
+    // The wire goes down, and the user presses Save while it is. Both
+    // frames queue for the next socket.
+    c.sockets.last.drop();
+    await pump();
+    c.conn.session.awaitTicket('report', 'download', (_) {});
+    // typed in the same window, and this one is the user's
+    c.conn.session.sendInput('note', 'kept');
+
+    // The retry connects and drops again before being welcomed, which
+    // is what clears the ledger out from under the queued request.
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(c.sockets, hasLength(2));
+    c.sockets.last.drop();
+    await pump();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(c.sockets, hasLength(3));
+    c.sockets.last.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+
+    final replayed = c.sockets.last.sent.map((m) => m['type']).toList();
+    expect(replayed, isNot(contains('ticket')));
+    expect(replayed, contains('input'),
+        reason: 'an interaction the user made once is still theirs');
+    c.conn.dispose();
+  });
+
   test('disposing gives back the controls waiting on a transfer', () async {
     // The app is torn down with a request in flight. Nothing here
     // will ever answer again, and a waiter left behind holds a

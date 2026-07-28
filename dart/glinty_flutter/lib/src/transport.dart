@@ -185,37 +185,57 @@ class GlintyConnection extends ChangeNotifier {
   final List<GlintyOutgoing> _pending = [];
   static const _pendingCap = 64;
 
-  void _send(GlintyOutgoing frame) {
+  /// Returns whether this connection took the frame on: sent now, or
+  /// queued for the next socket. False means it was dropped, which
+  /// the session has to know -- a request recorded against a frame
+  /// nobody sent waits forever on an answer the server was never
+  /// asked for.
+  bool _send(GlintyOutgoing frame) {
     final socket = _socket;
     // hello is the exception: it belongs to the socket being opened,
     // never to the queue, or a reconnect would replay the previous
     // hello ahead of its own.
     if (frame.type == 'hello') {
-      if (socket == null) return;
+      if (socket == null) return false;
       try {
         socket.sendText(jsonEncode(frame.body));
       } on WebSocketConnectionClosed {
         // the drop arrives as a close event; the retry path owns it
       }
-      return;
+      return true;
     }
     // Everything else queues until this socket is live. An open
     // socket that has not been welcomed yet is mid-handshake:
     // writing past it would let a new frame overtake the ones
     // already waiting from the last disconnect.
     if (socket == null || _state != GlintyConnectionState.live) {
-      _queue(frame);
-      return;
+      return _queue(frame);
     }
     try {
       socket.sendText(jsonEncode(frame.body));
     } on WebSocketConnectionClosed {
-      _queue(frame);
+      return _queue(frame);
     }
+    return true;
   }
 
-  void _queue(GlintyOutgoing frame) {
-    if (_pending.length < _pendingCap) _pending.add(frame);
+  bool _queue(GlintyOutgoing frame) {
+    if (_pending.length >= _pendingCap) return false;
+    _pending.add(frame);
+    return true;
+  }
+
+  /// Forget the transfer requests still waiting to go out.
+  ///
+  /// Called wherever the session's ledger is cleared, and for the
+  /// same reason: replayed on the next socket these would be answered
+  /// with nothing left to answer, and each reply would then be handed
+  /// to whoever asked *after* the reconnect. Inputs stay queued --
+  /// an interaction the user made once is still theirs -- but a
+  /// transfer request whose control has already been told the
+  /// connection dropped is not one anybody is still waiting for.
+  void _dropQueuedTickets() {
+    _pending.removeWhere((frame) => frame.type == 'ticket');
   }
 
   void _flushPending() {
@@ -338,6 +358,7 @@ class GlintyConnection extends ChangeNotifier {
     // sign of why -- so it is told, and can be pressed again once
     // the retry lands.
     session.failPendingTickets('the connection dropped');
+    _dropQueuedTickets();
     if (_disposed || _state == GlintyConnectionState.stopped) return;
     if (session.refused) {
       // The server said no. It will say no again; retrying would
@@ -383,6 +404,7 @@ class GlintyConnection extends ChangeNotifier {
     // not always reached through _onClosed. Terminal means no answer
     // is coming, for transfers as much as for anything else.
     session.failPendingTickets(reason ?? 'the connection ended');
+    _dropQueuedTickets();
     _stoppedReason = reason;
     _setState(GlintyConnectionState.stopped);
   }
@@ -400,6 +422,7 @@ class GlintyConnection extends ChangeNotifier {
     // this connection -- one being torn down in some other order --
     // gets told rather than left waiting on a dead wire.
     session.failPendingTickets('the connection ended');
+    _dropQueuedTickets();
     _retryTimer?.cancel();
     _welcomeTimer?.cancel();
     _events?.cancel();

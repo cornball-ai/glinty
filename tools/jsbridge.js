@@ -1895,6 +1895,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               noteFor("dataset") !== null &&
               noteFor("dataset").textContent === "still at the cap");
 
+        /* A request queued while the socket was down dies with the
+           drain that gave its control back. Left in `pending` it is
+           replayed onto the next socket, and the reply it draws is
+           handed to whoever asked after the reconnect -- one press
+           refused by an answer to somebody else's request. */
+        up2.files = [{ name: "e.bin" }];
+        page.fire("change", up2);
+        page.ws().close();
+        await sleep(650);
+        check("a socket reconnected after the queued request",
+              page.sockets.length >= 2);
+        const before = page.sent.length;
+        page.ws().open();
+        page.ws().deliver(
+            Object.assign({}, frames(hyd, "out")[0], { resumed: true }));
+        const replayed = page.sent.slice(before);
+        check("a dead transfer request is not replayed",
+              replayed.every((m) => m.type !== "ticket"));
+
         /* An `error` frame is now only ever a render failure, which
            is what the spec says and what every client assumes. */
         page.ws().deliver({

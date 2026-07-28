@@ -420,6 +420,15 @@
             }
             delete ticketWaiters[key];
         });
+        /* And the requests still waiting to go out. Every control has
+           been told the answer is not coming; replayed on the next
+           socket these would be answered with nobody left to answer,
+           and the reply would go to whoever asked after the
+           reconnect. Queued inputs stay -- an interaction the user
+           made once is still theirs. */
+        pending = pending.filter(function (msg) {
+            return msg.type !== "ticket";
+        });
     }
 
     /* ---------- file uploads (plain POST, not the WS) ---------- */
