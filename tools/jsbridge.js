@@ -1280,6 +1280,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.fire("click", page.document.getElementById("confirm"));
         check("its button reaches the server as an event",
               page.frames("event").some((m) => m.id === "confirm"));
+
+        /* modal_button(): closes and tells nobody. The delegated
+           handler has always looked for data-g-modal-close; for a
+           while nothing set it, so a Cancel rendered and did nothing
+           at all -- the same dead control the download button was. */
+        page.ws().deliver({
+            type: "modal", action: "show", title: "Confirm again",
+            body: [],
+            footer: { component: "row", children: [
+                { component: "button", id: "..modal_close",
+                  label: "Cancel", variant: "ghost" },
+                { component: "button", id: "yes", label: "Delete",
+                  variant: "danger" }
+            ] },
+            easy_close: false
+        });
+        const cancel = page.document.querySelector("[data-g-modal-close]");
+        check("modal_button carries the close mark and no binding",
+              cancel !== null &&
+              cancel.getAttribute("data-g-message") === null &&
+              cancel.getAttribute("data-g-target") === null);
+
+        const before = page.sent.length;
+        page.fire("click", cancel);
+        check("clicking it closes the dialog",
+              page.document.getElementById("g-modal") === null);
+        check("and sends nothing at all",
+              page.sent.length === before);
     }
 
     /* ---------------------------------------------------------- */

@@ -57,6 +57,20 @@ remove_modal <- function(session) {
     invisible(NULL)
 }
 
+#' The one reserved component id
+#'
+#' A button carrying it closes the open dialog locally and reports
+#' nothing. Reserved rather than app-chosen because ids opening with
+#' ".." are refused on the input path, so no app can collide with it.
+#'
+#' Both lowerings read this: the browser marks the button with
+#' data-g-modal-close, Flutter checks the id directly. A magic string
+#' either side does not know is a button that renders and does
+#' nothing.
+#'
+#' @keywords internal
+MODAL_CLOSE_ID <- "..modal_close"
+
 #' Create a button that closes the modal without telling the server
 #'
 #' The Cancel case: dismissing a dialog is not usually news. For a
@@ -69,5 +83,5 @@ remove_modal <- function(session) {
 #' modal_button("Cancel")
 #' @export
 modal_button <- function(label = "Cancel") {
-    component("button", id = "..modal_close", label = label, variant = "ghost")
+    component("button", id = MODAL_CLOSE_ID, label = label, variant = "ghost")
 }

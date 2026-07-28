@@ -342,10 +342,20 @@ html_button <- function(x, extra_class = NULL) {
         inner <- paste0(component_to_html(component("icon", name = x$icon)),
                         inner)
     }
-    attrs <- c(html_bind(x),
+    # modal_button() dismisses the dialog and tells nobody, so it
+    # carries the close mark instead of an event binding. Both halves
+    # matter: without the mark the client's delegation never fires
+    # (the button renders and does nothing), and with the binding
+    # still attached a Cancel would also report, which is the one
+    # thing modal_button() exists not to do.
+    closes <- identical(x$id, MODAL_CLOSE_ID)
+    attrs <- c(if (closes) list() else html_bind(x),
                list(type = "button",
                     class = paste(c("g-btn", paste0("g-btn-", x$variant),
                                     extra_class), collapse = " ")))
+    if (closes) {
+        attrs[["data-g-modal-close"]] <- "1"
+    }
     if (identical(x$component, "download_button")) {
         # what the client's click delegation keys on: a press asks
         # for a download ticket instead of emitting an event frame

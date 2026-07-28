@@ -274,7 +274,9 @@ rather than an intention.
 | `tabset` | `TabBar` + `TabBarView` | both retain hidden child state |
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
-| `plot_output`, `image_output`, `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
+| `plot_output` | `LayoutBuilder` + `Image.memory` | reports its box; an unbounded height becomes 4:3 off the width |
+| `image_output` | `Image.memory` / `Image.network` | data: and http(s); any other scheme is named, not a broken-image icon |
+| `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
 
 Of the three this table flagged before any Dart existed, one is
 closed and two hold. `select_input(multiple = TRUE)` has no single
@@ -289,13 +291,21 @@ has.
 The rest of the refusals are deliberate rather than pending.
 `raw_html` and `html_output` carry markup, which has no Flutter
 equivalent by design -- the first in the tree, the second as a value.
-`audio_output` needs an audio package outside the SDK. `plot_output`,
-`image_output` and `ui_output` have their protocol halves (measure
-messages, the `image` and `ui` kinds) and not their client halves;
-they are the honest remaining work.
+`audio_output` needs an audio package outside the SDK. `ui_output`
+has its protocol half (the `ui` kind) and not its client half:
+building a component tree that arrived as a value into its slot. That
+is the honest remaining work.
 
 None are blocking. All are cheaper to know now than after the
 vocabulary is frozen.
+
+A word on who sizes a plot. `measure` says the client picks, so an
+unbounded height is the client's to answer, not the server's. Flutter
+lays a `Column` out with an infinite main axis, so a responsive plot
+is routinely asked how tall it wants to be; it answers 4:3 off the
+measured width. The browser answers the same question with
+`height: auto`. Neither answer is in the protocol, and neither should
+be.
 
 ### Frames beyond the tree
 
@@ -312,6 +322,20 @@ A `custom` frame naming a handler nothing registered is warned about
 in the browser console and named on screen in Flutter. The same rule
 as an unsupported component: an app whose client half was never
 ported looks like it works and quietly does part of what it says.
+
+### The one reserved id
+
+`..modal_close`, which `modal_button()` builds. A button carrying it
+dismisses the open dialog **locally** and reports nothing — the
+Cancel case, where the server does not need to hear that a question
+was declined. Every other button reports.
+
+It is reserved rather than app-chosen because the server refuses ids
+opening with `..` on the input path, so no app can collide with it.
+Both lowerings read it: the browser marks the button with
+`data-g-modal-close` and omits the event binding, Flutter checks the
+id and wires the press to a local dismissal. A magic string either
+side does not know is a button that renders and does nothing.
 
 ### Output kinds
 

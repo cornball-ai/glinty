@@ -223,10 +223,10 @@ class GlintySession {
       'protocol': glintyProtocolVersion,
       'client': client,
       'components': supportedComponentsList,
-      // The output kinds this client can draw. `image`, `audio` and
-      // `ui` are absent because the components that carry them are,
+      // The output kinds this client can draw. `audio`, `ui` and
+      // `html` are absent because the components that carry them are,
       // and a kind declared without a slot to put it in is a lie.
-      'kinds': const ['text', 'table'],
+      'kinds': const ['text', 'table', 'image'],
       // measure, modal and progress are this client's own: it reports
       // output boxes, draws dialogs and draws progress reports. The
       // rest come from the embedder, because they need one -- there
@@ -388,6 +388,10 @@ class GlintySession {
       modal = null;
       progress.clear();
       unhandledCustom.clear();
+      // The new session has never been told a box. Keeping the old
+      // dedup keys would leave every plot unmeasured until something
+      // happened to resize it.
+      _measured.clear();
       _ui = null;
       _cachedRevision = null;
       generation++;
@@ -491,6 +495,31 @@ class GlintySession {
       'height': height,
       'dpr': dpr,
     }));
+  }
+
+  /// Last box reported per output id, so a rebuild at the same size
+  /// says nothing.
+  final Map<String, String> _measured = <String, String>{};
+
+  /// Report a box, once per distinct size.
+  ///
+  /// The deduplication the protocol asks callers for. Flutter runs
+  /// layout on every frame, so an undeduplicated report would put a
+  /// measure frame on the wire for each one, and a plot the server
+  /// re-rendered would arrive back as a new value, relayout, and
+  /// measure again -- a loop that never settles.
+  ///
+  /// A zero box is never reported: an Offstage conditional panel and
+  /// a hidden tab both lay out at nothing, and telling the server to
+  /// draw a 0x0 plot would throw away the size it already had.
+  void measure(String id, double width, double height, double dpr) {
+    final w = width.round();
+    final h = height.round();
+    if (w <= 0 || h <= 0) return;
+    final key = '$w:$h:$dpr';
+    if (_measured[id] == key) return;
+    _measured[id] = key;
+    sendMeasure(id, w, h, dpr: dpr);
   }
 
   void _emit(GlintyOutgoing frame) {

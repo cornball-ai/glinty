@@ -156,6 +156,7 @@ final liveTextTree = {
 };
 
 void main() {
+  _round7();
   group('outputs carry their kind and their errors', () {
     testWidgets('a kind this slot cannot draw is named, not stringified',
         (tester) async {
@@ -604,5 +605,142 @@ void main() {
       expect(find.text('theirs'), findsOneWidget,
           reason: 'a refused push is not a delivered one');
     });
+  });
+}
+
+// --- Codex round 7: three claims that were not true ---
+
+final plotTree = {
+  'component': 'page',
+  'title': 'Plots',
+  'children': [
+    {'component': 'plot_output', 'id': 'scatter'},
+  ],
+};
+
+final fixedPlotTree = {
+  'component': 'page',
+  'title': 'Plots',
+  'children': [
+    {'component': 'plot_output', 'id': 'fixed', 'width': 400,
+      'height': 300},
+  ],
+};
+
+/// A 1x1 transparent PNG, as the server would send it.
+const pngDataUri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf'
+    'FcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+void _round7() {
+  testWidgets('a responsive plot reports its box, once per size',
+      (tester) async {
+    final socket = await boot(tester, plotTree, 'rp');
+
+    final measures = socket.sent.where((m) => m['type'] == 'measure');
+    expect(measures, hasLength(1),
+        reason: 'hello declares the measure feature; a client that '
+            'declares it and never measures has told the server '
+            'something untrue');
+    final m = measures.single;
+    expect(m['id'], 'scatter');
+    expect(m['width'], greaterThan(0));
+    expect(m['height'], greaterThan(0));
+    expect(m['dpr'], isNotNull);
+
+    // A rebuild at the same size says nothing. Layout runs every
+    // frame; an undeduplicated report would put one measure on the
+    // wire per frame, and the plot coming back would relayout and
+    // measure again -- a loop that never settles.
+    socket.deliver({'type': 'output', 'id': 'scatter', 'kind': 'image',
+      'value': {'src': pngDataUri, 'alt': 'a plot'}});
+    await tester.pumpAndSettle();
+    expect(socket.sent.where((f) => f['type'] == 'measure'), hasLength(1));
+
+    // and the value it got back is drawn
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('a resize reports the new box', (tester) async {
+    final socket = await boot(tester, plotTree, 'rp');
+    expect(socket.sent.where((f) => f['type'] == 'measure'), hasLength(1));
+
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpAndSettle();
+
+    final measures =
+        socket.sent.where((f) => f['type'] == 'measure').toList();
+    expect(measures.length, greaterThan(1),
+        reason: 'a box that changed is news');
+    expect(measures.last['width'], isNot(measures.first['width']));
+  });
+
+  testWidgets('a fixed-size plot is not measured', (tester) async {
+    final socket = await boot(tester, fixedPlotTree, 'rf');
+    expect(socket.sent.where((f) => f['type'] == 'measure'), isEmpty,
+        reason: 'the app already said how big it is; asking the '
+            'server to re-answer that is noise');
+  });
+
+  testWidgets('an image src this client cannot load is named',
+      (tester) async {
+    final socket = await boot(tester, plotTree, 'rp');
+    socket.deliver({'type': 'output', 'id': 'scatter', 'kind': 'image',
+      'value': {'src': 'ftp://example.com/plot.png'}});
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cannot load an image'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets('modal_button closes the dialog and tells nobody',
+      (tester) async {
+    final socket = await boot(tester, outputTree, 'ro');
+    socket.deliver({
+      'type': 'modal',
+      'action': 'show',
+      'title': 'Delete it?',
+      'body': <dynamic>[],
+      'footer': {
+        'component': 'row',
+        'children': [
+          {'component': 'button', 'id': '..modal_close', 'label': 'Cancel',
+            'variant': 'ghost'},
+          {'component': 'button', 'id': 'yes', 'label': 'Delete',
+            'variant': 'danger'},
+        ],
+      },
+      'easy_close': false,
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Delete it?'), findsOneWidget);
+
+    final before = socket.sent.length;
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete it?'), findsNothing,
+        reason: 'a Cancel that renders and does nothing is the same '
+            'dead control the download button was');
+    expect(socket.sent.length, before,
+        reason: 'dismissing a dialog is not news; that is the whole '
+            'difference between modal_button() and button()');
+  });
+
+  testWidgets('a close button outside a dialog is visibly disabled',
+      (tester) async {
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Loose',
+      'children': [
+        {'component': 'button', 'id': '..modal_close', 'label': 'Cancel',
+          'variant': 'ghost'},
+      ],
+    }, 'rc');
+    final btn = tester.widget<TextButton>(find.byType(TextButton));
+    expect(btn.onPressed, isNull,
+        reason: 'an enabled button that closes nothing is the lie, '
+            'not the disabled one');
   });
 }

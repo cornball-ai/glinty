@@ -174,11 +174,30 @@ class GlintyView extends StatelessWidget {
     final ui = s.ui;
     if (ui == null) return const Center(child: CircularProgressIndicator());
 
+    // Local only. The server holds its own idea of whether a dialog
+    // is open, and dismissing one is not an answer to what it asked
+    // -- modal_button() and easy_close are both the app saying the
+    // question was optional.
+    void dismiss() {
+      s.modal = null;
+      s.notifyChanged();
+    }
+
     final r = renderer ??
         GlintyRenderer(
           onInput: s.sendInput,
           onLocalInput: s.setInputLocal,
           onEvent: s.sendEvent,
+          // Only while a dialog is open. A close button with no
+          // dialog behind it renders disabled, which is the honest
+          // answer -- an enabled one that closes nothing is the same
+          // dead control this rule keeps catching.
+          onModalClose: s.modal == null ? null : dismiss,
+          // Deduplicated inside the session: layout runs every frame,
+          // and a report per frame would have the server re-render a
+          // plot that then arrives back, relayouts, and measures
+          // again.
+          onMeasure: s.measure,
           // Only when the connection can actually deliver one. A
           // download button wired to a ticket request whose grant
           // has nowhere to go is the same lie as an InkWell with an
@@ -219,14 +238,7 @@ class GlintyView extends StatelessWidget {
           frame: s.modal!,
           renderer: r,
           generation: s.generation,
-          // Local only. The server holds its own idea of whether a
-          // dialog is open, and a tap on the backdrop is not an
-          // answer to what the dialog asked -- easy_close is the app
-          // saying the question was optional.
-          onDismiss: () {
-            s.modal = null;
-            s.notifyChanged();
-          },
+          onDismiss: dismiss,
         ),
     ];
     final stacked =

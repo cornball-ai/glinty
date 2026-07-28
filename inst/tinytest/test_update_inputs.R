@@ -43,6 +43,38 @@ expect_equal(m$choices$label, c("Fast", "Slow"))
 expect_equal(m$selected, "fast")
 expect_equal(isolate(s$input$engine()), "fast")
 
+# --- a multiple select's push is an array at every length ---
+#
+# The same rule the component schema keeps. update_select_input()
+# serialized a scalar whatever the control was, so a server pushing a
+# one-element selection to a multiple select sent "a" where the tree
+# had said ["a"] -- and a client that trusted the rule got a string.
+raw <- function() s$outgoing[[length(s$outgoing)]]
+
+update_select_input(s, "tags", selected = c("a", "c"))
+expect_true(grepl('"selected":["a","c"]', raw(), fixed = TRUE))
+expect_equal(isolate(s$input$tags()), c("a", "c"))
+
+# one value cannot say by itself which control it is for, so
+# multiple = TRUE is how a caller says it
+update_select_input(s, "tags", selected = "a", multiple = TRUE)
+expect_true(grepl('"selected":["a"]', raw(), fixed = TRUE))
+
+# and clearing a selection is character(0), which is an empty array
+update_select_input(s, "tags", selected = character(0), multiple = TRUE)
+expect_true(grepl('"selected":[]', raw(), fixed = TRUE))
+
+# a single select is still a bare string -- the other half of the rule
+update_select_input(s, "engine", selected = "slow")
+expect_true(grepl('"selected":"slow"', raw(), fixed = TRUE))
+
+# a label-only update must not clear a selection it was not asked
+# about: NULL means "leave it alone" and stays NULL all the way down
+update_select_input(s, "tags", label = "Tags:", multiple = TRUE)
+m <- last_msg()
+expect_equal(m$label, "Tags:")
+expect_false("selected" %in% names(m))
+
 # --- slider: numeric fields pass through ---
 update_slider_input(s, "n", value = 50, min = 0, max = 100, step = 5)
 m <- last_msg()

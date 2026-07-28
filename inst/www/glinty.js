@@ -25,6 +25,12 @@
     var SUPPORTED_KINDS = ["text", "html", "table", "image", "audio", "ui"];
     var SUPPORTED_FEATURES = ["upload", "download", "modal", "progress"];
 
+    /* The one reserved component id: a button carrying it closes the
+       open dialog locally and reports nothing. Reserved rather than
+       app-chosen because ".." ids are refused on the input path, so
+       an app cannot collide with it. */
+    var MODAL_CLOSE_ID = "..modal_close";
+
     var ws = null;
     var sessionId = null;
     var debounceTimers = new Map();
@@ -631,11 +637,26 @@
     }
 
     function buildButton(c, extraClass) {
-        var attrs = assign(bindAttrs(c, "event"), {
-            type: "button",
-            "class": ["g-btn", "g-btn-" + checkVariant(c.component, c.variant)]
-                .concat(extraClass || []).join(" ")
-        });
+        /* MODAL_CLOSE_ID dismisses the dialog and tells nobody, which
+           is what modal_button() is for. It carries no event binding:
+           a Cancel that also reported would make dismissing a dialog
+           news, and the server has no observer for it anyway. The
+           delegated handler below has always looked for the mark; for
+           a while nothing set it, so the button rendered and did
+           nothing at all. */
+        var closes = c.id === MODAL_CLOSE_ID;
+        var attrs = assign(
+            closes ? {} : bindAttrs(c, "event"),
+            {
+                type: "button",
+                "class": ["g-btn",
+                          "g-btn-" + checkVariant(c.component, c.variant)]
+                    .concat(extraClass || []).join(" ")
+            }
+        );
+        if (closes) {
+            attrs["data-g-modal-close"] = "1";
+        }
         if (c.component === "download_button") {
             attrs["data-g-download"] = c.id;
         }

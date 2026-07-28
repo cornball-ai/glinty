@@ -191,6 +191,24 @@ expect_true(grepl('<option value="b" selected="selected">', single,
 expect_false(grepl('<option value="a" selected="selected">', single,
                    fixed = TRUE))
 
+# --- modal_button() carries the close mark and no event binding ---
+#
+# Both halves. Without the mark, the client's delegation never fires
+# and the button renders and does nothing -- the same dead control
+# the download button was. With the event binding still attached, a
+# Cancel would also report, which is the one thing modal_button()
+# exists not to do.
+cancel <- component_to_html(glinty::modal_button("Cancel"))
+expect_true(grepl('data-g-modal-close="1"', cancel, fixed = TRUE))
+expect_false(grepl("data-g-message", cancel, fixed = TRUE))
+expect_false(grepl("data-g-target", cancel, fixed = TRUE))
+expect_true(grepl(">Cancel<", cancel, fixed = TRUE))
+
+# an ordinary button is untouched: it reports, and carries no mark
+plain <- component_to_html(component("button", id = "go", label = "Run"))
+expect_true(grepl('data-g-message="event"', plain, fixed = TRUE))
+expect_false(grepl("data-g-modal-close", plain, fixed = TRUE))
+
 # --- what each input reports is what INPUT_META declares ---
 #
 # The declaration used to be documentation nothing checked, which is

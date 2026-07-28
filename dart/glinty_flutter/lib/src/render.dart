@@ -25,6 +25,7 @@ const supportedComponents = <String>{
   'select_input', 'checkbox_input', 'radio_buttons', 'slider_input',
   'button', 'download_button',
   'text_output', 'verbatim_output', 'table_output',
+  'plot_output', 'image_output',
   'tabset', 'conditional_panel',
 };
 
@@ -34,12 +35,9 @@ const supportedComponents = <String>{
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
   'file_input', // needs the file_picker package, outside the SDK
-  // The protocol side of these exists (measure messages, image and
-  // ui output kinds); this renderer has not grown the client half:
-  // LayoutBuilder-driven measurement for plots, and building a
-  // ui-kind value into its slot.
-  'plot_output',
-  'image_output',
+  // The protocol side of this exists (the `ui` output kind); this
+  // renderer has not grown the client half -- building a component
+  // tree that arrived as a value into its slot.
   'ui_output',
   'audio_output', // needs an audio package, outside the SDK
   // Both carry markup, which has no Flutter equivalent by design.
@@ -48,6 +46,14 @@ const unsupportedComponents = <String>{
   'raw_html',
   'html_output',
 };
+
+/// The one reserved component id.
+///
+/// A button carrying it closes the open dialog locally and reports
+/// nothing -- what `modal_button()` builds. Reserved rather than
+/// app-chosen because the server refuses `..` ids on the input path,
+/// so no app can collide with it.
+const glintyModalCloseId = '..modal_close';
 
 /// Reports an input change back to the server.
 typedef GlintySink = void Function(String id, dynamic value);
@@ -58,6 +64,11 @@ typedef GlintyEventSink = void Function(String id);
 /// Asks the server for a transfer ticket.
 typedef GlintyTicketSink = void Function(String id, String purpose);
 
+/// Reports an output's box in logical pixels, with the device pixel
+/// ratio the server should rasterize at.
+typedef GlintyMeasureSink = void Function(
+    String id, double width, double height, double dpr);
+
 class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
@@ -65,6 +76,8 @@ class GlintyRenderer {
       this.onLink,
       this.onEvent,
       this.onTicket,
+      this.onModalClose,
+      this.onMeasure,
       this.values = const {},
       this.kinds = const {},
       this.errors = const {},
@@ -96,6 +109,16 @@ class GlintyRenderer {
   /// event. The press IS the download, and an event frame as well
   /// would make one press two actions.
   final GlintyTicketSink? onTicket;
+
+  /// Where a modal_button's press goes: dismissing the open dialog,
+  /// locally. Null outside a dialog, which makes such a button
+  /// visibly disabled rather than quietly inert.
+  final VoidCallback? onModalClose;
+
+  /// Where a responsive plot reports its box. Null in a fixture
+  /// render, where there is no server to tell -- the plot then draws
+  /// whatever value it was given and measures nothing.
+  final GlintyMeasureSink? onMeasure;
 
   /// The theme's base spacing unit in logical pixels. spacer() sizes
   /// are multiples of it -- the same rule the browser applies through
@@ -244,6 +267,10 @@ class GlintyRenderer {
         return _slot(context, c, 'text', () => _verbatim(context, c));
       case 'table_output':
         return _slot(context, c, 'table', () => _table(c));
+      case 'plot_output':
+        return _slot(context, c, 'image', () => _plot(context, c));
+      case 'image_output':
+        return _slot(context, c, 'image', () => _image(c));
       case 'tabset':
         return _tabset(context, c);
       case 'conditional_panel':
@@ -676,13 +703,22 @@ class GlintyRenderer {
             label,
           ]);
     final isDownload = c.type == 'download_button';
+    // modal_button(): dismisses the dialog and reports nothing.
+    // Neither lowering knew the reserved id, so a Cancel rendered and
+    // did nothing at all -- the same dead control the download button
+    // was, arrived at the same way.
+    final closes = id == glintyModalCloseId;
     // A download this client cannot deliver is a disabled button, not
     // a live one that asks for a ticket and throws it away. The gap
     // is the embedder's to close (onDownload); until then say so by
-    // being unpressable rather than by doing nothing visibly.
-    final dead = isDownload && onTicket == null;
+    // being unpressable rather than by doing nothing visibly. A close
+    // button with nowhere to send the dismissal is dead the same way.
+    final dead = (isDownload && onTicket == null) ||
+        (closes && onModalClose == null);
     void fire() {
-      if (isDownload) {
+      if (closes) {
+        onModalClose?.call();
+      } else if (isDownload) {
         onTicket?.call(id, 'download');
       } else {
         onEvent?.call(id);
@@ -775,6 +811,85 @@ class GlintyRenderer {
         ],
       ),
     );
+  }
+
+  /// A plot: the client picks the size, the server draws to it.
+  ///
+  /// The half of `measure` that was missing. The protocol chose
+  /// logical pixels precisely because that is Flutter's own unit, so
+  /// nothing converts here -- the box goes out as-is with the device
+  /// pixel ratio beside it, and the server rasterizes at their
+  /// product.
+  ///
+  /// A plot with explicit dimensions is not measured: the app already
+  /// said how big it is, and reporting a box would ask the server to
+  /// re-answer a question it has already answered.
+  Widget _plot(BuildContext context, GlintyComponent c) {
+    final id = c.str('id')!;
+    final w = c.integer('width');
+    final h = c.integer('height');
+    if (w != null && h != null) {
+      return SizedBox(
+          width: w.toDouble(), height: h.toDouble(), child: _image(c));
+    }
+    return LayoutBuilder(builder: (context, box) {
+      // Width comes from the parent. Height usually does not: a
+      // Column gives its children an unbounded main axis, so a plot
+      // in the ordinary case is asked how tall it wants to be. The
+      // client owns that answer -- "renders at the size the client
+      // gives it" is the whole point of measure -- so an unbounded
+      // height becomes a 4:3 box off the width rather than a report
+      // the server cannot rasterize.
+      if (!box.maxWidth.isFinite) {
+        // Neither axis bounded: nothing to measure from. Draw what
+        // arrived, if anything, and wait for a parent that has an
+        // opinion about width.
+        return _image(c);
+      }
+      final height =
+          box.maxHeight.isFinite ? box.maxHeight : box.maxWidth * 3 / 4;
+      onMeasure?.call(
+          id, box.maxWidth, height, MediaQuery.devicePixelRatioOf(context));
+      return SizedBox(
+          width: box.maxWidth, height: height, child: _image(c));
+    });
+  }
+
+  /// An `image` kind value: `{src, width, height, alt}`.
+  ///
+  /// `src` is a data: URI for a plot the server rasterized and may be
+  /// an http(s) URL for an image an app supplied. Both decode inside
+  /// the SDK; anything else is named rather than drawn, because a
+  /// broken image icon says nothing about why.
+  Widget _image(GlintyComponent c) {
+    final v = values[c.str('id')];
+    if (v is! Map) return const SizedBox.shrink();
+    final src = v['src'];
+    final alt = v['alt'] ?? c.str('alt');
+    if (src is! String || src.isEmpty) return const SizedBox.shrink();
+    final label = alt is String ? alt : null;
+    if (src.startsWith('data:')) {
+      try {
+        return Semantics(
+          label: label,
+          image: true,
+          child: Image.memory(UriData.parse(src).contentAsBytes(),
+              fit: BoxFit.contain),
+        );
+      } on FormatException {
+        return _problem(const Color(0xFFF8D7DA),
+            '[this image did not decode]');
+      }
+    }
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return Semantics(
+        label: label,
+        image: true,
+        child: Image.network(src, fit: BoxFit.contain),
+      );
+    }
+    return _problem(const Color(0xFFFFF3CD),
+        '[cannot load an image from ${Uri.tryParse(src)?.scheme ?? "that"}]');
   }
 
   Widget _unsupported(String name) => Container(
