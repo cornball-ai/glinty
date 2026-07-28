@@ -18,6 +18,16 @@ import 'transcript_data.dart';
 
 
 void main() {
+  // transcripts.json is a shared artifact, and a transcript nobody
+  // replays pins nothing. Dart runs each test file in its own
+  // isolate, so the contract is per-file: this is the file that must
+  // answer for every entry.
+  tearDownAll(() {
+    final all = loadTranscripts().map((t) => t['name'] as String).toSet();
+    expect(all.difference(usedTranscripts), isEmpty,
+        reason: 'transcripts checked in and never replayed here');
+  });
+
   group('the transcript file', () {
     test('declares the protocol this client speaks', () {
       expect(loadTranscriptFile()['protocol'], glintyProtocolVersion);
@@ -522,6 +532,18 @@ void main() {
       final expected = frames(transcript('button-event'), 'in').first;
       final s = GlintySession();
       s.sendEvent(expected['id'] as String);
+
+      expect(s.sent.single.body, expected);
+    });
+
+    test('a valued event frame matches the transcript shape', () {
+      // The other half of the event shape: a press from a list row
+      // carries which row. A client that drops the value reports a
+      // press the server cannot place.
+      final expected = frames(transcript('valued-event'), 'in').first;
+      final s = GlintySession();
+      s.sendEvent(expected['id'] as String,
+          value: expected['value'] as String);
 
       expect(s.sent.single.body, expected);
     });

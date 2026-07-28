@@ -913,6 +913,67 @@ void _v31() {
         findsNothing);
   });
 
+  testWidgets('a grown child of an auto-height column does not crash',
+      (tester) async {
+    // The second half of the same problem, and the one the first fix
+    // missed. Being the direct child of a Flex makes Expanded legal;
+    // it does not make it *work*. A Column with an unbounded main
+    // axis -- inside a scroll view, or inside an ExpansionTile -- has
+    // no spare height to divide, and a flexed child there throws
+    // "non-zero flex but incoming height constraints are unbounded".
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Unbounded',
+      'children': [
+        {
+          'component': 'collapse',
+          'title': 'Settings',
+          'open': true,
+          'children': [
+            {'component': 'column', 'children': [
+              {'component': 'panel', 'grow': 1, 'children': [
+                {'component': 'text', 'value': 'deep', 'variant': 'normal'}
+              ]},
+            ]},
+          ],
+        },
+      ],
+    }, 'ru1');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('deep'), findsOneWidget);
+    expect(
+        find.ancestor(of: find.text('deep'), matching: find.byType(Expanded)),
+        findsNothing,
+        reason: 'nothing to grow into, so it does not grow -- the same '
+            'as flex-grow inside an auto-height container');
+  });
+
+  testWidgets('a grown child of a bounded column still grows', (tester) async {
+    // And the check has to be a check, not a blanket refusal: a
+    // Column that does have bounded height must still share it out.
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Bounded',
+      'children': [
+        {
+          'component': 'row',
+          'children': [
+            {'component': 'column', 'grow': 1, 'children': [
+              {'component': 'text', 'value': 'wide', 'variant': 'normal'}
+            ]},
+          ],
+        },
+      ],
+    }, 'ru2');
+    expect(tester.takeException(), isNull);
+    expect(
+        find.ancestor(of: find.text('wide'), matching: find.byType(Expanded)),
+        findsOneWidget,
+        reason: 'a row is bounded horizontally by the page');
+  });
+
   testWidgets('a grown container in a modal footer does not crash',
       (tester) async {
     // The other non-flex parent a component can land under: a dialog

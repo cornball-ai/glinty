@@ -350,6 +350,21 @@ for (nm in names(INPUT_META)) {
 # the select declares both, and each one is what it actually seeds
 expect_equal(INPUT_META$select_input$value_type, "string")
 expect_equal(INPUT_META$select_input$value_type_multiple, "strings")
+
+# a button is the other component whose message type depends on a
+# field: valueless it counts presses, valued it carries the value.
+# The declaration was NULL for both, and the loop above skips a NULL
+# value_type -- so nothing checked the half that was added.
+expect_null(INPUT_META$button$value_type)
+expect_equal(INPUT_META$button$value_type_valued, "string")
+expect_null(INPUT_META$download_button$value_type_valued)
+
+s_ev <- glinty:::new_session("meta_ev")
+glinty:::handle_event(s_ev, "counted")
+expect_equal(r_type(isolate(s_ev$input$counted())), "number")
+glinty:::handle_event(s_ev, "valued", "entry_7")
+expect_equal(r_type(isolate(s_ev$input$valued())),
+             INPUT_META$button$value_type_valued)
 expect_equal(r_type(seed_of(component("select_input", id = "m",
                                       choices = c("a", "b"),
                                       selected = c("a", "b"),

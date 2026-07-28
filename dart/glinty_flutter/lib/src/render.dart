@@ -405,43 +405,73 @@ class GlintyRenderer {
   // `gap` is a number, which is the only reason this can build
   // separators. A CSS length string would have been unusable.
 
-  List<Widget> _spaced(
-      BuildContext context, List<GlintyComponent> kids, double gap, bool row) {
+  /// Children of a Row or Column, with gaps between them.
+  ///
+  /// [canGrow] says whether `Expanded` is legal here, which needs two
+  /// things and not one. Being the direct child of a Flex is
+  /// necessary -- Expanded anywhere else throws ParentDataWidget --
+  /// but the Flex also has to have a *bounded* main axis, or the
+  /// error is "children have non-zero flex but incoming constraints
+  /// are unbounded". A Column inside a scroll view, or inside an
+  /// ExpansionTile, has all the height it asks for and none to share
+  /// out, so there is nothing for a grown child to take.
+  List<Widget> _spaced(BuildContext context, List<GlintyComponent> kids,
+      double gap, bool row,
+      {required bool canGrow}) {
     final out = <Widget>[];
     for (var i = 0; i < kids.length; i++) {
       if (i > 0 && gap > 0) {
         out.add(row ? SizedBox(width: gap) : SizedBox(height: gap));
       }
-      // `grow` becomes Expanded here and nowhere else, because this is
-      // the only place that knows it is building the direct children
-      // of a Flex -- and Expanded is only legal there. Asking the
-      // element tree instead ("is there a RenderFlex above me?") finds
-      // any ancestor, so a grown component under a Column > Padding
-      // answered yes and threw ParentDataWidget at build time.
       final grow = kids[i].integer('grow') ?? 0;
       final child = build(context, kids[i]);
-      out.add(grow > 0 ? Expanded(flex: grow, child: child) : child);
+      out.add(canGrow && grow > 0 ? Expanded(flex: grow, child: child) : child);
     }
     return out;
   }
 
-  Widget _column(BuildContext context, GlintyComponent c) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children:
-            _spaced(context, c.children, c.number('gap')?.toDouble() ?? 0, false),
-      );
+  /// Builds a Flex, measuring its own main axis first.
+  ///
+  /// The LayoutBuilder is not decoration: whether a grown child is
+  /// legal depends on constraints this widget only learns at layout
+  /// time, and guessing wrong is a crash rather than a wrong pixel.
+  /// When the axis is unbounded a grown child simply does not grow,
+  /// which is what the browser does too -- flex-grow has nothing to
+  /// divide when the container is auto-sized.
+  Widget _flex(BuildContext context, GlintyComponent c, bool row) {
+    final gap = c.number('gap')?.toDouble() ?? 0;
+    final wants = c.children.any((k) => (k.integer('grow') ?? 0) > 0);
+    Widget make(bool canGrow) {
+      final kids = _spaced(context, c.children, gap, row, canGrow: canGrow);
+      return row
+          ? Row(
+              mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
+              crossAxisAlignment: switch (c.str('align')) {
+                'center' => CrossAxisAlignment.center,
+                'end' => CrossAxisAlignment.end,
+                _ => CrossAxisAlignment.start,
+              },
+              children: kids)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
+              children: kids);
+    }
 
-  Widget _row(BuildContext context, GlintyComponent c) => Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: switch (c.str('align')) {
-          'center' => CrossAxisAlignment.center,
-          'end' => CrossAxisAlignment.end,
-          _ => CrossAxisAlignment.start,
-        },
-        children:
-            _spaced(context, c.children, c.number('gap')?.toDouble() ?? 0, true),
-      );
+    // No grown child means no constraint to check, and no reason to
+    // pay for a LayoutBuilder on every container in the tree.
+    if (!wants) return make(false);
+    return LayoutBuilder(builder: (context, box) {
+      final bounded = row ? box.maxWidth.isFinite : box.maxHeight.isFinite;
+      return make(bounded);
+    });
+  }
+
+  Widget _column(BuildContext context, GlintyComponent c) =>
+      _flex(context, c, false);
+
+  Widget _row(BuildContext context, GlintyComponent c) =>
+      _flex(context, c, true);
 
   Widget _panel(BuildContext context, GlintyComponent c) {
     final title = c.str('title');

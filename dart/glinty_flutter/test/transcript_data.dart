@@ -12,10 +12,22 @@ Map<String, dynamic> loadTranscriptFile() =>
 List<Map<String, dynamic>> loadTranscripts() =>
     (loadTranscriptFile()["transcripts"] as List).cast<Map<String, dynamic>>();
 
-Map<String, dynamic> transcript(String name) => loadTranscripts().firstWhere(
-    (t) => t['name'] == name,
-    orElse: () => throw StateError('no transcript named $name; the R '
-        'definition and this suite have diverged'));
+/// Every transcript this suite has actually read.
+///
+/// transcripts.json is a shared artifact: adding one is meant to
+/// oblige every consumer to answer for it. Nothing enforced that, so a
+/// transcript could sit in the file pinning nothing -- the same hole
+/// the fixture list had when it claimed "every component, once" and
+/// was missing thirteen. `transcripts_test.dart` asserts this covers
+/// the file.
+final usedTranscripts = <String>{};
+
+Map<String, dynamic> transcript(String name) {
+  usedTranscripts.add(name);
+  return loadTranscripts().firstWhere((t) => t['name'] == name,
+      orElse: () => throw StateError('no transcript named $name; the R '
+          'definition and this suite have diverged'));
+}
 
 /// The frames one side sends, in order.
 List<Map<String, dynamic>> frames(Map<String, dynamic> t, String dir) =>

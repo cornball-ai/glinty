@@ -345,7 +345,13 @@ INPUT_META <- list(
                    slider_input = list(message = "input", value_type = "number"),
                    date_input = list(message = "input", value_type = "string"),
                    file_input = list(message = "input", value_type = "files"),
-                   button = list(message = "event", value_type = NULL),
+                   # A button's event carries a value when the component
+                   # declared one, and carries none otherwise: the press
+                   # is then the whole message. Two entries rather than
+                   # one, because which it is depends on the component,
+                   # exactly as with a select and `multiple`.
+                   button = list(message = "event", value_type = NULL,
+                                 value_type_valued = "string"),
                    download_button = list(message = "event", value_type = NULL)
 )
 

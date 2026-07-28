@@ -48,7 +48,13 @@ function check(name, cond) {
     }
 }
 
+/* Which transcripts this run actually replayed. The file is a
+   shared artifact, and a transcript nobody replays pins nothing --
+   the same hole the fixture list had when it claimed coverage it
+   did not have. */
+const replayed = new Set();
 function transcript(name) {
+    replayed.add(name);
     const hit = TRANSCRIPTS.transcripts.find((t) => t.name === name);
     if (!hit) throw new Error("no transcript named " + name);
     return hit;
@@ -1059,6 +1065,77 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
     /* ---------------------------------------------------------- */
     /* ---------------------------------------------------------- */
+    section("the remaining transcripts, replayed");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+
+        /* input -> output: the shape both directions take for the
+           ordinary case. */
+        const io = transcript("input-then-output");
+        const inFrame = frames(io, "in")[0];
+        const outFrame = frames(io, "out")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+        const nameEl = page.document.getElementById(inFrame.id);
+        nameEl.value = inFrame.value;
+        page.fire("input", nameEl);
+        await sleep(300);
+        const sentInput = page.frames("input").pop();
+        check("an input reports in the transcript's shape",
+              sentInput.id === inFrame.id && sentInput.value === inFrame.value);
+
+        page.ws().deliver(outFrame);
+        check("and the answering output lands in its slot",
+              page.document.getElementById(outFrame.id).textContent ===
+                  outFrame.value);
+
+        /* event -> ui: a press that answers with a subtree. */
+        const eu = transcript("event-then-ui");
+        page.ws().deliver(frames(eu, "out")[0]);
+        check("a ui-kind output builds its subtree",
+              page.document.getElementById("extra") !== null);
+
+        /* An input_update the client applies without echoing back. */
+        const iu = transcript("input-update");
+        const upd = frames(iu, "out")[0];
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "text_input", id: upd.id, label: "T:",
+                     value: "", emit: "live" }
+        });
+        const before = page.sent.length;
+        page.ws().deliver(upd);
+        check("an input_update applies to the control",
+              page.document.getElementById(upd.id).value === upd.value);
+        check("and is not echoed back -- the server already knows",
+              page.sent.length === before);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a valued event, replayed from the shared transcript");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const shape = frames(transcript("valued-event"), "in")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "button", id: shape.id, label: "12:04",
+                     value: shape.value, variant: "default" }
+        });
+        page.fire("click", page.document.getElementById(shape.id));
+        const sent = page.frames("event").pop();
+        check("the frame this client sends matches the transcript",
+              sent.type === shape.type && sent.id === shape.id &&
+              sent.value === shape.value);
+    }
+
+    /* ---------------------------------------------------------- */
     section("v3.1: sizing, images, collapse, valued buttons");
     {
         const hyd = transcript("hello-welcome-hydrated");
@@ -1540,8 +1617,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     /* ---------------------------------------------------------- */
     section("authentication: token out, refusal visible");
     {
+        /* The token and the shape of an authenticated hello come
+           from the shared transcript, so this checks the artifact
+           rather than a string retyped beside it. */
+        const authShape = frames(transcript("hello-authenticated"),
+                                 "in")[0];
         const withToken = freshPage({ setup: prerenderDemo });
-        withToken.sandbox.GLINTY_AUTH = "eyJhb.example.token";
+        withToken.sandbox.GLINTY_AUTH = authShape.token;
         /* GLINTY_AUTH is read at connect; boot again via a manual
            reconnect path: close before any session, then... simplest
            honest check is a fresh page whose sandbox carries the
@@ -1550,7 +1632,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
            built at open time, after the token existed. */
         withToken.ws().open();
         check("hello carries the app-provided token",
-              withToken.sent[0].token === "eyJhb.example.token");
+              withToken.sent[0].token === authShape.token &&
+              withToken.sent[0].type === authShape.type);
 
         const bare = freshPage({ setup: prerenderDemo });
         bare.ws().open();
@@ -1667,6 +1750,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         G.setInputValue("evt", "x", { priority: "event" });
         check("opts argument is accepted and ignored",
               page.sent.filter((m) => m.id === "evt").length === 1);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("every transcript in the file was replayed");
+    {
+        /* transcripts.json is a shared artifact: adding one is meant
+           to oblige every consumer to answer for it. Nothing enforced
+           that, so a new transcript could sit in the file pinning
+           nothing -- exactly the hole the fixture list had when it
+           claimed "every component, once" and was missing thirteen. */
+        const all = TRANSCRIPTS.transcripts.map((t) => t.name);
+        const missed = all.filter((n) => !replayed.has(n));
+        check("no transcript is checked in and never exercised: " +
+              (missed.length ? missed.join(", ") : "none"),
+              missed.length === 0);
     }
 
     console.log("");

@@ -349,6 +349,29 @@
       ]
     },
     {
+      "name": "valued-event",
+      "notes": "a press from a list row. The value rides on the event so one handler serves every row -- the press says which. A client that drops it reports a press the server cannot place, which is why the field is on the wire and not in the id",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "event",
+            "id": "history_view",
+            "value": "entry_7"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "output",
+            "id": "transcription",
+            "kind": "text",
+            "value": "the seventh transcription"
+          }
+        }
+      ]
+    },
+    {
       "name": "measure-then-image",
       "notes": "a client-sized output reporting its box in logical pixels with its device pixel ratio, and the image that comes back: rasterized at 2x behind that src, sized in logical pixels in the value; replaces the reserved ..clientdata_output_* inputs",
       "frames": [

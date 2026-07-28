@@ -1,7 +1,7 @@
 Package: glinty
 Type: Package
 Title: Tiny Reactive Web Application Framework
-Version: 0.0.5.3
+Version: 0.0.5.4
 Authors@R: c(
     person("Troy", "Hernandez", email = "troy@cornball.ai",
            role = c("aut", "cre"),

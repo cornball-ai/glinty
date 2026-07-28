@@ -26,9 +26,14 @@ By that test:
 | a component | draws a placeholder naming it | yes |
 | a variant | falls back to the first listed, warns | yes |
 | a feature | the server sees it undeclared | yes |
-| `grow`, `width` | lays out wrong, plainly | yes |
+| `grow`, `width` | lays out wrong — possibly *plausibly* wrong | borderline |
 | `link.children` | draws a link with no content | **no** |
 | `button.value` | reports a press with no value, and the handler reads nothing | **no** |
+
+`grow` and `width` are marked borderline rather than safe on purpose:
+a layout that is merely *wrong* can still look plausible, and "you
+would notice" is a weaker guarantee than a placeholder saying the
+name of what is missing. Treat borderline as needing the bump.
 
 Two earlier drafts of this paragraph were both wrong. The first said
 adding a component was a v4 conversation, which is stricter than the
@@ -43,8 +48,12 @@ protocol 2, and 3 exists only on `main`. Both protocol-3 clients ship
 in this repository and both implement v3.1. There is no client
 anywhere that could receive `button.value` and drop it. The additions
 below are safe *because no older protocol-3 client exists*, not
-because optional fields are safe in general — and once one does exist,
-an addition of that kind bumps to 4.
+because optional fields are safe in general.
+
+That justification expires the moment protocol 3 ships. After that,
+any addition that is not clearly in the "fails visibly" column bumps
+the version, or gates itself behind a declared capability. There is
+no third option where it is fine because the field is optional.
 
 ### v3.1
 
@@ -227,7 +236,9 @@ answer for it.
 ## Components
 
 A component is an object with a `component` field. Unknown fields are
-ignored, so adding optional properties is backwards compatible.
+ignored. That makes an addition *renderable* by an older client; it
+does not make it *correct* there — see the compatibility test at the
+top of this document, which is about what ignoring the field does.
 
 ```json
 {
@@ -248,15 +259,15 @@ Layout nests:
 
 ### The set
 
-**Static content**: `text`, `heading`, `link`, `icon`, `divider`,
-`spacer`
+**Static content**: `text`, `heading`, `link`, `icon`, `image`,
+`divider`, `spacer`
 
 These are what `p()`, `span()`, `h1()`–`h4()` and `a()` become. Without
 them the migration is not mechanical, because today's apps are full of
 them.
 
-**Layout**: `page`, `row`, `column`, `panel`, `tabset` / `tab_panel`,
-`conditional_panel`
+**Layout**: `page`, `row`, `column`, `panel`, `collapse`, `tabset` /
+`tab_panel`, `conditional_panel`
 
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
 `number_input`, `select_input`, `checkbox_input`, `radio_buttons`,
@@ -276,9 +287,9 @@ frontends comes from the set above.
 ### Field schemas
 
 Every component has a fixed field set with declared types and
-defaults. Unknown fields are ignored so optional additions stay
-backwards compatible; missing required fields are a client-side error,
-not a silent default.
+defaults. Missing required fields are a client-side error, not a
+silent default. Unknown fields are ignored — which, again, is not the
+same as safe to add.
 
 | component | required | optional |
 |---|---|---|

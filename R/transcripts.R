@@ -218,6 +218,23 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "valued-event",
+              notes = paste("a press from a list row. The value rides on",
+                            "the event so one handler serves every row --",
+                            "the press says which. A client that drops it",
+                            "reports a press the server cannot place, which",
+                            "is why the field is on the wire and not in",
+                            "the id"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event",
+                        id = "history_view", value = "entry_7")),
+                            list(dir = "out", message = list(
+                        type = "output", id = "transcription", kind = "text",
+                        value = "the seventh transcription"
+                    ))
+            )
+        ),
+         list(
               name = "measure-then-image",
               notes = paste("a client-sized output reporting its box in",
                             "logical pixels with its device pixel ratio, and",
