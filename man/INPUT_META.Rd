@@ -20,5 +20,10 @@ discrete action it merely observes. `value_type` is what that
 message's value must be, and is what the conformance test holds
 both lowerings to.
 
+A select is the one component whose value type depends on a field
+rather than only on the component, so it declares both. Saying
+only "string" was how a multiple select came to be scalar in three
+separate places.
+
 }
 \keyword{internal}

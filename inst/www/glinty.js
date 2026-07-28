@@ -554,10 +554,20 @@
         var attrs = assign(bindAttrs(c, "input"), { "class": "g-select" });
         if (c.multiple) attrs.multiple = "multiple";
         var sel = el("select", attrs);
+        /* A multiple select carries a list, so membership rather than
+           equality: === against an array never matches, which drew
+           every option unselected however many the app had chosen. */
+        var chosen = Array.isArray(c.selected)
+            ? c.selected.map(String)
+            : c.selected === null || c.selected === undefined
+              ? []
+              : [String(c.selected)];
         (c.choices || []).forEach(function (ch) {
             var opt = el("option", {
                 value: ch.value,
-                selected: ch.value === c.selected ? "selected" : null
+                selected: chosen.indexOf(String(ch.value)) !== -1
+                    ? "selected"
+                    : null
             });
             opt.textContent = ch.label;
             sel.appendChild(opt);
@@ -1055,7 +1065,23 @@
             });
         }
         if (msg.selected !== undefined && el.tagName === "SELECT") {
-            if (el !== document.activeElement) el.value = msg.selected;
+            /* never stomp an open dropdown */
+            if (el !== document.activeElement) {
+                if (el.multiple) {
+                    /* el.value takes one string, so assigning an array
+                       to a multiple select selected nothing at all --
+                       the server pushed a selection and the control
+                       silently cleared. Set each option instead. */
+                    var want = Array.isArray(msg.selected)
+                        ? msg.selected.map(String)
+                        : [String(msg.selected)];
+                    Array.prototype.forEach.call(el.options, function (o) {
+                        o.selected = want.indexOf(o.value) !== -1;
+                    });
+                } else {
+                    el.value = msg.selected;
+                }
+            }
         }
         if (msg.min !== undefined) el.min = msg.min;
         if (msg.max !== undefined) el.max = msg.max;

@@ -48,6 +48,19 @@ class GlintyComponent {
 
   int? integer(String name) => number(name)?.toInt();
 
+  /// A field that may be one string or several, as a list either way.
+  ///
+  /// `selected` on a select is the only one: a multiple select always
+  /// sends an array, a single select always sends a bare string, and
+  /// str() on the array would have produced the Dart rendering of a
+  /// List rather than any value in it.
+  List<String> strings(String name) {
+    final v = fields[name];
+    if (v == null) return const [];
+    if (v is List) return v.map((e) => e.toString()).toList();
+    return [v.toString()];
+  }
+
   bool boolean(String name, {bool fallback = false}) {
     final v = fields[name];
     if (v is bool) return v;

@@ -31,6 +31,8 @@ ui <- page(
     select_input("engine", "E:", c(A = "a", B = "b")),
     select_input("engine_sel", "E2:", c(A = "a", B = "b"), selected = "b"),
     select_input("multi", "M:", c(A = "a", B = "b"), multiple = TRUE),
+    select_input("multi_sel", "M2:", c(A = "a", B = "b"),
+                 selected = c("a", "b"), multiple = TRUE),
     date_input("when", "When:", value = "2026-07-27"),
     date_input("when_empty", "When2:"),
     file_input("upload", "File:"),
@@ -75,10 +77,16 @@ expect_equal(isolate(s$input$mode()), "fast")
 expect_equal(isolate(s$input$sl()), 25)
 expect_equal(isolate(s$input$sl_default()), 15)
 
-# a single select shows its first choice; multiple shows nothing
+# a single select shows its first choice; a multiple select shows an
+# empty selection, which is character(0) and not NULL. The browser
+# harvests Array.from(el.selectedOptions) and gets [], so seeding
+# NULL made the server disagree with the client it is mirroring
+# before anyone had touched anything.
 expect_equal(isolate(s$input$engine()), "a")
 expect_equal(isolate(s$input$engine_sel()), "b")
-expect_null(isolate(s$input$multi()))
+expect_equal(isolate(s$input$multi()), character(0))
+expect_false(is.null(isolate(s$input$multi())))
+expect_equal(isolate(s$input$multi_sel()), c("a", "b"))
 
 # no state to seed: files and events
 expect_null(isolate(s$input$upload()))

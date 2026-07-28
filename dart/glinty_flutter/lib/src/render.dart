@@ -178,7 +178,12 @@ class GlintyRenderer {
       return _problem(const Color(0xFFF8D7DA), err);
     }
     final kind = kinds[id];
-    if (kind != null && kind != expected && values[id] != null) {
+    // Whether this slot can draw a kind is a fact about the kind and
+    // the slot, not about what happened to arrive in it. Gating on a
+    // non-null value made an `output` carrying kind `image` and value
+    // null render as an ordinary empty slot -- the client could not
+    // have drawn it either way, and said nothing.
+    if (kind != null && kind != expected) {
       return _problem(const Color(0xFFFFF3CD),
           '[cannot display $kind here: ${c.type} shows $expected]');
     }
@@ -560,7 +565,7 @@ class GlintyRenderer {
   /// visible at once, which is what a list-valued control needs.
   Widget _multiSelect(BuildContext context, GlintyComponent c, String id,
       List<GlintyChoice> choices) {
-    final raw = _value(id, null);
+    final raw = _value(id, c.fields['selected']);
     final chosen = raw is List
         ? raw.map((v) => v.toString()).toList()
         : (raw == null ? <String>[] : [raw.toString()]);

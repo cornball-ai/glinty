@@ -129,7 +129,11 @@ COMPONENT_SCHEMA <- list(
         id = field("string", required = TRUE),
         label = field("string", default = ""),
         choices = field("choices", required = TRUE),
-        selected = field("string"),
+        # Strings, plural, because a multiple select has more than one
+        # selection and a scalar field made "pick some" expressible
+        # only as "pick one". How many are allowed depends on
+        # `multiple`, which check_component() enforces.
+        selected = field("strings"),
         multiple = field("bool", default = FALSE),
         emit = field("enum", default = "settle", values = c("live", "settle"))
     ),
@@ -256,13 +260,19 @@ OUTPUT_KINDS <- list(text_output = "text", verbatim_output = "text",
 #' message's value must be, and is what the conformance test holds
 #' both lowerings to.
 #'
+#' A select is the one component whose value type depends on a field
+#' rather than only on the component, so it declares both. Saying
+#' only "string" was how a multiple select came to be scalar in three
+#' separate places.
+#'
 #' @keywords internal
 INPUT_META <- list(
                    text_input = list(message = "input", value_type = "string"),
                    password_input = list(message = "input", value_type = "string"),
                    textarea_input = list(message = "input", value_type = "string"),
                    number_input = list(message = "input", value_type = "number"),
-                   select_input = list(message = "input", value_type = "string"),
+                   select_input = list(message = "input", value_type = "string",
+                                       value_type_multiple = "strings"),
                    checkbox_input = list(message = "input", value_type = "bool"),
                    radio_buttons = list(message = "input", value_type = "string"),
                    slider_input = list(message = "input", value_type = "number"),
@@ -335,6 +345,7 @@ component <- function(type, ...) {
         }
         out[[nm]] <- check_field(value, spec, type, nm)
     }
+    out <- check_component(type, out)
 
     structure(c(list(component = type), out), class = "glinty_component")
 }
@@ -454,6 +465,22 @@ check_field <- function(value, spec, type, nm) {
         }
         return(unname(value))
     },
+           strings = {
+        # Zero or more strings. A field whose arity depends on a
+        # sibling field cannot be settled here -- see
+        # check_component(), which is where select_input's `selected`
+        # gets held to whatever `multiple` says.
+        if (is.list(value)) {
+            value <- unlist(value, use.names = FALSE)
+        }
+        if (is.null(value)) {
+            value <- character(0L)
+        }
+        if (!(is.character(value) || is.numeric(value)) || anyNA(value)) {
+            stop(where, " must be strings", call. = FALSE)
+        }
+        return(as.character(value))
+    },
            children = {
         if (!is.list(value)) {
             stop(where, " must be a list of components", call. = FALSE)
@@ -463,6 +490,45 @@ check_field <- function(value, spec, type, nm) {
            any = return(value)
     )
     stop("unknown field type in schema: ", spec$type, call. = FALSE)
+}
+
+#' Validate the fields of a component against each other
+#'
+#' Per-field checks cannot see their siblings, and a few components
+#' have rules that span two. Run after every field has been checked
+#' and defaulted, so this sees the normalized values.
+#'
+#' It also fixes the wire arity where it is not fixed by the field
+#' type. `selected` on a single select is one string; on a multiple
+#' select it is an array, including when the array holds one element
+#' or none. Left to auto_unbox that array would collapse to a bare
+#' string whenever exactly one option was chosen, so a client parsing
+#' it would see a list on Tuesday and a string on Wednesday.
+#'
+#' @param type character component name
+#' @param out the checked field list
+#' @return the field list, adjusted
+#' @keywords internal
+check_component <- function(type, out) {
+    if (identical(type, "select_input")) {
+        selected <- out$selected
+        if (isTRUE(out$multiple)) {
+            # as.list() so toJSON() emits an array at every length.
+            out$selected <- as.list(if (is.null(selected)) {
+                    character(0L)
+                } else {
+                    selected
+                })
+        } else if (!is.null(selected)) {
+            if (length(selected) != 1L) {
+                stop("select_input(selected=) must be a single string ",
+                     "unless multiple = TRUE (got ", length(selected), ")",
+                     call. = FALSE)
+            }
+            out$selected <- selected[[1L]]
+        }
+    }
+    out
 }
 
 #' Is this a component?

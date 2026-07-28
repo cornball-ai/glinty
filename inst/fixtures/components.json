@@ -221,6 +221,35 @@
       }
     },
     {
+      "name": "select-multiple",
+      "notes": "its value is a list at every length; a lowering that picks one control per component silently makes this pick-one",
+      "component": {
+        "component": "select_input",
+        "id": "tags",
+        "label": "",
+        "choices": [
+          {
+            "value": "a",
+            "label": "Alpha"
+          },
+          {
+            "value": "b",
+            "label": "Beta"
+          },
+          {
+            "value": "c",
+            "label": "Gamma"
+          }
+        ],
+        "selected": [
+          "a",
+          "c"
+        ],
+        "multiple": true,
+        "emit": "settle"
+      }
+    },
+    {
       "name": "slider-input",
       "notes": "numbers, not CSS strings: Flutter derives Slider divisions from step",
       "component": {

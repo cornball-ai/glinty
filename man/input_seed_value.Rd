@@ -15,10 +15,10 @@ an initial value, or NULL
 Mirrors what a browser would have harvested from the rendered
 control, because that is the state the user actually sees:
 an empty text field is "", an untouched checkbox is FALSE, a
-single select shows its first choice, a slider with no value sits
-at the midpoint (the HTML default). NULL means this component
-seeds nothing and the input stays auto-NULL: an empty number
-field, a multi-select with nothing chosen, every button and
-output.
+single select shows its first choice, a multiple select with
+nothing chosen is character(0), a slider with no value sits at the
+midpoint (the HTML default). NULL means this component seeds
+nothing and the input stays auto-NULL: an empty number field,
+every button and output.
 }
 \keyword{internal}

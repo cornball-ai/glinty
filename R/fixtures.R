@@ -130,6 +130,15 @@ component_fixtures <- function() {
               notes = "choices normalize to value/label however they were written"
         ),
          list(
+              name = "select-multiple",
+              component = component("select_input", id = "tags",
+                                    choices = c("Alpha" = "a", "Beta" = "b", "Gamma" = "c"),
+                                    selected = c("a", "c"), multiple = TRUE),
+              notes = paste("its value is a list at every length; a",
+                            "lowering that picks one control per",
+                            "component silently makes this pick-one")
+        ),
+         list(
               name = "slider-input",
               component = component("slider_input", id = "speed", min = 0.5,
                                     max = 2, value = 1, step = 0.1),

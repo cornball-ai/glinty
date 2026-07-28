@@ -132,6 +132,15 @@ final settleTextTree = {
   ],
 };
 
+final buttonTree = {
+  'component': 'page',
+  'title': 'Buttons',
+  'children': [
+    {'component': 'button', 'id': 'run', 'label': 'Run',
+      'variant': 'primary'},
+  ],
+};
+
 final liveTextTree = {
   'component': 'page',
   'title': 'Text',
@@ -229,6 +238,208 @@ void main() {
       await tester.pumpAndSettle();
       // still the app, not the refusal screen
       expect(find.text('still here'), findsOneWidget);
+    });
+  });
+
+  group('round 6: frames this client used to drop', () {
+    testWidgets('an unrenderable kind is named even with no value',
+        (tester) async {
+      // Whether a slot can draw a kind is a fact about the kind and
+      // the slot, not about what arrived. Gating the refusal on a
+      // non-null value let an image output with a null value render
+      // as an ordinary empty slot -- this client could not have drawn
+      // it either way, and said nothing.
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({
+        'type': 'output',
+        'id': 'msg',
+        'kind': 'image',
+        'value': null,
+      });
+      await tester.pumpAndSettle();
+      expect(find.textContaining('cannot display image'), findsOneWidget);
+    });
+
+    testWidgets('show_modal draws a dialog, hide takes it away',
+        (tester) async {
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({
+        'type': 'modal',
+        'action': 'show',
+        'title': 'Download the model?',
+        'body': [
+          {'component': 'text', 'value': 'It is 1.4 GB.', 'variant': 'normal'}
+        ],
+        'footer': {
+          'component': 'button', 'id': 'confirm', 'label': 'Download',
+          'variant': 'primary'
+        },
+        'easy_close': false,
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('Download the model?'), findsOneWidget);
+      expect(find.text('It is 1.4 GB.'), findsOneWidget);
+      expect(find.text('Download'), findsOneWidget);
+
+      // and the footer button is live: a dialog that asks a question
+      // and cannot take the answer is worse than no dialog
+      await tester.tap(find.text('Download'));
+      await tester.pumpAndSettle();
+      expect(socket.sent.last['type'], 'event');
+      expect(socket.sent.last['id'], 'confirm');
+
+      socket.deliver({'type': 'modal', 'action': 'hide'});
+      await tester.pumpAndSettle();
+      expect(find.text('Download the model?'), findsNothing);
+    });
+
+    testWidgets('a modal blocks the tree behind it', (tester) async {
+      final socket = await boot(tester, buttonTree, 'rb');
+      socket.deliver({
+        'type': 'modal',
+        'action': 'show',
+        'title': 'Busy',
+        'body': <dynamic>[],
+        'easy_close': false,
+      });
+      await tester.pumpAndSettle();
+
+      final before = socket.sent.length;
+      await tester.tap(find.text('Run'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(socket.sent.length, before,
+          reason: 'modal means modal -- a scrim that lets taps through '
+              'is a picture of a dialog');
+    });
+
+    testWidgets('with_progress draws a report, and hide removes it',
+        (tester) async {
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({
+        'type': 'progress',
+        'action': 'show',
+        'id': 'p1',
+        'message': 'Transcribing',
+        'detail': 'chunk 1 of 8',
+        'value': 0.125,
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Transcribing'), findsOneWidget);
+      expect(find.text('chunk 1 of 8'), findsOneWidget);
+      var bar = tester.widget<LinearProgressIndicator>(
+          find.byType(LinearProgressIndicator));
+      expect(bar.value, closeTo(0.125, 1e-9));
+
+      socket.deliver({
+        'type': 'progress',
+        'action': 'update',
+        'id': 'p1',
+        'message': 'Transcribing',
+        'detail': 'chunk 8 of 8',
+        'value': 1.0,
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('chunk 8 of 8'), findsOneWidget);
+      expect(find.text('chunk 1 of 8'), findsNothing);
+
+      socket.deliver({'type': 'progress', 'action': 'hide', 'id': 'p1'});
+      await tester.pumpAndSettle();
+      expect(find.text('Transcribing'), findsNothing);
+    });
+
+    testWidgets('a progress report with no value is indeterminate',
+        (tester) async {
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({
+        'type': 'progress', 'action': 'show', 'id': 'p1',
+        'message': 'Working', 'value': null,
+      });
+      // pump, not pumpAndSettle: an indeterminate bar animates
+      // forever by design, so "settled" never arrives. That it does
+      // not settle is itself the assertion behind this one.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      final bar = tester.widget<LinearProgressIndicator>(
+          find.byType(LinearProgressIndicator));
+      expect(bar.value, isNull,
+          reason: 'pinning an unknown fraction to zero reports stalled');
+    });
+
+    testWidgets('two progress reports stack rather than replace',
+        (tester) async {
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({'type': 'progress', 'action': 'show', 'id': 'a',
+        'message': 'Outer', 'value': 0.5});
+      socket.deliver({'type': 'progress', 'action': 'show', 'id': 'b',
+        'message': 'Inner', 'value': 0.5});
+      await tester.pumpAndSettle();
+      expect(find.text('Outer'), findsOneWidget);
+      expect(find.text('Inner'), findsOneWidget);
+
+      socket.deliver({'type': 'progress', 'action': 'hide', 'id': 'b'});
+      await tester.pumpAndSettle();
+      expect(find.text('Outer'), findsOneWidget,
+          reason: 'nested with_progress closes inside-out');
+      expect(find.text('Inner'), findsNothing);
+    });
+
+    testWidgets('a custom message with no handler says so on screen',
+        (tester) async {
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({
+        'type': 'custom', 'handler': 'startRecording', 'value': {'ms': 30},
+      });
+      await tester.pumpAndSettle();
+      expect(find.textContaining('startRecording'), findsOneWidget,
+          reason: 'an app whose JavaScript half was never ported looks '
+              'like it works and quietly does half of what it says');
+    });
+
+    testWidgets('a wired custom handler gets the value and no notice',
+        (tester) async {
+      late FakeSocket socket;
+      dynamic received;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => socket = FakeSocket(),
+            customHandlers: {'ping': (v) => received = v},
+          ),
+        ),
+      ));
+      await tester.pump();
+      socket.deliver(welcomeOf(outputTree, 'ro'));
+      await tester.pumpAndSettle();
+
+      socket.deliver(
+          {'type': 'custom', 'handler': 'ping', 'value': 42});
+      await tester.pumpAndSettle();
+      expect(received, 42);
+      expect(find.textContaining('no handler'), findsNothing);
+    });
+
+    testWidgets('a refused resume clears dialogs and progress',
+        (tester) async {
+      final socket = await boot(tester, outputTree, 'ro');
+      socket.deliver({'type': 'modal', 'action': 'show', 'title': 'Old',
+        'body': <dynamic>[], 'easy_close': false});
+      socket.deliver({'type': 'progress', 'action': 'show', 'id': 'p',
+        'message': 'Old work', 'value': 0.5});
+      await tester.pumpAndSettle();
+      expect(find.text('Old'), findsOneWidget);
+
+      // the server hands back a different session
+      socket.deliver({
+        'type': 'welcome', 'session': 's2', 'protocol': 3,
+        'ui_revision': 'ro', 'ui': outputTree, 'resumed': false,
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('Old'), findsNothing,
+          reason: 'that dialog belonged to a session that is gone');
+      expect(find.text('Old work'), findsNothing);
     });
   });
 

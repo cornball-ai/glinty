@@ -100,6 +100,11 @@ class GlintySession {
 
   void _changed() => _onChanged?.call();
 
+  /// Announce a state change made from outside receive(): dismissing
+  /// a dialog locally, for one. Without it the store updates and
+  /// nothing redraws until some later server frame happens to land.
+  void notifyChanged() => _changed();
+
   GlintyComponent? _ui;
   String? _cachedRevision;
 
@@ -179,6 +184,28 @@ class GlintySession {
   final Map<String, Map<String, dynamic>> tickets =
       <String, Map<String, dynamic>>{};
 
+  /// The open dialog's frame, or null. One at a time, because
+  /// show_modal() replaces rather than stacks.
+  Map<String, dynamic>? modal;
+
+  /// Active progress reports by id, in the order they were opened.
+  /// A `hide` removes one; the rest keep going, which is what makes
+  /// nested with_progress() calls readable.
+  final Map<String, Map<String, dynamic>> progress =
+      <String, Map<String, dynamic>>{};
+
+  /// Handlers for `custom` frames, by name. The embedder registers
+  /// these -- glinty has no idea what an app's custom message means,
+  /// which is the whole point of the channel.
+  final Map<String, void Function(dynamic value)> customHandlers =
+      <String, void Function(dynamic value)>{};
+
+  /// Custom handler names the server sent that nothing was listening
+  /// for. Recorded rather than dropped: a message with nowhere to go
+  /// is a gap in the app, and the rule this client keeps is that a
+  /// gap is visible.
+  final Set<String> unhandledCustom = <String>{};
+
   /// The tree to render, or null when there is nothing to draw yet.
   GlintyComponent? get ui => refused ? null : _ui;
 
@@ -200,7 +227,11 @@ class GlintySession {
       // `ui` are absent because the components that carry them are,
       // and a kind declared without a slot to put it in is a lie.
       'kinds': const ['text', 'table'],
-      'features': features,
+      // measure, modal and progress are this client's own: it reports
+      // output boxes, draws dialogs and draws progress reports. The
+      // rest come from the embedder, because they need one -- there
+      // is no way to save a downloaded file from inside this package.
+      'features': ['measure', 'modal', 'progress', ...features],
       if (token != null) 'token': token,
       // resume and prerendered are alternatives, not companions: a
       // reconnect asks for its session back, a fresh connect says
@@ -286,6 +317,40 @@ class GlintySession {
           refusalMessage =
               msg['message']?.toString() ?? 'connection refused';
         }
+      case 'modal':
+        // A dialog is a component tree with a title and a footer, so
+        // this client can draw it with the renderer it already has --
+        // which is the point of the tree being components rather than
+        // markup. Ignoring the frame left show_modal() a no-op here:
+        // an app asking a question and getting no answer, forever.
+        if (msg['action'] == 'hide') {
+          modal = null;
+        } else {
+          modal = msg;
+        }
+      case 'progress':
+        final id = msg['id'];
+        if (id is String) {
+          if (msg['action'] == 'hide') {
+            progress.remove(id);
+          } else {
+            progress[id] = msg;
+          }
+        }
+      case 'custom':
+        // The one frame whose meaning lives outside glinty: the
+        // payload is the app's, and only the embedder knows what it
+        // means. Held so a view can say a handler was never wired,
+        // rather than dropping the message where nobody can see it.
+        final handler = msg['handler'];
+        if (handler is String) {
+          final fn = customHandlers[handler];
+          if (fn != null) {
+            fn(msg['value']);
+          } else {
+            unhandledCustom.add(handler);
+          }
+        }
       default:
         // Unknown message types are ignored on purpose: the protocol
         // grows by adding them, and a client that throws here cannot
@@ -320,6 +385,9 @@ class GlintySession {
       kinds.clear();
       errors.clear();
       pushes.clear();
+      modal = null;
+      progress.clear();
+      unhandledCustom.clear();
       _ui = null;
       _cachedRevision = null;
       generation++;

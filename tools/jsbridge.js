@@ -235,9 +235,15 @@ function makeEl(doc, tag) {
         },
         set selected(v) { this._selected = !!v; },
         get multiple() { return "multiple" in this.attrs; },
+        /* A select's option list. Modelled because the client walks
+           it to apply a multiple selection, and a harness missing the
+           property would have made that code look like a crash rather
+           than the fix it is. */
+        get options() {
+            return this.children.filter((c) => c.tagName === "OPTION");
+        },
         get selectedOptions() {
-            return this.children.filter(
-                (c) => c.tagName === "OPTION" && c.selected);
+            return this.options.filter((c) => c.selected);
         },
 
         get textContent() {
@@ -1085,6 +1091,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               ctl !== null &&
               ctl.children.length === fixture.choices.length);
 
+        /* A multiple select carries a list, so the lowering needs
+           membership rather than equality. `ch.value === c.selected`
+           against an array never matches, so an app could choose
+           three options and the built control would show none. */
+        node = build(byName("select-multiple"));
+        ctl = node.querySelector("select");
+        const chosen = Array.from(ctl.children).filter(
+            (o) => o.getAttribute("selected") !== null
+        );
+        check("a multiple select marks every selection, not zero",
+              ctl.getAttribute("multiple") !== null &&
+              chosen.length === 2 &&
+              chosen.map((o) => o.getAttribute("value")).join(",") === "a,c");
+
         node = build(byName("button-primary"));
         check("button is an event emitter with its variant class",
               node.getAttribute("data-g-message") === "event" &&
@@ -1170,6 +1190,69 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.fire("click", page.document.getElementById("go2"));
         check("its button reports through root delegation",
               page.frames("event").some((m) => m.id === "go2"));
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a multiple select is plural end to end");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: {
+                component: "select_input", id: "tags", label: "Tags:",
+                multiple: true, emit: "settle",
+                selected: ["a", "c"],
+                choices: [
+                    { value: "a", label: "Alpha" },
+                    { value: "b", label: "Beta" },
+                    { value: "c", label: "Gamma" }
+                ]
+            }
+        });
+        const sel = page.document.getElementById("tags");
+        const chosen = () => Array.from(sel.children)
+            .filter((o) => o.selected)
+            .map((o) => o.getAttribute("value"))
+            .join(",");
+        check("every selection in the tree is marked, not zero",
+              sel.multiple && chosen() === "a,c");
+
+        /* el.value takes one string, so assigning an array selected
+           nothing at all: the server pushed a selection and the
+           control silently cleared. */
+        page.ws().deliver({
+            type: "input_update", id: "tags", selected: ["b", "c"]
+        });
+        check("input_update replaces the whole selection",
+              chosen() === "b,c");
+
+        /* and a one-element push is still a list, not a scalar */
+        page.ws().deliver({
+            type: "input_update", id: "tags", selected: ["b"]
+        });
+        check("a one-element selection is applied as a list",
+              chosen() === "b");
+
+        page.ws().deliver({
+            type: "input_update", id: "tags", selected: []
+        });
+        check("an empty selection clears every option",
+              chosen() === "");
+
+        /* what leaves the page is the list the server declared */
+        Array.from(sel.children).forEach(function (o) {
+            o.selected = o.getAttribute("value") !== "b";
+        });
+        page.fire("change", sel);
+        const last = page.frames("input").filter((m) => m.id === "tags").pop();
+        check("a change reports every selected option",
+              Array.isArray(last.value) &&
+              last.value.join(",") === "a,c");
     }
 
     /* ---------------------------------------------------------- */

@@ -131,8 +131,18 @@ permissions, packaging and signing.
 
 `tag()`, `html_output()`, custom JavaScript and browser-only CSS are
 escape hatches, and escape hatches don't travel. R stays on the
-server; it is not bundled into the native app. The live Flutter
-transport and scaffolder are still under development.
+server; it is not bundled into the native app.
+
+The Flutter transport is live: `GlintyApp` opens the socket, sends
+`hello`, hydrates from `welcome`, reconnects with `resume` under
+bounded backoff, and refuses visibly when the server says no. It
+draws dialogs and progress reports, reports output boxes for
+client-sized plots, and redeems transfer tickets. Downloads, links
+and `custom` messages need an embedder callback, because saving a
+file, opening a URL and knowing what an app's own message means are
+all things this package cannot do on its own -- so it declares those
+features only when one is wired, and names the gap on screen rather
+than dropping the frame. There is no project scaffolder yet.
 
 The wire carries semantic components, not DOM instructions, which is
 what makes that swap possible. `dart/glinty_flutter` reads the same

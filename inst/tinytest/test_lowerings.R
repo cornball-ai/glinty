@@ -165,6 +165,81 @@ pw <- component_to_html(component("password_input", id = "k",
 expect_true(grepl('type="password"', pw, fixed = TRUE))
 expect_true(grepl('value=""', pw, fixed = TRUE))
 
+# --- a multiple select's selections all render selected ---
+#
+# The lowering compared ch$value against x$selected with identical(),
+# which against a list is always FALSE: an app could choose three
+# options and the served page would show none of them chosen.
+multi <- component_to_html(component("select_input", id = "tags",
+                                     choices = c("a", "b", "c"),
+                                     selected = c("a", "c"),
+                                     multiple = TRUE))
+expect_equal(length(gregexpr('selected="selected"', multi)[[1]]), 2L)
+expect_true(grepl('<option value="a" selected="selected">', multi,
+                  fixed = TRUE))
+expect_true(grepl('<option value="c" selected="selected">', multi,
+                  fixed = TRUE))
+expect_true(grepl('<option value="b">', multi, fixed = TRUE))
+expect_true(grepl('multiple="multiple"', multi, fixed = TRUE))
+
+# and a single select still marks exactly the one
+single <- component_to_html(component("select_input", id = "s",
+                                      choices = c("a", "b"),
+                                      selected = "b"))
+expect_true(grepl('<option value="b" selected="selected">', single,
+                  fixed = TRUE))
+expect_false(grepl('<option value="a" selected="selected">', single,
+                   fixed = TRUE))
+
+# --- what each input reports is what INPUT_META declares ---
+#
+# The declaration used to be documentation nothing checked, which is
+# how select_input came to say "string" for a control whose value is
+# a list. Held against the seed, because that is the value the server
+# starts with and the one a browser would have harvested.
+seed_of <- glinty:::input_seed_value
+r_type <- function(v) {
+    if (is.null(v)) {
+        "null"
+    } else if (is.logical(v)) {
+        "bool"
+    } else if (is.numeric(v)) {
+        "number"
+    } else if (length(v) == 1L) {
+        "string"
+    } else {
+        "strings"
+    }
+}
+for (nm in names(INPUT_META)) {
+    meta <- INPUT_META[[nm]]
+    if (is.null(meta$value_type)) {
+        next
+    }
+    args <- list(nm, id = "probe")
+    if (nm %in% c("select_input", "radio_buttons")) {
+        args$choices <- c("a", "b")
+    }
+    if (identical(nm, "slider_input")) {
+        args$min <- 0
+        args$max <- 1
+    }
+    seed <- seed_of(do.call(component, args))
+    # files and an unseeded field have no value to type-check
+    if (!is.null(seed) && !identical(meta$value_type, "files")) {
+        expect_equal(r_type(seed), meta$value_type)
+    }
+}
+
+# the select declares both, and each one is what it actually seeds
+expect_equal(INPUT_META$select_input$value_type, "string")
+expect_equal(INPUT_META$select_input$value_type_multiple, "strings")
+expect_equal(r_type(seed_of(component("select_input", id = "m",
+                                      choices = c("a", "b"),
+                                      selected = c("a", "b"),
+                                      multiple = TRUE))),
+             "strings")
+
 # --- choices normalize identically however they were written ---
 named <- component("select_input", id = "s", choices = c(Fast = "fast"))
 bare <- component("select_input", id = "s", choices = "fast")

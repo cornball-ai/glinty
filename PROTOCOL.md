@@ -214,6 +214,7 @@ not a silent default.
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
 | `password_input` | `id` | `label`, `placeholder` — **never `value`** |
 | `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
+| `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
 | `button` | `id`, `label` | `variant`, `icon` |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
@@ -223,6 +224,22 @@ not a silent default.
 
 `password_input` has no `value` field **in the schema**, not merely by
 convention. A field that cannot be expressed cannot leak.
+
+`select_input` is the one component whose value type depends on a
+field rather than only on the component. With `multiple: false`,
+`selected` is a bare string and so is the `input` value it reports.
+With `multiple: true`, both are an **array at every length** —
+including one element and none:
+
+```json
+{"component": "select_input", "id": "tags", "multiple": true,
+ "selected": ["a"], "choices": [{"value": "a", "label": "Alpha"}]}
+```
+
+`["a"]`, not `"a"`. A one-element selection that collapses to a bare
+string makes a client parse a list on Tuesday and a string on
+Wednesday, and every lowering then grows its own guess about which
+it got. The same rule holds for `input` and `input_update`.
 
 ### The Flutter column
 
@@ -242,27 +259,59 @@ rather than an intention.
 | `spacer` | `SizedBox` | size × theme spacing |
 | `row` / `column` | `Row` / `Column` | `gap` → `spacing` (Flutter 3.27+) or separators |
 | `panel` | `Card` / `Container` | variant selects |
-| `text_input` | `TextField` | `emit` → `onChanged` vs `onEditingComplete` |
+| `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit |
 | `password_input` | `TextField(obscureText: true)` | |
 | `textarea_input` | `TextField(maxLines:)` | |
-| `number_input` | `TextField` + `TextInputType.number` | Flutter has no spinner |
-| `select_input` | `DropdownButton` | `multiple` has no direct widget |
+| `number_input` | `TextField` + `TextInputType.number` | Flutter has no spinner; bounds show as helper text |
+| `select_input` | `DropdownButton`, or `FilterChip`s | `multiple` has no dropdown; chips carry the list |
 | `checkbox_input` | `CheckboxListTile` | |
-| `radio_buttons` | `RadioListTile` | |
-| `slider_input` | `Slider` | `divisions` = range / step |
-| `date_input` | `showDatePicker` | a dialog, not an inline field |
-| `file_input` | `file_picker` package | not in the SDK |
+| `radio_buttons` | `RadioGroup` + `RadioListTile` | |
+| `slider_input` | `Slider` | `divisions` = range / step; `settle` reports on `onChangeEnd` |
+| `date_input` | `showDatePicker` | a dialog, not an inline field: **refused by name** |
+| `file_input` | `file_picker` package | not in the SDK: **refused by name** |
 | `button` | `FilledButton` etc. | variant selects the constructor |
+| `download_button` | `FilledButton` + ticket request | disabled without an `onDownload` embedder callback |
 | `tabset` | `TabBar` + `TabBarView` | both retain hidden child state |
+| `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
+| `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
+| `plot_output`, `image_output`, `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
 
-Three of those flagged real work before any Dart existed, and all
-three still hold: `select_input(multiple = TRUE)` has no single
-Flutter widget, `date_input` is a dialog rather than an inline
-control, and `file_input` needs a package outside the SDK.
+Of the three this table flagged before any Dart existed, one is
+closed and two hold. `select_input(multiple = TRUE)` has no single
+Flutter widget, but it does not need one: the value is a list, and a
+`Wrap` of `FilterChip`s carries a list. `date_input` is still a
+dialog rather than an inline control, and `file_input` still needs a
+package outside the SDK, so both are refused by name.
 
-`icon` needed a name-to-`IconData` map, which dart/glinty_flutter now has.
+`icon` needed a name-to-`IconData` map, which dart/glinty_flutter now
+has.
+
+The rest of the refusals are deliberate rather than pending.
+`raw_html` and `html_output` carry markup, which has no Flutter
+equivalent by design -- the first in the tree, the second as a value.
+`audio_output` needs an audio package outside the SDK. `plot_output`,
+`image_output` and `ui_output` have their protocol halves (measure
+messages, the `image` and `ui` kinds) and not their client halves;
+they are the honest remaining work.
+
 None are blocking. All are cheaper to know now than after the
 vocabulary is frozen.
+
+### Frames beyond the tree
+
+Three message types are about the app rather than parts of it, and
+both clients draw all three:
+
+| frame | browser | Flutter |
+|---|---|---|
+| `modal` | an overlay built from the body tree | an overlay `Card` behind a scrim |
+| `progress` | a stack of `.g-progress` bars | a stack of `LinearProgressIndicator`s |
+| `custom` | the handler registered with `Glinty.addCustomMessageHandler()` | the handler passed as `GlintyApp(customHandlers:)` |
+
+A `custom` frame naming a handler nothing registered is warned about
+in the browser console and named on screen in Flutter. The same rule
+as an unsupported component: an app whose client half was never
+ported looks like it works and quietly does part of what it says.
 
 ### Output kinds
 

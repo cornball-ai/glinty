@@ -266,8 +266,13 @@ html_number <- function(x) {
 }
 
 html_select <- function(x) {
+    # A multiple select carries a list of selections, so membership
+    # rather than equality. identical() against a list is always
+    # FALSE, which rendered every option unselected however many the
+    # app had chosen.
+    chosen <- as.character(unlist(x$selected, use.names = FALSE))
     opts <- paste(vapply(x$choices, function(ch) {
-        sel <- if (identical(ch$value, x$selected)) "selected" else NULL
+        sel <- if (ch$value %in% chosen) "selected" else NULL
         html_el("option", list(value = ch$value, selected = sel),
                 html_escape(ch$label))
     }, character(1L)), collapse = "")

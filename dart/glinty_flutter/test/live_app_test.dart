@@ -351,7 +351,10 @@ void main() {
 
     await tester.pumpWidget(app());
     await tester.pump();
-    expect(sockets.single.sent.single['features'], isEmpty);
+    // measure, modal and progress are this client's own and always
+    // hold; download is the embedder's and holds only when wired.
+    expect(sockets.single.sent.single['features'],
+        isNot(contains('download')));
 
     // a fresh closure, same capability: no reconnect
     await tester.pumpWidget(app(onDownload: (u) {}));
@@ -368,7 +371,8 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pump();
     expect(sockets, hasLength(3));
-    expect(sockets.last.sent.single['features'], isEmpty);
+    expect(sockets.last.sent.single['features'],
+        isNot(contains('download')));
   });
 }
 

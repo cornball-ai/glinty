@@ -77,7 +77,12 @@ void main() {
         ],
       }));
       expect(s.inputs.containsKey('empty'), isFalse);
-      expect(s.inputs.containsKey('multi'), isFalse);
+      // A multiple select is not one of them: an empty selection is a
+      // value, and the browser harvests it as `[]` from
+      // selectedOptions. Seeding nothing here left this client
+      // disagreeing with the other two before anyone had touched it.
+      expect(s.inputs['multi'], isEmpty);
+      expect(s.inputs.containsKey('multi'), isTrue);
       expect(s.inputs.containsKey('go'), isFalse);
     });
   });
@@ -284,8 +289,17 @@ void main() {
   });
 
   group('what hello declares', () {
-    test('features are declared only when wired', () {
-      expect(GlintySession().hello().body['features'], isEmpty);
+    test('features are declared only when they are real', () {
+      // Two kinds. measure, modal and progress are this client's own
+      // -- it reports output boxes, draws dialogs, draws progress
+      // reports -- so they hold on every connection. download needs
+      // an embedder, because nothing in this package can save a file,
+      // so it is declared only when one is wired. A feature named
+      // without an implementation is a claim the server believes.
+      final bare = GlintySession().hello().body['features'] as List;
+      expect(bare, containsAll(['measure', 'modal', 'progress']));
+      expect(bare, isNot(contains('download')));
+
       expect(
           GlintySession(features: const ['download'])
               .hello()

@@ -135,9 +135,9 @@ for (nm in names(COMPONENT_SCHEMA)) {
     for (fname in names(COMPONENT_SCHEMA[[nm]])) {
         spec <- COMPONENT_SCHEMA[[nm]][[fname]]
         expect_true(is.character(spec$type))
-        expect_true(spec$type %in% c("string", "number", "int", "bool",
-                                     "enum", "choices", "panels", "condition",
-                                     "children", "any"))
+        expect_true(spec$type %in% c("string", "strings", "number", "int",
+                                     "bool", "enum", "choices", "panels",
+                                     "condition", "children", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)
@@ -156,6 +156,49 @@ for (nm in names(COMPONENT_SCHEMA)) {
         }
     }
 }
+
+# --- a multiple select's selection is plural, and stays an array ---
+#
+# `selected` was field("string"), so c("a", "b") was rejected outright:
+# "pick some" was expressible only as "pick one", in the schema, in
+# INPUT_META and in both lowerings.
+multi <- component("select_input", id = "tags", choices = c("a", "b", "c"),
+                   selected = c("a", "c"), multiple = TRUE)
+expect_equal(unlist(multi$selected), c("a", "c"))
+
+# A single select still holds one, and says so rather than quietly
+# keeping the first.
+expect_error(component("select_input", id = "s", choices = c("a", "b"),
+                       selected = c("a", "b")),
+             "must be a single string")
+one <- component("select_input", id = "s", choices = c("a", "b"),
+                 selected = "b")
+expect_equal(one$selected, "b")
+expect_true(is.character(one$selected) && length(one$selected) == 1L)
+
+# The wire form is an array at every length, including one and zero.
+# Left to auto_unbox a one-element selection collapses to a bare
+# string, so a client parsing it sees a list on Tuesday and a string
+# on Wednesday.
+as_json <- function(x) {
+    as.character(jsonlite::toJSON(unclass_recursive(x), auto_unbox = TRUE))
+}
+solo <- component("select_input", id = "t", choices = c("a", "b"),
+                  selected = "a", multiple = TRUE)
+expect_true(grepl('"selected":["a"]', as_json(solo), fixed = TRUE))
+none <- component("select_input", id = "t", choices = c("a", "b"),
+                  multiple = TRUE)
+expect_true(grepl('"selected":[]', as_json(none), fixed = TRUE))
+expect_true(grepl('"selected":["a","c"]', as_json(multi), fixed = TRUE))
+
+# and a single select is a bare string on the wire, not a one-element
+# array -- the other half of the same contract
+expect_true(grepl('"selected":"b"', as_json(one), fixed = TRUE))
+
+# NAs are not selections
+expect_error(component("select_input", id = "s", choices = c("a", "b"),
+                       selected = c("a", NA), multiple = TRUE),
+             "must be strings")
 
 # --- fixtures ---
 fx <- component_fixtures()

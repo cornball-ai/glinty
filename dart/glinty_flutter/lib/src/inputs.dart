@@ -66,7 +66,11 @@ dynamic _seedFor(GlintyComponent c) {
       final max = c.number('max') ?? 1;
       return min + (max - min) / 2;
     case 'select_input':
-      if (c.boolean('multiple')) return null;
+      // A multiple select with nothing chosen has an empty selection,
+      // not an absent one -- the browser harvests `[]` from
+      // selectedOptions, and seeding null here would make this client
+      // disagree with the other two before anyone had touched it.
+      if (c.boolean('multiple')) return c.strings('selected');
       final selected = c.str('selected');
       if (selected != null) return selected;
       final choices = c.choices;

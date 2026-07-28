@@ -71,11 +71,11 @@ collect_input_seeds <- function(x) {
 #' Mirrors what a browser would have harvested from the rendered
 #' control, because that is the state the user actually sees:
 #' an empty text field is "", an untouched checkbox is FALSE, a
-#' single select shows its first choice, a slider with no value sits
-#' at the midpoint (the HTML default). NULL means this component
-#' seeds nothing and the input stays auto-NULL: an empty number
-#' field, a multi-select with nothing chosen, every button and
-#' output.
+#' single select shows its first choice, a multiple select with
+#' nothing chosen is character(0), a slider with no value sits at the
+#' midpoint (the HTML default). NULL means this component seeds
+#' nothing and the input stays auto-NULL: an empty number field,
+#' every button and output.
 #'
 #' @param x a component (or its unclassed list form)
 #' @return an initial value, or NULL
@@ -112,17 +112,25 @@ slider_default <- function(min, max) {
 #' Initial value of a select input
 #'
 #' A single select displays its first choice when nothing is
-#' selected, so that is its value. A multiple select displays
-#' nothing selected, so it has none.
+#' selected, so that is its value.
+#'
+#' A multiple select with nothing selected has an empty selection,
+#' which is a character(0) rather than a NULL. The browser harvests
+#' `Array.from(el.selectedOptions)` and gets `[]`, so seeding NULL
+#' here made the server disagree with the client it is mirroring
+#' before a single interaction had happened.
 #'
 #' @param x a select_input component
 #' @return character value, or NULL
 #' @keywords internal
 select_seed <- function(x) {
+    if (isTRUE(x$multiple)) {
+        return(as.character(unlist(x$selected, use.names = FALSE)))
+    }
     if (!is.null(x$selected)) {
         return(x$selected)
     }
-    if (isTRUE(x$multiple) || length(x$choices) == 0L) {
+    if (length(x$choices) == 0L) {
         return(NULL)
     }
     x$choices[[1L]]$value
