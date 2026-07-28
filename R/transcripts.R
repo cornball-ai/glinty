@@ -218,6 +218,28 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "ticket-refused",
+              notes = paste("the server will not grant this transfer:",
+                            "a ticket frame carrying `error` where a grant",
+                            "carries `token`. Answered on the channel the",
+                            "request was made on, so the client hands it to",
+                            "the control that asked rather than guessing",
+                            "which element an id meant -- and so `error`",
+                            "keeps meaning one thing, a render failure",
+                            "scoped to an output"),
+              frames = list(
+                            list(dir = "in", message = list(
+                        type = "ticket", id = "report",
+                        purpose = "download"
+                    )),
+                            list(dir = "out", message = list(
+                        type = "ticket", id = "report",
+                        purpose = "download",
+                        error = "too many pending transfers"
+                    ))
+            )
+        ),
+         list(
               name = "valued-event",
               notes = paste("a press from a list row. The value rides on",
                             "the event so one handler serves every row --",

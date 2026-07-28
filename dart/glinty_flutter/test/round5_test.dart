@@ -16,6 +16,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:glinty_flutter/glinty_flutter.dart';
 import 'package:web_socket/web_socket.dart';
 
+import 'transcript_data.dart';
+
 class FakeSocket implements WebSocket {
   final List<Map<String, dynamic>> sent = [];
   final _events = StreamController<WebSocketEvent>();
@@ -159,6 +161,7 @@ final liveTextTree = {
 void main() {
   _round7();
   _v31();
+  _ticketRefusals();
   group('outputs carry their kind and their errors', () {
     testWidgets('a kind this slot cannot draw is named, not stringified',
         (tester) async {
@@ -1239,4 +1242,94 @@ class _FakeHeaders implements HttpHeaders {
   void add(String name, Object value, {bool preserveHeaderCase = false}) {}
   @override
   noSuchMethod(Invocation i) => throw UnimplementedError('${i.memberName}');
+}
+
+/// A refused transfer answers on the ticket channel.
+///
+/// It used to arrive as an `error` frame scoped to the resource id.
+/// This client stores those against output ids and a download_button
+/// is not an output, so a Flutter refusal was invisible: the press
+/// did nothing and nothing said why.
+void _ticketRefusals() {
+  final downloadTree = {
+    'component': 'page',
+    'title': 'Download',
+    'children': [
+      {'component': 'download_button', 'id': 'report', 'label': 'Save',
+        'variant': 'primary'},
+    ],
+  };
+
+  Future<FakeSocket> bootDownload(WidgetTester tester) async {
+    late FakeSocket socket;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: GlintyApp(
+          url: Uri.parse('ws://x/ws'),
+          open: (_) async => socket = FakeSocket(),
+          onDownload: (_) {},
+        ),
+      ),
+    ));
+    await tester.pump();
+    socket.deliver(welcomeOf(downloadTree, 'rt1'));
+    await tester.pumpAndSettle();
+    return socket;
+  }
+
+  testWidgets('a refused transfer is visible, beside the control',
+      (tester) async {
+    final socket = await bootDownload(tester);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(socket.sent.last['type'], 'ticket');
+
+    socket.deliver({
+      'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'too many pending transfers',
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('too many pending transfers'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget,
+        reason: 'the label is the control; an error must not replace it');
+  });
+
+  testWidgets('asking again clears the refusal', (tester) async {
+    final socket = await bootDownload(tester);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    socket.deliver({
+      'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'error': 'at the cap',
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('at the cap'), findsOneWidget);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('at the cap'), findsNothing,
+        reason: 'a refusal belongs to the attempt that earned it');
+  });
+
+  testWidgets('a grant is not a refusal', (tester) async {
+    final socket = await bootDownload(tester);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    socket.deliver({
+      'type': 'ticket', 'id': 'report', 'purpose': 'download',
+      'token': 'tk_abc', 'expires': 30,
+    });
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cap'), findsNothing);
+  });
+
+  test('the refusal frame matches the shared transcript', () {
+    final expected = frames(transcript('ticket-refused'), 'out').first;
+    final s = GlintySession();
+    s.receive(expected);
+    expect(s.transferErrors[expected['id']], expected['error']);
+    expect(s.tickets, isEmpty,
+        reason: 'a refusal is not a credential');
+  });
 }

@@ -151,11 +151,11 @@ the server sent the tree, so it already knows the defaults.
 | `welcome` | `session`, `protocol`, `theme?`, `ui`, `ui_revision`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
 | `output` | `id`, `kind`, `value` | an output's current value, including `kind: "ui"` |
 | `input_update` | `id`, fields | server-driven input change |
-| `ticket` | `id`, `purpose`, `token`, `expires` | short-lived credential for one transfer |
+| `ticket` | `id`, `purpose`, and either `token` + `expires` or `error` | the answer to a ticket request: a credential, or why not |
 | `modal` | `action`, `title?`, `body?`, `footer?` | dialog |
 | `progress` | `action`, `id`, `message?`, `detail?`, `value?` | progress bar |
 | `custom` | `handler`, `value` | app-defined channel |
-| `error` | `id?`, `message` | render error, scoped to an output |
+| `error` | `id?`, `message` | a renderer failed, scoped to that output; id-less before `welcome` means the connection was refused |
 
 `welcome.ui` is **canonical**. Every client can rely on receiving the
 tree there, and a client that ignores everything else is correct.
@@ -730,6 +730,33 @@ and a leaked ticket is dead within seconds either way.
 The ticket is an opaque token held server-side, not a signed
 payload: a single-process server is the authority on what it issued,
 and a store it can consult beats cryptography it could get wrong.
+
+**A refusal is a ticket frame, not an error.** When the server will
+not grant one — at the live-ticket cap, say — it answers on the
+channel the request was made on, with `error` where a grant carries
+`token`:
+
+```json
+{"type": "ticket", "id": "report", "purpose": "download",
+ "error": "too many pending transfers"}
+```
+
+Answering is not optional. A client waiting on a grant that never
+comes leaves its control disabled forever, which is the silent
+failure this protocol keeps refusing to ship.
+
+It rides the ticket channel rather than an `error` frame for two
+reasons. The client is already holding the request that asked, so it
+knows exactly which control to give back — an `error` scoped to a
+resource id only names a *handler*, and several controls may share
+one, so the client would be guessing. And it keeps `error` meaning one
+thing: a renderer failed, scoped to that output. When refusals came
+through `error`, the two clients quietly disagreed about which — the
+browser marked every control routing to the id, Flutter stored it
+against an output slot and so showed nothing at all.
+
+A refusal is transient state belonging to one attempt. Both clients
+clear it when the control asks again.
 Signing would buy verification by a process that did not mint the
 ticket, which is not this architecture. (An earlier draft said
 "signed"; this is the honest replacement.)

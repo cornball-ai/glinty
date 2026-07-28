@@ -353,6 +353,15 @@ h1, h2, h3, h4 {
     height: auto;
 }
 
+/* Why a transfer was refused, beside the control that asked. A
+   title attribute is invisible on a touch screen; this can be read
+   and is removed on the next attempt. */
+.g-transfer-error {
+    color: var(--g-danger);
+    font-size: 0.875em;
+    margin-top: calc(var(--g-space) * 1);
+}
+
 .g-error {
     color: var(--g-danger);
 }

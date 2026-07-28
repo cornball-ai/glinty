@@ -201,6 +201,7 @@ class GlintyView extends StatelessWidget {
           // A relative image src is served by the same app; only the
           // connection knows what address that is.
           assetBase: conn?.assetBase,
+          transferErrors: s.transferErrors,
           // Only when the connection can actually deliver one. A
           // download button wired to a ticket request whose grant
           // has nowhere to go is the same lie as an InkWell with an

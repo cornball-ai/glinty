@@ -184,6 +184,13 @@ class GlintySession {
   final Map<String, Map<String, dynamic>> tickets =
       <String, Map<String, dynamic>>{};
 
+  /// Why a transfer was refused, per resource id.
+  ///
+  /// Separate from [errors], which are render failures scoped to an
+  /// output. A refused ticket belongs to the control that asked, and
+  /// clears when it asks again.
+  final Map<String, String> transferErrors = <String, String>{};
+
   /// The open dialog's frame, or null. One at a time, because
   /// show_modal() replaces rather than stacks.
   Map<String, dynamic>? modal;
@@ -273,7 +280,19 @@ class GlintySession {
         final id = msg['id'];
         final purpose = msg['purpose'];
         if (id is String && purpose is String) {
-          tickets['$purpose:$id'] = msg;
+          final refusal = msg['error'];
+          if (refusal != null) {
+            // A refusal answers the request that asked, so it lands
+            // where that request's control can see it. Sent as an
+            // `error` frame it was invisible here entirely: this
+            // client stores those against output ids, and a
+            // download_button is not an output.
+            transferErrors[id] = refusal.toString();
+            tickets.remove('$purpose:$id');
+          } else {
+            transferErrors.remove(id);
+            tickets['$purpose:$id'] = msg;
+          }
         }
       case 'input_update':
         // A server-driven change is a value change like any other,
@@ -387,6 +406,7 @@ class GlintySession {
       pushes.clear();
       modal = null;
       progress.clear();
+      transferErrors.clear();
       unhandledCustom.clear();
       // The new session has never been told a box. Keeping the old
       // dedup keys would leave every plot unmeasured until something
@@ -477,8 +497,12 @@ class GlintySession {
   }
 
   /// Ask for a transfer ticket. The grant arrives as a `ticket`
-  /// frame and lands in [tickets] under "purpose:id".
+  /// frame and lands in [tickets] under "purpose:id"; a refusal
+  /// arrives on the same frame carrying `error` instead.
   void requestTicket(String id, String purpose) {
+    // Asking again clears the last answer, so a refusal cannot outlive
+    // the attempt that earned it.
+    if (transferErrors.remove(id) != null) _changed();
     _emit(GlintyOutgoing(
         'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
   }

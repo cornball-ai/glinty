@@ -536,6 +536,20 @@ void main() {
       expect(s.sent.single.body, expected);
     });
 
+    test('a refused ticket lands as a transfer error, not a grant', () {
+      // The refusal answers on the ticket channel. As an `error`
+      // frame this client stored it against an output id, and a
+      // download_button is not an output, so it was invisible.
+      final refusal = frames(transcript('ticket-refused'), 'out').first;
+      final s = GlintySession();
+      s.receive(refusal);
+
+      expect(s.transferErrors[refusal['id']], refusal['error']);
+      expect(s.tickets, isEmpty);
+      expect(s.errors, isEmpty,
+          reason: 'a refused transfer is not a render failure');
+    });
+
     test('a valued event frame matches the transcript shape', () {
       // The other half of the event shape: a press from a list row
       // carries which row. A client that drops the value reports a

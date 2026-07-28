@@ -1324,34 +1324,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
            dropped on the floor if the lookup were getElementById --
            which is exactly how a refused download ticket goes
            unreported. */
-        put({ component: "download_button", id: "report", label: "Save" });
-        page.ws().deliver({ type: "error", id: "report",
-                            message: "too many pending transfers" });
-        const dlBtn = host.querySelector('[data-g-target="report"]');
-        check("an error scoped to a button still reaches it",
-              dlBtn.classList.contains("g-error"));
-        check("and goes in the title rather than over the label",
-              dlBtn.title === "too many pending transfers" &&
-              dlBtn.textContent === "Save");
-
-        /* An error names a handler, not a press. If several controls
-           route to one id the server cannot say which failed, so all
-           of them are equally affected -- marking an arbitrary first
-           would put the message on a control nobody touched. */
-        put({ component: "column", children: [
-            { component: "download_button", id: "report", label: "Top",
-              variant: "ghost" },
-            { component: "download_button", id: "report", label: "Bottom",
-              variant: "ghost" }
-        ] });
-        page.ws().deliver({ type: "error", id: "report",
-                            message: "at the cap" });
-        const both = host.querySelectorAll('[data-g-target="report"]');
-        check("an error reaches every control routing to that id",
-              both.length === 2 &&
-              both.every((b) => b.classList.contains("g-error") &&
-                  b.title === "at the cap"));
-
         /* An id is app-chosen text. Building a selector out of it lets
            a quote or a bracket throw out of querySelector, or match
            something else entirely; the attribute is compared instead. */
@@ -1843,11 +1815,68 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.fire("change", up);
         check("the control is disabled while it waits", up.disabled === true);
 
-        /* the server is at its live-ticket cap and says so */
-        page.ws().deliver({ type: "error", id: "dataset",
-                            message: "too many pending transfers" });
+        /* The server is at its live-ticket cap and says so, on the
+           channel the request was made on. As an `error` frame this
+           meant two unrelated things at once and the client had to
+           guess which element the id named. */
+        const refusal = frames(transcript("ticket-refused"), "out")[0];
+        page.ws().deliver({ type: "ticket", id: "dataset",
+                            purpose: "upload", error: refusal.error });
         check("a refused grant re-enables the control rather than "
               + "leaving it dead", up.disabled === false);
+
+        /* And says why, where it can be read. A title attribute is
+           invisible on a touch screen and sticks around; a sibling
+           node can be seen and can be removed on the next attempt. */
+        const noteFor = (id) => page.document.querySelector(
+            '[data-g-transfer-error="' + id + '"]');
+        check("and says why, visibly beside the control",
+              noteFor("dataset") !== null &&
+              noteFor("dataset").textContent === refusal.error);
+        check("without overwriting anything the control owns",
+              up.getAttribute("type") === "file");
+
+        /* Asking again clears the last answer: a refusal belongs to
+           the attempt that earned it. */
+        up.files = [{ name: "b.bin" }];
+        page.fire("change", up);
+        check("a retry clears the refusal", noteFor("dataset") === null);
+
+        /* A download button takes the same path. Sent as an `error`
+           it marked the button red and replaced its label. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "download_button", id: "report",
+                     label: "Save", variant: "primary" }
+        });
+        const dl = page.document.querySelector('[data-g-download="report"]');
+        page.fire("click", dl);
+        check("a download disables its button while it waits",
+              dl.disabled === true);
+
+        page.ws().deliver({ type: "ticket", id: "report",
+                            purpose: "download", error: "at the cap" });
+        check("a refused download gives the button back and says why",
+              dl.disabled === false &&
+              dl.textContent === "Save" &&
+              noteFor("report") !== null &&
+              noteFor("report").textContent === "at the cap");
+
+        page.fire("click", dl);
+        check("and pressing again clears it", noteFor("report") === null);
+
+        /* An `error` frame is now only ever a render failure, which
+           is what the spec says and what every client assumes. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "text_output", id: "slot" }
+        });
+        page.ws().deliver({ type: "error", id: "slot",
+                            message: "object not found" });
+        const slot = page.document.getElementById("slot");
+        check("an error still fills its output slot",
+              slot.classList.contains("g-error") &&
+              slot.textContent === "Error: object not found");
     }
 
     /* ---------------------------------------------------------- */

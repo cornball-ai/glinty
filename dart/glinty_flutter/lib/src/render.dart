@@ -81,6 +81,7 @@ class GlintyRenderer {
       this.onModalClose,
       this.onMeasure,
       this.assetBase,
+      this.transferErrors = const {},
       this.values = const {},
       this.kinds = const {},
       this.errors = const {},
@@ -191,6 +192,11 @@ class GlintyRenderer {
   /// name; without this it would stringify the payload instead, and
   /// an image would render as `{src: data:image/png;base64,iVBOR...`.
   final Map<String, String> kinds;
+
+  /// Why a transfer was refused, per resource id. Separate from
+  /// [errors]: a render failure belongs to an output slot, a refused
+  /// ticket belongs to the control that asked for it.
+  final Map<String, String> transferErrors;
 
   /// Render errors per output id. The server said why the value is
   /// missing, so the slot shows that rather than sitting blank.
@@ -803,7 +809,7 @@ class GlintyRenderer {
     // are identities: an input id names one value in one store.
 
     final scheme = Theme.of(context).colorScheme;
-    return switch (_variant(c.type, c.str('variant'))) {
+    final button = switch (_variant(c.type, c.str('variant'))) {
       'primary' =>
         FilledButton(onPressed: dead ? null : fire, child: child),
       'secondary' =>
@@ -820,6 +826,27 @@ class GlintyRenderer {
       _ =>
         ElevatedButton(onPressed: dead ? null : fire, child: child),
     };
+
+    // A refused transfer, beside the control that asked. The label
+    // stays its own -- overwriting it with an error string loses the
+    // control -- and the message goes when the next attempt clears it.
+    final refusal = transferErrors[id];
+    if (refusal == null) return button;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        button,
+        Padding(
+          padding: EdgeInsets.only(top: spacing),
+          child: Text(refusal,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: scheme.error)),
+        ),
+      ],
+    );
   }
 
   // --- outputs ---

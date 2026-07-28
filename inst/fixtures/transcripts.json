@@ -349,6 +349,29 @@
       ]
     },
     {
+      "name": "ticket-refused",
+      "notes": "the server will not grant this transfer: a ticket frame carrying `error` where a grant carries `token`. Answered on the channel the request was made on, so the client hands it to the control that asked rather than guessing which element an id meant -- and so `error` keeps meaning one thing, a render failure scoped to an output",
+      "frames": [
+        {
+          "dir": "in",
+          "message": {
+            "type": "ticket",
+            "id": "report",
+            "purpose": "download"
+          }
+        },
+        {
+          "dir": "out",
+          "message": {
+            "type": "ticket",
+            "id": "report",
+            "purpose": "download",
+            "error": "too many pending transfers"
+          }
+        }
+      ]
+    },
+    {
       "name": "valued-event",
       "notes": "a press from a list row. The value rides on the event so one handler serves every row -- the press says which. A client that drops it reports a press the server cannot place, which is why the field is on the wire and not in the id",
       "frames": [

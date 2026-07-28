@@ -386,9 +386,26 @@
     function deliverTicket(msg) {
         var key = msg.purpose + ":" + msg.id;
         var queue = ticketWaiters[key];
-        if (queue && queue.length) {
-            queue.shift().grant(msg);
+        if (!queue || !queue.length) return;
+        var waiter = queue.shift();
+        /* A refusal answers the request it refuses, so it goes to the
+           one waiter that asked -- not to whichever element on the
+           page happens to carry that id. */
+        if (msg.error !== undefined && msg.error !== null) {
+            if (waiter.refused) waiter.refused(msg.error);
+            return;
         }
+        /* Neither a credential nor a reason is a malformed answer.
+           Treat it as a refusal rather than handing a control an
+           undefined token: the request is over either way, and the
+           control has to come back. */
+        if (!msg.token) {
+            console.warn("glinty: ticket answer with neither token nor "
+                         + "error", msg);
+            if (waiter.refused) waiter.refused("the server did not answer");
+            return;
+        }
+        waiter.grant(msg);
     }
 
     /* The server can refuse a grant (too many pending transfers).
@@ -413,23 +430,24 @@
             fd.append("file", f, f.name);
         });
         el.disabled = true;
+        clearTransferNotice(el);
         requestTicket(el.dataset.gUpload, "upload", function (ticket) {
             fetch(
                 "/upload?ticket=" + encodeURIComponent(ticket.token),
                 { method: "POST", body: fd }
             ).then(function (resp) {
                 if (!resp.ok) throw new Error("upload failed: " + resp.status);
-                el.classList.remove("g-error");
+                clearTransferNotice(el);
             }).catch(function () {
-                el.classList.add("g-error");
+                showTransferNotice(el, "the upload did not complete");
             }).finally(function () {
                 el.disabled = false;
             });
-        }, function () {
+        }, function (message) {
             /* refused: give the control back rather than leaving it
-               dead while the user wonders what happened */
+               dead, and say why where it can be read */
             el.disabled = false;
-            el.classList.add("g-error");
+            showTransferNotice(el, message);
         });
     }
 
@@ -1240,26 +1258,20 @@
             console.error("glinty:", msg.message);
             return;
         }
-        /* Every control routing to this id, not the first one found.
-           An error is scoped to a *handler*: if three buttons share
-           `report`, the server has no way to say which press failed
-           and all three are equally affected. Marking an arbitrary
-           one would put the message on a control the user did not
-           touch.
+        /* An error is scoped to an output, which is what the spec
+           says and what every client assumes: a renderer failed, and
+           its slot says so instead of sitting there with a stale
+           value. A slot's id is an identity, so there is exactly one.
 
-           A button's label is its own, so the message goes in the
-           title rather than over the text -- replacing a button's
-           label with an error string loses the control. Output slots
-           exist to be filled, so those still take the text. */
-        var els = elementsFor(msg.id);
-        if (!els.length) return;
-        els.forEach(function (el) {
-            el.classList.add("g-error");
-            el.title = msg.message;
-            if (el.dataset.gMessage !== "event") {
-                el.textContent = "Error: " + msg.message;
-            }
-        });
+           Transfer refusals used to come through here too, which made
+           this message mean two unrelated things and forced a guess
+           about which element on the page an id referred to. They
+           answer on the ticket channel now. */
+        var el = elementsFor(msg.id)[0];
+        if (!el) return;
+        el.classList.add("g-error");
+        el.textContent = "Error: " + msg.message;
+        el.title = msg.message;
     }
 
     /* ---------- hydration ---------- */
@@ -1482,9 +1494,6 @@
                           msg.message || "The server refused this connection.");
                 break;
             }
-            /* an error naming a resource someone is waiting on is
-               that wait's answer */
-            if (msg.id) refuseTickets(msg.id, msg.message);
             applyError(msg);
             break;
         default:
@@ -1610,10 +1619,41 @@
        time. A press asks for a ticket and navigates to it. */
     function startDownload(el) {
         if (!sessionId) return;
+        clearTransferNotice(el);
+        el.disabled = true;
         requestTicket(el.dataset.gDownload, "download", function (ticket) {
+            el.disabled = false;
             window.location.href =
                 "/download?ticket=" + encodeURIComponent(ticket.token);
+        }, function (message) {
+            el.disabled = false;
+            showTransferNotice(el, message);
         });
+    }
+
+    /* Why a transfer was refused, beside the control that asked.
+       A title attribute is invisible on a touch screen and sticks
+       until something else happens to clear it; a sibling node can be
+       seen and can be removed on the next attempt. The control's own
+       label is left alone -- overwriting it with an error string
+       loses the control. */
+    function showTransferNotice(el, message) {
+        clearTransferNotice(el);
+        var note = document.createElement("div");
+        note.className = "g-transfer-error";
+        note.setAttribute("data-g-transfer-error", el.dataset.gTarget || "");
+        note.setAttribute("role", "status");
+        note.textContent = message || "the transfer was refused";
+        if (el.parentNode) el.parentNode.insertBefore(note, el.nextSibling);
+        el._gNote = note;
+    }
+
+    function clearTransferNotice(el) {
+        el.classList.remove("g-error");
+        if (el._gNote) {
+            el._gNote.remove();
+            el._gNote = null;
+        }
     }
 
     /* ---------- disconnect overlay ---------- */
