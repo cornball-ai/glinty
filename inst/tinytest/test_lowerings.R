@@ -359,10 +359,18 @@ expect_false(grepl(' id="', rows, fixed = TRUE))
 expect_equal(length(gregexpr('data-g-target="history_view"', rows)[[1]]), 3L)
 expect_equal(length(gregexpr("data-g-value=", rows)[[1]]), 3L)
 
-# an ordinary button still gets one, because it is the only one
-expect_true(grepl('id="go"',
-                  component_to_html(component("button", id = "go",
-                                              label = "Run")),
+# an ordinary button gets none either. Nothing makes a button id
+# unique: a form with Save at the top and the bottom shares one
+# without meaning anything by it, so two would collide.
+plain_saves <- paste(rep(component_to_html(component("button", id = "save",
+                                                     label = "Save")), 2L),
+                     collapse = "")
+expect_false(grepl(' id="save"', plain_saves, fixed = TRUE))
+expect_equal(length(gregexpr('data-g-target="save"', plain_saves)[[1]]), 2L)
+
+# an input keeps its id, because that id names one value in one store
+expect_true(grepl('id="name"',
+                  component_to_html(component("text_input", id = "name")),
                   fixed = TRUE))
 
 # --- what each input reports is what INPUT_META declares ---

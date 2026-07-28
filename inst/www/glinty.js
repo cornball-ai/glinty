@@ -511,9 +511,12 @@
             c.value !== undefined;
         var attrs = {};
         /* The component id says which handler hears this, not which
-           element it is. A list of rows shares the handler, so
-           emitting it as a DOM id would give every row the same one. */
-        if (!valued) attrs.id = c.id;
+           element it is, and for an event those are never the same:
+           nothing makes a button id unique. A row list shares one
+           deliberately; a form with Save top and bottom shares one
+           without meaning anything by it. An input's id does name one
+           value in one store, so it keeps the attribute. */
+        if (message !== "event") attrs.id = c.id;
         attrs["data-g-target"] = c.id;
         attrs["data-g-message"] = message;
         if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
@@ -982,6 +985,20 @@
 
     /* ---------- incoming ---------- */
 
+    /* The element a server message names.
+       A component id is a routing name, and only some components put
+       it in the DOM as an id -- event buttons deliberately do not,
+       because several may share one. Outputs carry data-g-output and
+       bound controls carry data-g-target, so look there too rather
+       than dropping a message whose element is findable by the name
+       it was actually addressed with. */
+    function elementFor(id) {
+        if (id === null || id === undefined) return null;
+        return document.getElementById(id) ||
+            document.querySelector('[data-g-output="' + id + '"]') ||
+            document.querySelector('[data-g-target="' + id + '"]');
+    }
+
     function clearError(el) {
         el.classList.remove("g-error");
         el.removeAttribute("title");
@@ -1053,7 +1070,7 @@
        the wire; this is the only place that knows text means
        textContent here. */
     function applyOutput(msg) {
-        var el = document.getElementById(msg.id);
+        var el = elementFor(msg.id);
         if (!el) return;
         clearError(el);
         switch (msg.kind) {
@@ -1140,7 +1157,7 @@
     }
 
     function applyInputUpdate(msg) {
-        var el = document.getElementById(msg.id);
+        var el = elementFor(msg.id);
         if (!el) return;
 
         /* A server-driven update is a value change like any other, so
@@ -1210,7 +1227,7 @@
             console.error("glinty:", msg.message);
             return;
         }
-        var el = document.getElementById(msg.id);
+        var el = elementFor(msg.id);
         if (!el) return;
         el.classList.add("g-error");
         el.textContent = "Error: " + msg.message;

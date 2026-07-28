@@ -1265,7 +1265,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               valued.length === 1 && valued[0].id === "history_view" &&
               valued[0].value === "entry_7");
 
-        page.fire("click", page.document.getElementById("go"));
+        page.fire("click", page.document.querySelector('[data-g-target="go"]'));
         const plain = page.frames("event").pop();
         check("an ordinary button sends no value at all",
               plain.id === "go" && !("value" in plain));
@@ -1296,6 +1296,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const which = page.frames("event").slice(rowBefore);
         check("clicking one reports which row it was",
               which.length === 1 && which[0].value === "b");
+
+        /* Two ordinary buttons sharing an id -- Save at the top and
+           the bottom of a form. Nothing makes a button id unique, so
+           the plain case duplicates just as readily as the valued
+           one, and neither may claim a DOM id. */
+        put({ component: "column", children: [
+            { component: "button", id: "save", label: "Save top",
+              variant: "ghost" },
+            { component: "button", id: "save", label: "Save bottom",
+              variant: "primary" }
+        ] });
+        const saves = host.querySelectorAll('[data-g-target="save"]');
+        check("two plain buttons may share a handler",
+              saves.length === 2 &&
+              saves.every((b) => b.getAttribute("id") === null));
+
+        const saveBefore = page.frames("event").length;
+        page.fire("click", saves[1]);
+        const fired = page.frames("event").slice(saveBefore);
+        check("and either one reports the same handler",
+              fired.length === 1 && fired[0].id === "save" &&
+              !("value" in fired[0]));
+
+        /* A scoped error still finds a button. Buttons carry no DOM
+           id now, so a message addressed by routing name would be
+           dropped on the floor if the lookup were getElementById --
+           which is exactly how a refused download ticket goes
+           unreported. */
+        put({ component: "download_button", id: "report", label: "Save" });
+        page.ws().deliver({ type: "error", id: "report",
+                            message: "too many pending transfers" });
+        const dlBtn = host.querySelector('[data-g-target="report"]');
+        check("an error scoped to a button still reaches it",
+              dlBtn.classList.contains("g-error"));
     }
 
     /* ---------------------------------------------------------- */
@@ -1493,7 +1527,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("its input is bound",
               page.document.getElementById("extra")
                   .getAttribute("data-g-target") === "extra");
-        page.fire("click", page.document.getElementById("go2"));
+        page.fire("click", page.document.querySelector('[data-g-target="go2"]'));
         check("its button reports through root delegation",
               page.frames("event").some((m) => m.id === "go2"));
     }
@@ -1583,7 +1617,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               modal !== null && modal.closest("#glinty-root") !== null);
         check("its body rendered as components",
               modal.textContent.includes("Proceed?"));
-        page.fire("click", page.document.getElementById("confirm"));
+        page.fire("click", page.document.querySelector('[data-g-target="confirm"]'));
         check("its button reaches the server as an event",
               page.frames("event").some((m) => m.id === "confirm"));
 
@@ -1638,9 +1672,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             value: { component: "download_button", id: "report",
                      label: "Save" }
         });
-        const dl = page.document.getElementById("report");
+        /* By the download mark, not by a DOM id: a download_button is
+           an event button and carries none. */
+        const dl = page.document.querySelector('[data-g-download="report"]');
         check("download buttons carry their download id",
-              dl.getAttribute("data-g-download") === "report");
+              dl !== null && dl.getAttribute("id") === null &&
+              dl.getAttribute("data-g-target") === "report");
         const eventsBefore = page.frames("event").length;
         page.fire("click", dl);
         const reqs = page.frames("ticket");

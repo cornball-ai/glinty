@@ -315,13 +315,18 @@ html_field_group <- function(x, control) {
 html_bind <- function(x) {
     meta <- INPUT_META[[x$component]]
     # A component's `id` is which server handler hears it, not which
-    # element it is. Those are the same thing until a button carries a
-    # value -- the whole point of `value` is that a list of rows share
-    # one handler -- and then emitting `id` gives every row the same
-    # DOM id. data-g-target still carries the handler name, which is
-    # what the delegation reads.
-    valued <- !is.null(x$value) && identical(meta$message, "event")
-    if (valued) {
+    # element it is, and for an event those are never the same thing:
+    # nothing makes a button id unique. A list of rows shares one
+    # deliberately -- that is what `value` is for -- and a form with
+    # Save at the top and the bottom shares one without meaning
+    # anything by it. Either way, emitting it as a DOM id duplicates
+    # it.
+    #
+    # An input is different: its id names one value in one store, so
+    # it is an identity and keeps the attribute. data-g-target carries
+    # the routing name in both cases, which is what the click
+    # delegation reads and what elementFor() falls back to.
+    if (identical(meta$message, "event")) {
         out <- list()
     } else {
         out <- list(id = x$id)
