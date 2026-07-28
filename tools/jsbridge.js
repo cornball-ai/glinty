@@ -27,6 +27,11 @@ const TRANSCRIPTS = JSON.parse(fs.readFileSync(
     path.join(__dirname, "..", "inst", "fixtures", "transcripts.json"),
     "utf8"));
 const CLIENT_SRC = fs.readFileSync(CLIENT_PATH, "utf8");
+/* The stylesheet is part of the browser lowering: an icon component
+   builds a span and the glyph comes from here, so a name with no rule
+   renders nothing at all. */
+const CSS_SRC = fs.readFileSync(
+    path.join(path.dirname(CLIENT_PATH), "glinty.css"), "utf8");
 
 let failures = 0;
 let current = "";
@@ -1050,6 +1055,46 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.ws().deliver({ type: "welcome", session: "s-new", protocol: 3,
                             resumed: false });
         check("resumed=false reloads", page.reloads === 1);
+    }
+
+    /* ---------------------------------------------------------- */
+    /* ---------------------------------------------------------- */
+    section("every icon in the set has artwork");
+    {
+        /* An icon lowers to an empty span and the glyph comes from
+           the stylesheet, so "it rendered" is satisfied by a span
+           that draws nothing -- which is exactly what every icon did
+           until now: glinty.css had one .g-icon rule and no artwork
+           for any name. The fixtures could not catch it because an
+           empty span is a successful render. */
+        const names = FIXTURES.fixtures
+            .filter((f) => f.component.component === "icon")
+            .map((f) => f.component.name);
+        const unique = [...new Set(names)];
+        check("the fixtures cover more than one icon name",
+              unique.length > 1);
+        const missing = unique.filter(
+            (n) => !CSS_SRC.includes(".g-icon-" + n + " {"));
+        check("every fixture icon name has a rule in glinty.css",
+              missing.length === 0);
+
+        /* And the rule has to be a mask, not just a selector: the
+           glyph is what makes it an icon, and a rule that sets only
+           colour or size draws the same nothing. */
+        const noGlyph = unique.filter((n) => {
+            const at = CSS_SRC.indexOf(".g-icon-" + n + " {");
+            if (at === -1) return true;
+            const body = CSS_SRC.slice(at, CSS_SRC.indexOf("}", at));
+            return !body.includes("mask-image");
+        });
+        check("and that rule carries a glyph", noGlyph.length === 0);
+
+        /* The colour rule lives on .g-icon and is what makes a masked
+           glyph visible at all -- without it the mask has nothing to
+           reveal. */
+        check("icons take the colour of their container",
+              /\.g-icon\s*\{[^}]*background-color:\s*currentColor/.test(
+                  CSS_SRC));
     }
 
     /* ---------------------------------------------------------- */

@@ -157,6 +157,18 @@ for (nm in names(COMPONENT_SCHEMA)) {
     }
 }
 
+# --- an icon name is a closed set, not free text ---
+#
+# Every frontend supplies artwork per name, so a name no frontend
+# draws is a component that renders nothing. As field("string") that
+# was silent in both lowerings at once: an empty span in the browser,
+# a question-mark glyph in Flutter.
+expect_error(component("icon", name = "sparkles"), "must be one of")
+expect_error(component("icon", name = "sparkles"), "play")
+for (nm in glinty:::ICON_NAMES) {
+    expect_equal(component("icon", name = nm)$name, nm)
+}
+
 # --- a multiple select's selection is plural, and stays an array ---
 #
 # `selected` was field("string"), so c("a", "b") was rejected outright:

@@ -5,6 +5,22 @@
 # its own primitives: the browser to DOM, dart/glinty_flutter to
 # Flutter widgets. Nothing here knows about either.
 
+#' The icon set every frontend must draw
+#'
+#' Closed on purpose. An icon name is a token each frontend supplies
+#' artwork for, so the set has to be small enough that every frontend
+#' can actually carry all of it -- and enumerated here so a name no
+#' frontend draws fails where it was written rather than rendering
+#' nothing at all.
+#'
+#' Adding one means adding artwork to `inst/www/glinty.css` and a case
+#' to `_iconFor` in dart/glinty_flutter, and the fixtures make that
+#' obligation fail loudly if either is skipped.
+#'
+#' @keywords internal
+ICON_NAMES <- c("play", "stop", "rotate", "trash", "microphone",
+                "bookmark", "download", "upload")
+
 #' Declare one component field
 #'
 #' @param type character one of "string", "number", "int", "bool",
@@ -49,7 +65,12 @@ COMPONENT_SCHEMA <- list(
                                      external = field("bool", default = FALSE)
     ),
                          icon = list(
-                                     name = field("string", required = TRUE),
+                                     # A closed set, not free text. Every frontend has to
+                                     # supply artwork per name, so a name no frontend
+                                     # draws is a component that renders nothing --
+                                     # which is what `field("string")` allowed, silently,
+                                     # in both lowerings at once.
+                                     name = field("enum", required = TRUE, values = ICON_NAMES),
                                      size = field("int", default = 16L, min = 8, max = 128)
     ),
                          divider = list(

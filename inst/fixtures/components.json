@@ -489,6 +489,78 @@
         "component": "raw_html",
         "html": "<details>x<\/details>"
       }
+    },
+    {
+      "name": "icon-play",
+      "notes": "every frontend must draw play -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "play",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-stop",
+      "notes": "every frontend must draw stop -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "stop",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-rotate",
+      "notes": "every frontend must draw rotate -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "rotate",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-trash",
+      "notes": "every frontend must draw trash -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "trash",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-microphone",
+      "notes": "every frontend must draw microphone -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "microphone",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-bookmark",
+      "notes": "every frontend must draw bookmark -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "bookmark",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-download",
+      "notes": "every frontend must draw download -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "download",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-upload",
+      "notes": "every frontend must draw upload -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "upload",
+        "size": 16
+      }
     }
   ]
 }
