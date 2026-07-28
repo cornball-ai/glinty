@@ -167,6 +167,93 @@ component_fixtures <- function() {
                               label = "API URL"))),
               notes = "the condition is data, evaluated by whoever renders it"
         ),
+         # The rest of the schema. Every component appears here at
+         # least once, and a test asserts that against
+         # COMPONENT_SCHEMA -- "every component, once" was a claim
+         # this list did not keep until it was checked.
+         list(
+              name = "page",
+              component = component("page", title = "Fixture page",
+                                    children = list(
+                    component("heading", value = "Hi", level = 1L))),
+              notes = "the root every client is handed in welcome"
+        ),
+         list(
+              name = "textarea-input",
+              component = component("textarea_input", id = "notes",
+                                    label = "Notes:", value = "line one",
+                                    rows = 6L, placeholder = "why"),
+              notes = "rows is a count, not a CSS height"
+        ),
+         list(
+              name = "number-input",
+              component = component("number_input", id = "k",
+                                    label = "Clusters:", value = 3,
+                                    min = 1, max = 10, step = 1),
+              notes = paste("bounds and step are numbers a frontend may",
+                            "spend on a spinner, a slider, or a hint")
+        ),
+         list(
+              name = "checkbox-input",
+              component = component("checkbox_input", id = "save",
+                                    label = "Save results", value = TRUE),
+              notes = "a checkbox starts at a real boolean, never NULL"
+        ),
+         list(
+              name = "radio-buttons",
+              component = component("radio_buttons", id = "mode",
+                                    label = "Mode:",
+                                    choices = c(Fast = "fast", Careful = "careful"),
+                                    selected = "careful"),
+              notes = "one value for the group, from the selected member"
+        ),
+         list(
+              name = "date-input",
+              component = component("date_input", id = "start",
+                                    label = "Start:", value = "2026-07-27",
+                                    min = "2026-01-01", max = "2026-12-31"),
+              notes = "a date is a YYYY-MM-DD string on the wire, not a class"
+        ),
+         list(
+              name = "file-input",
+              component = component("file_input", id = "dataset",
+                                    label = "CSV:", accept = ".csv",
+                                    multiple = TRUE),
+              notes = "its value arrives over HTTP, not the socket"
+        ),
+         list(
+              name = "download-button",
+              component = component("download_button", id = "report",
+                                    label = "Download", variant = "primary"),
+              notes = paste("a press asks for a transfer ticket, not an",
+                            "event: the press IS the download")
+        ),
+         list(
+              name = "verbatim-output",
+              component = component("verbatim_output", id = "log"),
+              notes = "same text kind as text_output; only the display differs"
+        ),
+         list(
+              name = "table-output",
+              component = component("table_output", id = "results"),
+              notes = "structure on the wire (header + rows), never markup"
+        ),
+         list(
+              name = "image-output",
+              component = component("image_output", id = "cover",
+                                    alt = "album art"),
+              notes = "an image the app supplies, unlike a plot it renders"
+        ),
+         list(
+              name = "html-output",
+              component = component("html_output", id = "details"),
+              notes = "browser-only: the html kind has no widget equivalent"
+        ),
+         list(
+              name = "ui-output",
+              component = component("ui_output", id = "panel"),
+              notes = "the slot render_ui() fills with a component tree"
+        ),
          list(
               name = "raw_html",
               component = component("raw_html", html = "<details>x</details>"),

@@ -305,6 +305,155 @@
       }
     },
     {
+      "name": "page",
+      "notes": "the root every client is handed in welcome",
+      "component": {
+        "component": "page",
+        "children": [
+          {
+            "component": "heading",
+            "value": "Hi",
+            "level": 1
+          }
+        ],
+        "title": "Fixture page"
+      }
+    },
+    {
+      "name": "textarea-input",
+      "notes": "rows is a count, not a CSS height",
+      "component": {
+        "component": "textarea_input",
+        "id": "notes",
+        "label": "Notes:",
+        "value": "line one",
+        "rows": 6,
+        "placeholder": "why",
+        "emit": "live"
+      }
+    },
+    {
+      "name": "number-input",
+      "notes": "bounds and step are numbers a frontend may spend on a spinner, a slider, or a hint",
+      "component": {
+        "component": "number_input",
+        "id": "k",
+        "label": "Clusters:",
+        "value": 3,
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "emit": "live"
+      }
+    },
+    {
+      "name": "checkbox-input",
+      "notes": "a checkbox starts at a real boolean, never NULL",
+      "component": {
+        "component": "checkbox_input",
+        "id": "save",
+        "label": "Save results",
+        "value": true,
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "radio-buttons",
+      "notes": "one value for the group, from the selected member",
+      "component": {
+        "component": "radio_buttons",
+        "id": "mode",
+        "label": "Mode:",
+        "choices": [
+          {
+            "value": "fast",
+            "label": "Fast"
+          },
+          {
+            "value": "careful",
+            "label": "Careful"
+          }
+        ],
+        "selected": "careful",
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "date-input",
+      "notes": "a date is a YYYY-MM-DD string on the wire, not a class",
+      "component": {
+        "component": "date_input",
+        "id": "start",
+        "label": "Start:",
+        "value": "2026-07-27",
+        "min": "2026-01-01",
+        "max": "2026-12-31",
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "file-input",
+      "notes": "its value arrives over HTTP, not the socket",
+      "component": {
+        "component": "file_input",
+        "id": "dataset",
+        "label": "CSV:",
+        "accept": ".csv",
+        "multiple": true
+      }
+    },
+    {
+      "name": "download-button",
+      "notes": "a press asks for a transfer ticket, not an event: the press IS the download",
+      "component": {
+        "component": "download_button",
+        "id": "report",
+        "label": "Download",
+        "variant": "primary"
+      }
+    },
+    {
+      "name": "verbatim-output",
+      "notes": "same text kind as text_output; only the display differs",
+      "component": {
+        "component": "verbatim_output",
+        "id": "log"
+      }
+    },
+    {
+      "name": "table-output",
+      "notes": "structure on the wire (header + rows), never markup",
+      "component": {
+        "component": "table_output",
+        "id": "results"
+      }
+    },
+    {
+      "name": "image-output",
+      "notes": "an image the app supplies, unlike a plot it renders",
+      "component": {
+        "component": "image_output",
+        "id": "cover",
+        "alt": "album art"
+      }
+    },
+    {
+      "name": "html-output",
+      "notes": "browser-only: the html kind has no widget equivalent",
+      "component": {
+        "component": "html_output",
+        "id": "details"
+      }
+    },
+    {
+      "name": "ui-output",
+      "notes": "the slot render_ui() fills with a component tree",
+      "component": {
+        "component": "ui_output",
+        "id": "panel"
+      }
+    },
+    {
       "name": "raw_html",
       "notes": "browser renders; every other frontend must refuse by name",
       "component": {

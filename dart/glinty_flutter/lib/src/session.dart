@@ -137,6 +137,15 @@ class GlintySession {
   /// Latest value per output id, for the renderer to draw.
   final Map<String, dynamic> values = <String, dynamic>{};
 
+  /// The kind of each output value, from the `output` frame. What
+  /// a value IS, so a renderer can refuse one it cannot draw by
+  /// name instead of stringifying it.
+  final Map<String, String> kinds = <String, String>{};
+
+  /// Render errors per output id: the server said why, so the slot
+  /// shows that rather than going blank.
+  final Map<String, String> errors = <String, String>{};
+
   /// Current value per input id: the state a control draws from.
   /// Seeded from the tree on welcome, then owned by user edits and
   /// `input_update` frames. The component tree is the shape of the
@@ -148,6 +157,16 @@ class GlintySession {
   /// server first built it; these are what changed since.
   final Map<String, Map<String, dynamic>> overrides =
       <String, Map<String, dynamic>>{};
+
+  /// How many value pushes each input has received.
+  ///
+  /// A push is an event, not a state, and a stateful control needs to
+  /// tell one from the next. Counting them is the only way: a control
+  /// that instead remembers "the last value I was pushed" cannot see
+  /// a second push of the same value, so a push refused because the
+  /// field had focus makes an identical later push a no-op -- the
+  /// server said it twice and the user saw it never.
+  final Map<String, int> pushes = <String, int>{};
 
   /// Bumped whenever the tree is replaced or the state is cleared.
   /// Widgets key off it so Flutter discards controllers and element
@@ -205,7 +224,20 @@ class GlintySession {
         _welcome(msg);
       case 'output':
         final id = msg['id'];
-        if (id is String) values[id] = msg['value'];
+        if (id is String) {
+          values[id] = msg['value'];
+          // The kind says what the value IS. Dropping it left a slot
+          // stringifying whatever arrived: an image value rendered
+          // as "{src: data:image/png;base64,iVBOR..." rather than as
+          // a visible "this client cannot draw images".
+          final kind = msg['kind'];
+          if (kind is String) {
+            kinds[id] = kind;
+          } else {
+            kinds.remove(id);
+          }
+          errors.remove(id);
+        }
       case 'ticket':
         final id = msg['id'];
         final purpose = msg['purpose'];
@@ -221,8 +253,10 @@ class GlintySession {
         if (id is String) {
           if (msg.containsKey('selected')) {
             inputs[id] = msg['selected'];
+            pushes[id] = (pushes[id] ?? 0) + 1;
           } else if (msg.containsKey('value')) {
             inputs[id] = msg['value'];
+            pushes[id] = (pushes[id] ?? 0) + 1;
           }
           // The rest of the update -- label, choices, bounds, step --
           // is not in the tree either: update_select_input() changes
@@ -240,7 +274,12 @@ class GlintySession {
       case 'error':
         final id = msg['id'];
         if (id is String) {
+          // A render error is something to show, not a blank slot:
+          // the server said why, and an app that goes quiet instead
+          // is the silent failure this protocol keeps refusing.
           values[id] = null;
+          kinds.remove(id);
+          errors[id] = msg['message']?.toString() ?? 'error';
         } else if (_awaitingWelcome) {
           // a refused connection: the server says why once and
           // closes; nothing after it is meaningful
@@ -278,6 +317,9 @@ class GlintySession {
       inputs.clear();
       tickets.clear();
       overrides.clear();
+      kinds.clear();
+      errors.clear();
+      pushes.clear();
       _ui = null;
       _cachedRevision = null;
       generation++;
@@ -336,6 +378,18 @@ class GlintySession {
     inputs[id] = value;
     _changed();
     _emit(GlintyOutgoing('input', {'type': 'input', 'id': id, 'value': value}));
+  }
+
+  /// Update local state without reporting it.
+  ///
+  /// What an `emit: settle` control does while it is being changed:
+  /// the slider thumb tracks the drag and any conditional panel keyed
+  /// on it follows, but the server hears once, when the gesture ends.
+  /// Reporting each intermediate value is what `live` means, and a
+  /// control that does it in both modes has made `settle` decorative.
+  void setInputLocal(String id, dynamic value) {
+    inputs[id] = value;
+    _changed();
   }
 
   /// Report a discrete event, such as a button press.

@@ -118,18 +118,48 @@ class GlintyConnection extends ChangeNotifier {
   Timer? _retryTimer;
   Timer? _welcomeTimer;
   int _retries = 0;
+
+  /// Which connection attempt is current. Bumped on every start and
+  /// on every close, so a callback belonging to an attempt that has
+  /// since been abandoned -- a deadline that fires late, a connect
+  /// that finally returns -- can tell that it is stale and stand
+  /// down instead of tearing down its successor.
+  int _attempt = 0;
+
   bool _disposed = false;
 
   /// Open the socket and keep it open. Safe to call once.
   Future<void> start() async {
     if (_disposed) return;
+    final attempt = ++_attempt;
     _setState(_retries == 0
         ? GlintyConnectionState.connecting
         : GlintyConnectionState.reconnecting);
+    // Armed before the open, not after it. The deadline covers the
+    // whole attempt: connecting and being welcomed. Arming it after
+    // the await bounded only the half that needs a socket to exist,
+    // so a connect that never completes -- a black-holed route, a
+    // proxy that accepts and stalls -- never reached the line that
+    // arms it. No timer, no close event, no retry, and a retry
+    // budget nobody spends is the same infinite spinner this
+    // promise exists to rule out.
+    _welcomeTimer?.cancel();
+    _welcomeTimer = Timer(welcomeTimeout, () {
+      if (_disposed || attempt != _attempt) return;
+      if (_state == GlintyConnectionState.live) return;
+      // silence is a failure, and treating it as one is what
+      // makes the retry bound mean anything
+      final socket = _socket;
+      if (socket != null) unawaited(socket.close().catchError((_) {}));
+      _onClosed();
+    });
     try {
       final socket = await _open(url);
-      if (_disposed) {
-        unawaited(socket.close());
+      // A socket for an attempt that has already failed is trash,
+      // not a connection: adopting it would run a second wire under
+      // the one the retry path has since made.
+      if (_disposed || attempt != _attempt) {
+        unawaited(socket.close().catchError((_) {}));
         return;
       }
       _socket = socket;
@@ -140,15 +170,8 @@ class GlintyConnection extends ChangeNotifier {
       // usable app, and saying otherwise would let the UI draw
       // before it has a tree.
       session.hello();
-      _welcomeTimer?.cancel();
-      _welcomeTimer = Timer(welcomeTimeout, () {
-        if (_disposed || _state == GlintyConnectionState.live) return;
-        // silence is a failure, and treating it as one is what
-        // makes the retry bound mean anything
-        unawaited(socket.close().catchError((_) {}));
-        _onClosed();
-      });
     } catch (e) {
+      if (_disposed || attempt != _attempt) return;
       _onClosed();
     }
   }
@@ -273,6 +296,11 @@ class GlintyConnection extends ChangeNotifier {
     // lets it fire during the *replacement* handshake and tear that
     // one down instead -- a disconnect before welcome would keep
     // killing every socket after it.
+    //
+    // The attempt is bumped for the same reason the timer is
+    // cancelled: this attempt is over, and anything of its still in
+    // flight is answering for a connection that no longer exists.
+    _attempt += 1;
     _welcomeTimer?.cancel();
     _welcomeTimer = null;
     _events?.cancel();
@@ -304,10 +332,20 @@ class GlintyConnection extends ChangeNotifier {
     // refusal arrives with the socket still open, and leaving the
     // welcome timer armed would fire a retry into a connection that
     // has already been told no.
+    _attempt += 1;
     _welcomeTimer?.cancel();
     _welcomeTimer = null;
     _retryTimer?.cancel();
     _retryTimer = null;
+    // And the wire itself. Terminal means done, not "done deciding":
+    // a refusal arrives on an open socket, and leaving it open
+    // leaves its subscription live, so frames keep landing in a
+    // session that has been refused and the app cannot let go of a
+    // connection it has already given up on.
+    _events?.cancel();
+    _events = null;
+    unawaited(_socket?.close().catchError((_) {}));
+    _socket = null;
     _pending.clear();
     _stoppedReason = reason;
     _setState(GlintyConnectionState.stopped);

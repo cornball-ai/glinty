@@ -159,7 +159,17 @@ for (nm in names(COMPONENT_SCHEMA)) {
 
 # --- fixtures ---
 fx <- component_fixtures()
-expect_true(length(fx) >= 20L)
+# Every component in the schema, exactly once. "length >= 20" let the
+# list claim exhaustive coverage while missing 13 components, which
+# is the kind of gap a shared artifact must not have: a client that
+# renders every fixture would still have met only part of the set.
+covered <- vapply(fx, function(f) f$component$component, character(1L))
+expect_equal(sort(unique(covered)),
+             sort(names(glinty:::COMPONENT_SCHEMA)))
+# More than one fixture per component is fine and wanted -- text and
+# divider carry their variants, plot_output both sizing modes. What
+# is not fine is a component with none.
+expect_true(length(fx) >= length(glinty:::COMPONENT_SCHEMA))
 for (f in fx) {
     expect_true(is.character(f$name) && nzchar(f$name))
     expect_true(is_component(f$component))

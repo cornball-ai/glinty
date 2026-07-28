@@ -42,7 +42,11 @@ const unsupportedComponents = <String>{
   'image_output',
   'ui_output',
   'audio_output', // needs an audio package, outside the SDK
-  'raw_html', // arbitrary markup has no Flutter equivalent, by design
+  // Both carry markup, which has no Flutter equivalent by design.
+  // raw_html is markup in the tree; html_output is markup arriving
+  // as a value. Same refusal for the same reason.
+  'raw_html',
+  'html_output',
 };
 
 /// Reports an input change back to the server.
@@ -57,17 +61,28 @@ typedef GlintyTicketSink = void Function(String id, String purpose);
 class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
+      this.onLocalInput,
       this.onLink,
       this.onEvent,
       this.onTicket,
       this.values = const {},
+      this.kinds = const {},
+      this.errors = const {},
       this.inputs = const {},
+      this.pushes = const {},
       this.overrides = const {},
       this.condition,
       this.spacing = 4,
       this.monoStack = const ['monospace', 'Menlo', 'Courier New']});
 
   final GlintySink? onInput;
+
+  /// A local edit that is not reported: what a `settle` control does
+  /// while it is being changed. Without it a settle slider either
+  /// reports every intermediate value (which is `live`) or refuses to
+  /// move under the thumb.
+  final GlintySink? onLocalInput;
+
   final GlintyEventSink? onEvent;
 
   /// Where a link tap goes. Opening a URL needs a platform plugin
@@ -132,8 +147,50 @@ class GlintyRenderer {
   /// control the tree still describes with the old ones.
   final Map<String, Map<String, dynamic>> overrides;
 
+  /// How many `input_update` pushes each input has had. Stateful
+  /// controls tell one push from the next by this count rather than
+  /// by the value, so a repeat of the same value still registers.
+  final Map<String, int> pushes;
+
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
+
+  /// What each value IS, from the `kind` field of the same message.
+  /// A slot whose value arrives as a kind it cannot draw says so by
+  /// name; without this it would stringify the payload instead, and
+  /// an image would render as `{src: data:image/png;base64,iVBOR...`.
+  final Map<String, String> kinds;
+
+  /// Render errors per output id. The server said why the value is
+  /// missing, so the slot shows that rather than sitting blank.
+  final Map<String, String> errors;
+
+  /// Draws an output slot, or refuses it visibly.
+  ///
+  /// The order matters: an error outranks a value (the value is
+  /// stale, the error is current), and a kind this slot cannot draw
+  /// outranks drawing it wrong.
+  Widget _slot(BuildContext context, GlintyComponent c, String expected,
+      Widget Function() draw) {
+    final id = c.str('id');
+    final err = errors[id];
+    if (err != null) {
+      return _problem(const Color(0xFFF8D7DA), err);
+    }
+    final kind = kinds[id];
+    if (kind != null && kind != expected && values[id] != null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[cannot display $kind here: ${c.type} shows $expected]');
+    }
+    return draw();
+  }
+
+  Widget _problem(Color background, String message) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        color: background,
+        child: Text(message),
+      );
 
   Widget build(BuildContext context, GlintyComponent c) {
     switch (c.type) {
@@ -176,11 +233,12 @@ class GlintyRenderer {
       case 'download_button':
         return _button(context, c);
       case 'text_output':
-        return Text(_outputText(c), style: _textStyleFor(context, c));
+        return _slot(context, c, 'text',
+            () => Text(_outputText(c), style: _textStyleFor(context, c)));
       case 'verbatim_output':
-        return _verbatim(context, c);
+        return _slot(context, c, 'text', () => _verbatim(context, c));
       case 'table_output':
-        return _table(c);
+        return _slot(context, c, 'table', () => _table(c));
       case 'tabset':
         return _tabset(context, c);
       case 'conditional_panel':
@@ -429,6 +487,7 @@ class GlintyRenderer {
     return _GlintyTextField(
       key: Key(id),
       value: _value(id, c.str('value') ?? '')?.toString() ?? '',
+      push: pushes[id] ?? 0,
       obscure: obscure,
       maxLines: maxLines,
       numeric: numeric,
@@ -436,9 +495,18 @@ class GlintyRenderer {
       hint: c.str('placeholder'),
       helper: helper,
       // This is where `emit` is spent, and the only place that knows
-      // Flutter calls these onChanged and onSubmitted.
+      // Flutter calls these onChanged, onSubmitted and (for settle,
+      // via a focus listener) blur.
+      //
+      // A settle field reports on enter OR on leaving -- typing and
+      // then clicking away is how most forms are filled, and a field
+      // that only reports on enter discards that silently.
       onChanged: emit == GlintyEmit.live ? report : null,
       onSubmitted: emit == GlintyEmit.settle ? report : null,
+      onSettle: emit == GlintyEmit.settle ? report : null,
+      onLocal: emit == GlintyEmit.settle && onLocalInput != null
+          ? (v) => onLocalInput?.call(id, numeric ? num.tryParse(v) : v)
+          : null,
     );
   }
 
@@ -463,6 +531,11 @@ class GlintyRenderer {
   Widget _select(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final choices = _choices(c);
+    // A dropdown holds one value. Lowering a multiple select to one
+    // silently turns "pick some" into "pick one" -- the control
+    // looks fine, and every selection but the last is discarded on
+    // the way to the server.
+    if (c.boolean('multiple')) return _multiSelect(context, c, id, choices);
     final current = _value(id, c.str('selected'))?.toString() ??
         (choices.isNotEmpty ? choices.first.value : null);
     return _labelled(context, c, DropdownButton<String>(
@@ -478,6 +551,46 @@ class GlintyRenderer {
         if (v != null) onInput?.call(id, v);
       },
     ));
+  }
+
+  /// A multiple select: chips, not a dropdown.
+  ///
+  /// Material has no stock multi-select menu, and the value on the
+  /// wire is a list either way. Chips make the whole selection
+  /// visible at once, which is what a list-valued control needs.
+  Widget _multiSelect(BuildContext context, GlintyComponent c, String id,
+      List<GlintyChoice> choices) {
+    final raw = _value(id, null);
+    final chosen = raw is List
+        ? raw.map((v) => v.toString()).toList()
+        : (raw == null ? <String>[] : [raw.toString()]);
+    return _labelled(
+        context,
+        c,
+        Wrap(
+          spacing: 8,
+          children: choices
+              .map((ch) => FilterChip(
+                    key: Key('${id}_${ch.value}'),
+                    label: Text(ch.label),
+                    selected: chosen.contains(ch.value),
+                    onSelected: (on) {
+                      // Order follows the choice list, not the order
+                      // they were tapped: the server compares this
+                      // against a set, and a value that reorders
+                      // itself on every toggle reads as a change
+                      // when nothing changed.
+                      final next = choices
+                          .map((o) => o.value)
+                          .where((v) => v == ch.value
+                              ? on
+                              : chosen.contains(v))
+                          .toList();
+                      onInput?.call(id, next);
+                    },
+                  ))
+              .toList(),
+        ));
   }
 
   Widget _checkbox(GlintyComponent c) {
@@ -521,6 +634,7 @@ class GlintyRenderer {
     final step = _numField(c, "step");
     final raw = _value(id, c.number('value'));
     final current = raw is num ? raw.toDouble() : min;
+    final settle = GlintyEmit.parse(c.str('emit')) == GlintyEmit.settle;
     return _labelled(
         context,
         c,
@@ -533,7 +647,15 @@ class GlintyRenderer {
           divisions:
               step != null && step > 0 ? ((max - min) / step).round() : null,
           value: current.clamp(min, max),
-          onChanged: (v) => onInput?.call(id, v),
+          // Where `emit` is spent for a slider. A drag is one
+          // gesture producing hundreds of onChanged calls; under
+          // `settle` the server wants the number the user landed on,
+          // not the sweep. Local edits keep the thumb (and any panel
+          // keyed on it) tracking the finger in the meantime.
+          onChanged: settle
+              ? (v) => (onLocalInput ?? onInput)?.call(id, v)
+              : (v) => onInput?.call(id, v),
+          onChangeEnd: settle ? (v) => onInput?.call(id, v) : null,
         ));
   }
 
@@ -673,6 +795,7 @@ class _GlintyTextField extends StatefulWidget {
   const _GlintyTextField({
     super.key,
     required this.value,
+    required this.push,
     required this.obscure,
     required this.maxLines,
     required this.numeric,
@@ -681,9 +804,16 @@ class _GlintyTextField extends StatefulWidget {
     this.helper,
     this.onChanged,
     this.onSubmitted,
+    this.onSettle,
+    this.onLocal,
   });
 
   final String value;
+
+  /// How many pushes this input has had. Compared rather than the
+  /// value, so a second push of the same text is still a push.
+  final int push;
+
   final bool obscure;
   final int maxLines;
   final bool numeric;
@@ -692,6 +822,15 @@ class _GlintyTextField extends StatefulWidget {
   final String? helper;
   final void Function(String)? onChanged;
   final void Function(String)? onSubmitted;
+
+  /// Reported when focus leaves and the text has changed since it
+  /// arrived. The other half of `settle`: enter is one way to finish
+  /// with a field, clicking away is the more common one.
+  final void Function(String)? onSettle;
+
+  /// A local edit, not reported. Keeps conditional panels keyed on a
+  /// settle field tracking what is typed.
+  final void Function(String)? onLocal;
 
   @override
   State<_GlintyTextField> createState() => _GlintyTextFieldState();
@@ -702,9 +841,16 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
       TextEditingController(text: widget.value);
   final FocusNode _focus = FocusNode();
 
-  /// The last server value this field has been shown. A push the
-  /// user typed over is spent, not queued.
-  late String _seen;
+  /// The push count this field has already answered. A push the user
+  /// typed over is spent, not queued -- but a *later* push is a
+  /// separate event even when it carries the same text, which is why
+  /// this counts rather than remembering the value.
+  late int _seen;
+
+  /// The text this field last reported or was pushed. A settle field
+  /// reports on blur only when something actually changed; focus
+  /// alone is not an edit.
+  late String _reported;
 
   @override
   void initState() {
@@ -712,7 +858,17 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
     // eagerly: a `late` field initialises on first *access*, which
     // happens inside didUpdateWidget -- by then `widget` is the new
     // one, so _seen would equal the incoming push and swallow it
-    _seen = widget.value;
+    _seen = widget.push;
+    _reported = widget.value;
+    _focus.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (_focus.hasFocus) return;
+    final text = _controller.text;
+    if (text == _reported) return;
+    _reported = text;
+    widget.onSettle?.call(text);
   }
 
   @override
@@ -723,13 +879,14 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
     // the browser client refuses this for the same reason
     // (`el !== document.activeElement`).
     //
-    // Refused, not deferred: the value is marked seen so that the
+    // Refused, not deferred: the push is marked answered so that the
     // next rebuild after focus leaves does not quietly apply it. A
-    // push the user typed over is spent. Only a *newer* value --
-    // one the server sent after this -- lands.
-    if (widget.value != _seen) {
-      _seen = widget.value;
+    // push the user typed over is spent. Only a *later* push -- one
+    // the server sent after this -- lands, whatever it carries.
+    if (widget.push != _seen) {
+      _seen = widget.push;
       if (_focus.hasFocus) return;
+      _reported = widget.value;
     } else {
       return;
     }
@@ -750,8 +907,21 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
 
   @override
   void dispose() {
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onChanged(String v) {
+    widget.onChanged?.call(v);
+    if (widget.onChanged != null) _reported = v;
+    widget.onLocal?.call(v);
+  }
+
+  void _onSubmitted(String v) {
+    _reported = v;
+    widget.onSubmitted?.call(v);
   }
 
   @override
@@ -766,7 +936,7 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
           hintText: widget.hint,
           helperText: widget.helper,
         ),
-        onChanged: widget.onChanged,
-        onSubmitted: widget.onSubmitted,
+        onChanged: _onChanged,
+        onSubmitted: _onSubmitted,
       );
 }

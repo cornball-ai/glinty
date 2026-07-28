@@ -154,6 +154,7 @@ class GlintyView extends StatelessWidget {
     final r = renderer ??
         GlintyRenderer(
           onInput: s.sendInput,
+          onLocalInput: s.setInputLocal,
           onEvent: s.sendEvent,
           // Only when the connection can actually deliver one. A
           // download button wired to a ticket request whose grant
@@ -164,7 +165,10 @@ class GlintyView extends StatelessWidget {
               : null,
           onLink: conn?.onLink,
           values: s.values,
+          kinds: s.kinds,
+          errors: s.errors,
           inputs: s.inputs,
+          pushes: s.pushes,
           overrides: s.overrides,
           condition: s.conditionHolds,
           spacing: glintySpacing(s.theme),

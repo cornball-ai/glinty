@@ -190,6 +190,91 @@ void main() {
     c.conn.dispose();
   });
 
+  test('a connect that never completes still spends the retry budget',
+      () async {
+    // The welcome deadline was armed after `await _open(url)`, so it
+    // only ever bounded the half of the handshake that needs a
+    // socket to exist. A connect that hangs -- a black-holed route,
+    // a proxy that accepts and then stalls -- never reached the line
+    // that arms it. No timer, no close event, no retry: the app sits
+    // on connecting forever, which is exactly the infinite spinner
+    // the bounded-retry promise rules out.
+    var opens = 0;
+    final conn = GlintyConnection(
+      url: url,
+      maxRetries: 2,
+      retryBase: const Duration(milliseconds: 10),
+      retryCap: const Duration(milliseconds: 20),
+      welcomeTimeout: const Duration(milliseconds: 40),
+      open: (_) {
+        opens++;
+        return Completer<WebSocket>().future; // never completes
+      },
+    );
+    unawaited(conn.start());
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    expect(conn.state, GlintyConnectionState.stopped,
+        reason: 'a hung connect is a failed attempt, not a pending one');
+    expect(conn.stoppedReason, isNotNull);
+    expect(opens, lessThanOrEqualTo(3),
+        reason: 'and it is bounded by the same budget as any other');
+    conn.dispose();
+  });
+
+  test('a late socket from a timed-out attempt is closed, not adopted',
+      () async {
+    // The other half of the same bug: once an attempt times out, its
+    // socket may still arrive. Adopting it would resurrect a
+    // connection the retry path has already replaced, leaving two
+    // live sockets and two helloes on the same session.
+    final opened = <FakeSocket>[];
+    final completers = <Completer<WebSocket>>[];
+    final conn = GlintyConnection(
+      url: url,
+      maxRetries: 5,
+      retryBase: const Duration(milliseconds: 10),
+      retryCap: const Duration(milliseconds: 20),
+      welcomeTimeout: const Duration(milliseconds: 40),
+      open: (_) {
+        final c = Completer<WebSocket>();
+        completers.add(c);
+        return c.future;
+      },
+    );
+    unawaited(conn.start());
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(completers.length, greaterThan(1),
+        reason: 'the first attempt should have timed out and retried');
+
+    // the first attempt's socket finally shows up, long after
+    final late = FakeSocket();
+    opened.add(late);
+    completers.first.complete(late);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(late.closed, isTrue,
+        reason: 'a socket for an attempt that already failed is trash');
+    expect(late.sent, isEmpty, reason: 'and it is never spoken to');
+    conn.dispose();
+  });
+
+  test('stopping closes the socket it stopped on', () async {
+    // A refusal arrives with the socket still open. Leaving it open
+    // leaves its event subscription live: frames keep landing in a
+    // session that has been refused, and the app cannot let go of a
+    // connection it has already given up on.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-refused', 'error'));
+    await pump();
+
+    expect(c.conn.state, GlintyConnectionState.stopped);
+    expect(c.sockets.single.closed, isTrue,
+        reason: 'terminal means the wire is done, not just the policy');
+    c.conn.dispose();
+  });
+
   test('a download grant becomes an http URL for the embedder', () async {
     Uri? got;
     final c = makeConn(onDownload: (u) => got = u);
