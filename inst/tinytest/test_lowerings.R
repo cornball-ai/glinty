@@ -361,9 +361,9 @@ expect_null(INPUT_META$download_button$value_type_valued)
 
 s_ev <- glinty:::new_session("meta_ev")
 glinty:::handle_event(s_ev, "counted")
-expect_equal(r_type(isolate(s_ev$input$counted())), "number")
+expect_equal(r_type(glinty::isolate(s_ev$input$counted())), "number")
 glinty:::handle_event(s_ev, "valued", "entry_7")
-expect_equal(r_type(isolate(s_ev$input$valued())),
+expect_equal(r_type(glinty::isolate(s_ev$input$valued())),
              INPUT_META$button$value_type_valued)
 expect_equal(r_type(seed_of(component("select_input", id = "m",
                                       choices = c("a", "b"),

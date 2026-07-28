@@ -135,7 +135,7 @@ is a translation of the other.
 |---|---|---|
 | `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
 | `input` | `id`, `value` | an input changed |
-| `event` | `id` | a button press or other discrete event; carries `value` when the button declared one |
+| `event` | `id`, `value?` | a button press or other discrete event; `value` is present only when the button declared one |
 | `measure` | `id`, `width`, `height`, `dpr?` | a client-sized output's box, in logical pixels |
 | `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
 | `ack` | `seq` | optional flow control, reserved |
