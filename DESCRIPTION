@@ -8,10 +8,13 @@ Authors@R: c(
            comment = c(ORCID = "0009-0005-4248-604X")),
     person("cornball.ai", role = "cph"))
 Description: Build interactive web applications in R with a pure base R
-    reactive engine, an HTML tag builder, and a built-in HTTP and
-    'WebSocket' server implemented on base R sockets. Session-scoped
-    inputs, outputs, observers, and reactive expressions, with a small
-    hand-written JavaScript client and no build tools.
+    reactive engine, a semantic component vocabulary, and a built-in
+    HTTP and 'WebSocket' server implemented on base R sockets.
+    Session-scoped inputs, outputs, observers, and reactive
+    expressions. The wire carries components rather than markup, so a
+    frontend that is not a browser can render the same application:
+    a small hand-written JavaScript client ships here, and a Flutter
+    client reads the same trees. No build tools.
 License: MIT + file LICENSE
 URL: https://github.com/cornball-ai/glinty
 BugReports: https://github.com/cornball-ai/glinty/issues

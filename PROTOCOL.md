@@ -1,9 +1,9 @@
 # glinty protocol v3
 
-Status: **frozen**. Implemented and shipping. Three independent
-lowerings render it: R to HTML for the server-rendered first paint,
-`inst/www/glinty.js` to DOM, and `dart/glinty_flutter` to Flutter
-widgets. Protocol 2 is gone.
+Status: **frozen**, on the `design/protocol-v3` branch. Implemented
+and unreleased. Three independent lowerings render it: R to HTML for
+the server-rendered first paint, `inst/www/glinty.js` to DOM, and
+`dart/glinty_flutter` to Flutter widgets. Protocol 2 is gone.
 
 Frozen means the component vocabulary, the message types and their
 field shapes are settled. Clients may still grow — the Flutter one
@@ -731,8 +731,8 @@ exists than after.
   keeps working in the browser and does nothing elsewhere.
 - Protocol 2 clients stop working. There was one, it shipped in this
   repo, and it was replaced rather than retrofitted.
-- `run_app_native()` stops working at stage 1 and stays broken until
-  someone retrofits it. See below.
+- `run_app_native()` and the flitR backend are gone, not retrofitted.
+  See below.
 
 First paint is **not** a cost: the browser keeps pre-rendering and
 hydrating against `ui_revision`, so `welcome` being canonical does not
@@ -867,9 +867,9 @@ and Windows with real widgets, real text input and an accessibility
 tree flitR cannot offer.
 
 So there are two lowerings, not three: component → DOM here, and
-component → Flutter widgets in dart/glinty_flutter. `run_app_native()` and
-`native_scene.R` stay on protocol 2 and stop working when stage 1
-switches the builders over. flitR is archived.
+component → Flutter widgets in dart/glinty_flutter. `run_app_native()`
+and `native_scene.R` were deleted rather than ported; flitR is
+archived.
 
 The falsifier reasoning was right while Dart was hypothetical. It
 stopped being right the moment the Flutter SDK was installed, which
