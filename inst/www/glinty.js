@@ -23,7 +23,14 @@
         "text_output", "textarea_input", "ui_output", "verbatim_output"
     ];
     var SUPPORTED_KINDS = ["text", "html", "table", "image", "audio", "ui"];
-    var SUPPORTED_FEATURES = ["upload", "download", "modal", "progress"];
+    /* Every one of these is implemented below: uploadFiles(),
+       startDownload(), showModal(), applyProgress(), reportPlotDims().
+       `measure` was missing here while the client had been reporting
+       plot boxes all along -- the inverse of naming a feature nothing
+       implements, and just as much a thing the server would believe. */
+    var SUPPORTED_FEATURES = [
+        "upload", "download", "modal", "progress", "measure"
+    ];
 
     /* The one reserved component id: a button carrying it closes the
        open dialog locally and reports nothing. Reserved rather than

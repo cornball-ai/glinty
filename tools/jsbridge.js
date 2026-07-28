@@ -513,6 +513,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               hello.components.includes("page"));
         check("hello declares kinds and features",
               Array.isArray(hello.kinds) && Array.isArray(hello.features));
+        /* Naming a feature nothing implements is a claim the server
+           believes; omitting one it does implement is the same lie
+           the other way, and `measure` was omitted while the client
+           had been reporting plot boxes all along. Both directions
+           are asserted against the functions that back them. */
+        const implemented = {
+            upload: "uploadFiles",
+            download: "startDownload",
+            modal: "showModal",
+            progress: "applyProgress",
+            measure: "reportPlotDims"
+        };
+        const src = CLIENT_SRC;
+        check("every declared feature has a function behind it",
+              hello.features.every(
+                  (f) => implemented[f] &&
+                      src.includes("function " + implemented[f])));
+        check("and every implemented feature is declared",
+              Object.keys(implemented).every(
+                  (f) => !src.includes("function " + implemented[f]) ||
+                      hello.features.includes(f)));
         check("hello carries the served revision", hello.prerendered === rev);
         check("hello carries NO input values -- the server seeded itself",
               !("inputs" in hello));
