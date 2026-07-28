@@ -159,17 +159,27 @@ html_link <- function(x) {
 html_flex_style <- function(x) {
     parts <- character(0L)
     if (!is.null(x$grow) && x$grow > 0L) {
-        parts <- c(parts, paste0("flex:", x$grow, " 1 0"))
+        parts <- c(parts, paste0("--g-grow:", x$grow), "--g-basis:0")
     }
     if (!is.null(x$width)) {
-        parts <- c(parts, paste0("flex:0 0 ", x$width, "px"),
-                   paste0("width:", x$width, "px"))
+        parts <- c(parts, "--g-shrink:0",
+                   paste0("--g-basis:", x$width, "px"),
+                   paste0("--g-width:", x$width, "px"))
     }
     if (length(parts) == 0L) {
         NULL
     } else {
         paste(parts, collapse = ";")
     }
+}
+
+#' Does this component carry sizing?
+#'
+#' @param x the component
+#' @return logical
+#' @keywords internal
+html_is_sized <- function(x) {
+    (!is.null(x$grow) && x$grow > 0L) || !is.null(x$width)
 }
 
 html_image <- function(x) {
@@ -230,7 +240,9 @@ html_layout <- function(x, cls) {
         style <- paste(c(style, paste0("align-items:", align)), collapse = ";")
     }
     style <- paste(c(style, html_flex_style(x)), collapse = ";")
-    html_el("div", list(class = cls, id = x$id,
+    html_el("div", list(class = paste(c(cls, if (html_is_sized(x)) "g-sized"),
+                                      collapse = " "),
+                        id = x$id,
                         style = if (nzchar(style)) style else NULL),
             children_to_html(x$children))
 }
@@ -241,7 +253,9 @@ html_panel <- function(x) {
         inner <- paste0(html_el("div", list(class = "g-panel-title"),
                                 html_escape(x$title)), inner)
     }
-    html_el("div", list(class = paste0("g-panel g-panel-", x$variant),
+    html_el("div", list(class = paste(c(paste0("g-panel g-panel-", x$variant),
+                    if (html_is_sized(x)) "g-sized"),
+                                      collapse = " "),
                         id = x$id, style = html_flex_style(x)), inner)
 }
 

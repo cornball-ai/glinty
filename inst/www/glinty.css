@@ -411,6 +411,19 @@ h1, h2, h3, h4 {
 
 /* ---------- shared layout ---------- */
 
+/* How a container takes space in its parent.
+
+   Declared here rather than inline on the element, because an inline
+   style cannot be overridden by a stylesheet -- and an app has every
+   right to ignore the layout at a breakpoint, where proportions stop
+   making sense. The lowering sets custom properties; this turns them
+   into flex. Any app rule with more weight than a class -- an id, say
+   -- beats it normally. */
+.g-sized {
+    flex: var(--g-grow, 0) var(--g-shrink, 1) var(--g-basis, auto);
+    width: var(--g-width, auto);
+}
+
 .g-layout-row {
     display: flex;
     flex-direction: row;

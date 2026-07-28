@@ -1161,10 +1161,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const side = host.children[0].children[0];
         const centre = host.children[0].children[1];
         check("a width becomes a fixed flex basis",
-              side.getAttribute("style").includes("flex:0 0 280px") &&
-              side.getAttribute("style").includes("width:280px"));
+              side.getAttribute("style").includes("--g-shrink:0") &&
+              side.getAttribute("style").includes("--g-width:280px") &&
+              side.classList.contains("g-sized"));
         check("a grow becomes flex-grow with a zero basis",
-              centre.getAttribute("style").includes("flex:1 1 0"));
+              centre.getAttribute("style").includes("--g-grow:1") &&
+              centre.classList.contains("g-sized"));
         check("gap survives beside them",
               host.children[0].getAttribute("style").includes("gap:16px"));
 
@@ -1173,7 +1175,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         put({ component: "row", children: [] });
         const bare = host.children[0].getAttribute("style");
         check("a container with neither carries no sizing",
-              bare === null || !bare.includes("flex:"));
+              (bare === null || !bare.includes("--g-")) &&
+              !host.children[0].classList.contains("g-sized"));
+
+        /* The sizing is custom properties consumed by .g-sized rather
+           than an inline `flex`, because an inline style cannot be
+           overridden by a stylesheet -- and an app has every right to
+           ignore the layout at a breakpoint. */
+        check("sizing never lands as an inline flex or width",
+              !CSS_SRC.includes("flex:0 0 ") &&
+              /\.g-sized\s*\{[^}]*flex:\s*var\(--g-grow/.test(CSS_SRC));
 
         put({ component: "image", src: "/static/logo.png",
               alt: "cornball.ai", width: 32 });

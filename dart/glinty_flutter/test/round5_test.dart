@@ -1121,12 +1121,19 @@ void _v31() {
           for (final v in ['a', 'b', 'c'])
             {'component': 'button', 'id': 'history_view', 'label': 'row $v',
               'value': v, 'variant': 'ghost'},
+          // Same id AND same value. Neither field is guaranteed
+          // distinct -- the id is routing, the value is data -- so a
+          // key derived from either still collides. There is no
+          // identity here to key on, and inventing one is what
+          // crashed.
+          {'component': 'button', 'id': 'history_view', 'label': 'row a',
+            'value': 'a', 'variant': 'ghost'},
         ]},
       ],
     }, 'rk2');
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(TextButton), findsNWidgets(3));
+    expect(find.byType(TextButton), findsNWidgets(4));
 
     // and pressing one says which
     await tester.tap(find.text('row b'));

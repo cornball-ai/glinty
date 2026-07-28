@@ -787,12 +787,20 @@ class GlintyRenderer {
       }
     }
 
-    // The id says which handler hears this, not which widget it is.
-    // A list of rows shares one handler -- that is what `value` is
-    // for -- and duplicate keys among siblings are an error in
-    // Flutter, so a valued button keys on the pair.
-    final v = c.str('value');
-    final key = Key(v == null ? id : '$id:$v');
+    // Keyed only when there is an identity to key on.
+    //
+    // An unvalued button's id is unique by construction: it names one
+    // handler and one control. A valued button's is not -- the id is
+    // routing and the value is data, and the protocol guarantees
+    // neither is distinct, so two rows may legitimately carry the
+    // same pair. Deriving a key from routing produced exactly that
+    // collision, and duplicate keys among siblings are an error in
+    // Flutter.
+    //
+    // Unkeyed is correct rather than a workaround: a button holds no
+    // state a key would preserve, and Flutter matches unkeyed
+    // siblings positionally, which is what a list of rows wants.
+    final Key? key = c.str('value') == null ? Key(id) : null;
 
     final scheme = Theme.of(context).colorScheme;
     return switch (_variant(c.type, c.str('variant'))) {

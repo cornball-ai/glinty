@@ -217,20 +217,24 @@ expect_false(grepl("data-g-modal-close", plain, fixed = TRUE))
 grown <- component_to_html(component("column", grow = 1L,
                                      children = list(component("text",
                                                                value = "x"))))
-expect_true(grepl("flex:1 1 0", grown, fixed = TRUE))
+expect_true(grepl("--g-grow:1", grown, fixed = TRUE))
+expect_true(grepl("g-sized", grown, fixed = TRUE))
 
 fixed <- component_to_html(component("panel", width = 280L,
                                      variant = "sidebar",
                                      children = list()))
-expect_true(grepl("flex:0 0 280px", fixed, fixed = TRUE))
-expect_true(grepl("width:280px", fixed, fixed = TRUE))
+expect_true(grepl("--g-shrink:0", fixed, fixed = TRUE))
+expect_true(grepl("--g-basis:280px", fixed, fixed = TRUE))
+expect_true(grepl("--g-width:280px", fixed, fixed = TRUE))
+expect_true(grepl("g-sized", fixed, fixed = TRUE))
 
 # a container with neither carries no sizing style at all, rather
 # than a style attribute holding nothing
 plainrow <- component_to_html(component("row",
                                         children = list(component("text",
                                                                   value = "x"))))
-expect_false(grepl("flex:", plainrow, fixed = TRUE))
+expect_false(grepl("--g-", plainrow, fixed = TRUE))
+expect_false(grepl("g-sized", plainrow, fixed = TRUE))
 expect_false(grepl('style=""', plainrow, fixed = TRUE))
 
 # grow and width are contradictory instructions, and the two lowerings
@@ -253,7 +257,7 @@ both <- component_to_html(component("row", gap = 16L, grow = 2L,
                                     children = list(component("text",
                                                               value = "x"))))
 expect_true(grepl("gap:16px", both, fixed = TRUE))
-expect_true(grepl("flex:2 1 0", both, fixed = TRUE))
+expect_true(grepl("--g-grow:2", both, fixed = TRUE))
 
 # --- v3.1: an image that is part of the UI ---
 img <- component_to_html(component("image", src = "/static/logo.png",

@@ -554,17 +554,27 @@
     }
 
     /* grow and width are numbers on the wire and become CSS only
-       here. flex-grow with a zero basis is what makes "fill the rest"
-       behave the same whatever the content is, which is the reason
-       the field exists rather than an app measuring things. */
+       here -- as custom properties, which .g-sized turns into flex.
+       Not as an inline `flex`, because an inline style cannot be
+       overridden by a stylesheet, and an app has every right to
+       ignore the layout at a breakpoint where proportions stop
+       making sense. */
     function flexStyle(c) {
         var out = [];
-        if (c.grow) out.push("flex:" + c.grow + " 1 0");
+        if (c.grow) {
+            out.push("--g-grow:" + c.grow);
+            out.push("--g-basis:0");
+        }
         if (c.width !== null && c.width !== undefined) {
-            out.push("flex:0 0 " + c.width + "px");
-            out.push("width:" + c.width + "px");
+            out.push("--g-shrink:0");
+            out.push("--g-basis:" + c.width + "px");
+            out.push("--g-width:" + c.width + "px");
         }
         return out;
+    }
+
+    function sizedClass(c) {
+        return flexStyle(c).length ? " g-sized" : "";
     }
 
     function buildLayout(c, cls) {
@@ -579,7 +589,7 @@
         }
         style = style.concat(flexStyle(c));
         var node = el("div", {
-            "class": cls,
+            "class": cls + sizedClass(c),
             id: c.id,
             style: style.length ? style.join(";") : null
         });
@@ -839,7 +849,8 @@
         case "panel":
             var panelStyle = flexStyle(c);
             node = el("div", {
-                "class": "g-panel g-panel-" + checkVariant("panel", c.variant),
+                "class": "g-panel g-panel-" +
+                    checkVariant("panel", c.variant) + sizedClass(c),
                 id: c.id,
                 style: panelStyle.length ? panelStyle.join(";") : null
             });
