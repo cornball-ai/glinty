@@ -267,6 +267,53 @@ component_fixtures <- function() {
                       name = "raw_html",
                       component = component("raw_html", html = "<details>x</details>"),
                       notes = "browser renders; every other frontend must refuse by name"
+        ),
+                 list(
+                      name = "image",
+                      component = component("image", src = "/static/logo.png",
+                alt = "cornball.ai", width = 32L, height = 32L),
+                      notes = paste("a picture that is part of the UI, not an",
+                                    "output a renderer produced")
+        ),
+                 list(
+                      name = "collapse",
+                      component = component("collapse", title = "Parameters",
+                open = TRUE,
+                children = list(component("text", value = "inside"))),
+                      notes = "details/summary in the browser, ExpansionTile in Flutter"
+        ),
+                 list(
+                      name = "collapse-closed",
+                      component = component("collapse", title = "API Settings",
+                children = list(component("text", value = "hidden"))),
+                      notes = "open defaults FALSE; both lowerings start it folded"
+        ),
+                 list(
+                      name = "link-wrapping",
+                      component = component("link", href = "https://cornball.ai",
+                external = TRUE,
+                children = list(component("image", src = "/static/logo.png",
+                        alt = "cornball.ai"))),
+                      notes = paste("a link around a logo; value= and children=",
+                                    "are alternatives, never both")
+        ),
+                 list(
+                      name = "row-sized",
+                      component = component("row", gap = 16L, children = list(
+                    component("panel", variant = "sidebar", width = 280L,
+                              children = list(component("text", value = "side"))),
+                    component("column", grow = 1L,
+                              children = list(component("text", value = "fills")))
+                )),
+                      notes = paste("a fixed sidebar beside a filling centre --",
+                                    "the shape both migrated apps are built on")
+        ),
+                 list(
+                      name = "button-valued",
+                      component = component("button", id = "history_view",
+                label = "12:04", value = "entry_7"),
+                      notes = paste("the value rides on the event, so one handler",
+                                    "serves a list of rows")
         )
     )
     # One fixture per icon name, appended rather than written out.

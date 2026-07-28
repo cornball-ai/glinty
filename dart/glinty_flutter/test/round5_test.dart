@@ -157,6 +157,7 @@ final liveTextTree = {
 
 void main() {
   _round7();
+  _v31();
   group('outputs carry their kind and their errors', () {
     testWidgets('a kind this slot cannot draw is named, not stringified',
         (tester) async {
@@ -827,5 +828,180 @@ void _round7() {
     expect(btn.onPressed, isNull,
         reason: 'an enabled button that closes nothing is the lie, '
             'not the disabled one');
+  });
+}
+
+// --- v3.1: what the earshot port proved the vocabulary was missing ---
+
+void _v31() {
+  testWidgets('a width becomes a SizedBox, a grow becomes Expanded',
+      (tester) async {
+    // A fixed sidebar beside a filling centre: the shape both
+    // migrated apps are built on, and the one thing row/column could
+    // not say. CSS spends it as flex-basis and flex-grow; Flutter as
+    // SizedBox and Expanded.
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Layout',
+      'children': [
+        {
+          'component': 'row',
+          'gap': 16,
+          'children': [
+            {'component': 'panel', 'variant': 'sidebar', 'width': 280,
+              'children': [
+                {'component': 'text', 'value': 'side', 'variant': 'normal'}
+              ]},
+            {'component': 'column', 'grow': 1, 'children': [
+              {'component': 'text', 'value': 'fills', 'variant': 'normal'}
+            ]},
+          ],
+        },
+      ],
+    }, 'rl1');
+
+    final box = tester.widget<SizedBox>(find.ancestor(
+        of: find.text('side'), matching: find.byType(SizedBox)).first);
+    expect(box.width, 280);
+
+    expect(
+        find.ancestor(of: find.text('fills'), matching: find.byType(Expanded)),
+        findsOneWidget,
+        reason: 'a grown column in a Row is exactly what Expanded is for');
+    // and the fixed one is not also expanded, or both would flex
+    expect(
+        find.ancestor(of: find.text('side'), matching: find.byType(Expanded)),
+        findsNothing);
+  });
+
+  testWidgets('a grown container outside a Flex does not crash',
+      (tester) async {
+    // Expanded outside a Row or Column throws at build time rather
+    // than laying out oddly, and render_ui() can drop a grown column
+    // into an output slot that is not in one.
+    final socket = await boot(tester, {
+      'component': 'page',
+      'title': 'Loose',
+      'children': [
+        {'component': 'text_output', 'id': 'slot'},
+      ],
+    }, 'rl2');
+    socket.deliver({
+      'type': 'output', 'id': 'slot', 'kind': 'text', 'value': 'x'});
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an image draws from a data URI at the size it was given',
+      (tester) async {
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Img',
+      'children': [
+        {'component': 'image', 'src': pngDataUri, 'alt': 'logo',
+          'width': 32, 'height': 32},
+      ],
+    }, 'ri1');
+    final img = tester.widget<Image>(find.byType(Image));
+    expect(img.width, 32);
+    expect(img.height, 32);
+  });
+
+  testWidgets('an image with a relative src says so', (tester) async {
+    // A relative src is served by the glinty app; this client has no
+    // base URL to resolve it against, and the embedder does. Saying
+    // so beats a broken-image box.
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Img',
+      'children': [
+        {'component': 'image', 'src': '/static/logo.png', 'alt': 'logo'},
+      ],
+    }, 'ri2');
+    expect(find.textContaining('without an absolute URL'), findsOneWidget);
+  });
+
+  testWidgets('a collapse folds and unfolds', (tester) async {
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Fold',
+      'children': [
+        {'component': 'collapse', 'title': 'Parameters', 'open': false,
+          'children': [
+            {'component': 'text', 'value': 'inside', 'variant': 'normal'}
+          ]},
+      ],
+    }, 'rc1');
+
+    expect(find.text('Parameters'), findsOneWidget);
+    expect(find.text('inside'), findsNothing,
+        reason: 'open defaults false, so it starts folded');
+
+    await tester.tap(find.text('Parameters'));
+    await tester.pumpAndSettle();
+    expect(find.text('inside'), findsOneWidget);
+  });
+
+  testWidgets('a collapse marked open starts open', (tester) async {
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Fold',
+      'children': [
+        {'component': 'collapse', 'title': 'Parameters', 'open': true,
+          'children': [
+            {'component': 'text', 'value': 'inside', 'variant': 'normal'}
+          ]},
+      ],
+    }, 'rc2');
+    expect(find.text('inside'), findsOneWidget);
+  });
+
+  testWidgets('a link wraps children instead of its own text',
+      (tester) async {
+    await boot(tester, {
+      'component': 'page',
+      'title': 'Link',
+      'children': [
+        {'component': 'link', 'href': 'https://cornball.ai',
+          'external': true,
+          'children': [
+            {'component': 'text', 'value': 'earshot', 'variant': 'strong'}
+          ]},
+      ],
+    }, 'rk1');
+    expect(find.text('earshot'), findsOneWidget);
+    final t = tester.widget<Text>(find.text('earshot'));
+    expect(t.style?.decoration, isNot(TextDecoration.underline),
+        reason: 'a logo inside a link is still a logo, not link text');
+  });
+
+  testWidgets('a valued button carries its value, a plain one does not',
+      (tester) async {
+    // One handler serves a list of rows: the press says which row.
+    final socket = await boot(tester, {
+      'component': 'page',
+      'title': 'Rows',
+      'children': [
+        {'component': 'button', 'id': 'history_view', 'label': '12:04',
+          'value': 'entry_7', 'variant': 'default'},
+        {'component': 'button', 'id': 'go', 'label': 'Run',
+          'variant': 'primary'},
+      ],
+    }, 'rb1');
+
+    await tester.tap(find.text('12:04'));
+    await tester.pumpAndSettle();
+    var last = socket.sent.last;
+    expect(last['type'], 'event');
+    expect(last['id'], 'history_view');
+    expect(last['value'], 'entry_7');
+
+    await tester.tap(find.text('Run'));
+    await tester.pumpAndSettle();
+    last = socket.sent.last;
+    expect(last['id'], 'go');
+    expect(last.containsKey('value'), isFalse,
+        reason: 'an ordinary press is the whole message; a null value '
+            'field would make the server decide what null means');
   });
 }

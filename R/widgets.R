@@ -214,10 +214,15 @@ file_input <- function(id, label = "", accept = NULL, multiple = FALSE) {
 #' @param variant character "default", "primary", "secondary",
 #'   "danger" or "ghost"
 #' @param icon character icon name shown before the label
+#' @param value character carried on the event this button emits, so
+#'   one `observe_event()` can serve a whole list: the press says which
+#'   row. `input$id()` is then that value rather than a press count
 #' @return A UI component
 #' @examples
 #' button("go", "Run", variant = "primary")
+#' button("history_view", "12:04", value = "entry_7")
 #' @export
-button <- function(id, label, variant = "default", icon = NULL) {
-    component("button", id = id, label = label, variant = variant, icon = icon)
+button <- function(id, label, variant = "default", icon = NULL, value = NULL) {
+    component("button", id = id, label = label, variant = variant,
+              icon = icon, value = value)
 }

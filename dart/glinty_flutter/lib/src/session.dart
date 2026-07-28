@@ -465,8 +465,15 @@ class GlintySession {
   }
 
   /// Report a discrete event, such as a button press.
-  void sendEvent(String id) {
-    _emit(GlintyOutgoing('event', {'type': 'event', 'id': id}));
+  void sendEvent(String id, {String? value}) {
+    _emit(GlintyOutgoing('event', {
+      'type': 'event',
+      'id': id,
+      // Omitted rather than sent as null when absent: an ordinary
+      // button's press is the whole message, and a null value field
+      // would have the server decide what null means.
+      'value': ?value,
+    }));
   }
 
   /// Ask for a transfer ticket. The grant arrives as a `ticket`

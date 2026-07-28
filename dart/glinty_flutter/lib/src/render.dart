@@ -11,6 +11,9 @@
 library;
 
 import 'package:flutter/material.dart';
+// RenderFlex, to ask whether an Expanded would be legal here rather
+// than assuming it.
+import 'package:flutter/rendering.dart';
 
 import 'component.dart';
 
@@ -25,8 +28,8 @@ const supportedComponents = <String>{
   'select_input', 'checkbox_input', 'radio_buttons', 'slider_input',
   'button', 'download_button',
   'text_output', 'verbatim_output', 'table_output',
-  'plot_output', 'image_output',
-  'tabset', 'conditional_panel',
+  'plot_output', 'image_output', 'image',
+  'tabset', 'conditional_panel', 'collapse',
 };
 
 /// Components the protocol defines that this client cannot render.
@@ -58,8 +61,10 @@ const glintyModalCloseId = '..modal_close';
 /// Reports an input change back to the server.
 typedef GlintySink = void Function(String id, dynamic value);
 
-/// Reports a discrete event back to the server.
-typedef GlintyEventSink = void Function(String id);
+/// Reports a discrete event back to the server, carrying the button's
+/// value when it has one -- that is what lets one server handler
+/// serve a list of rows.
+typedef GlintyEventSink = void Function(String id, {String? value});
 
 /// Asks the server for a transfer ticket.
 typedef GlintyTicketSink = void Function(String id, String purpose);
@@ -234,13 +239,20 @@ class GlintyRenderer {
         return _divider(c);
       case 'spacer':
         return SizedBox(height: (c.number('size') ?? 1) * spacing);
+      case 'image':
+        return _staticImage(c);
+      case 'collapse':
+        return _collapse(context, c);
+      // page is never a flex child -- it is the root -- so it skips
+      // the sizing wrapper the other three take.
       case 'page':
-      case 'column':
         return _column(context, c);
+      case 'column':
+        return _sized(c, _column(context, c));
       case 'row':
-        return _row(context, c);
+        return _sized(c, _row(context, c));
       case 'panel':
-        return _panel(context, c);
+        return _sized(c, _panel(context, c));
       case 'text_input':
         return _textField(context, c);
       case 'password_input':
@@ -329,13 +341,22 @@ class GlintyRenderer {
   Widget _link(BuildContext context, GlintyComponent c) {
     final href = c.str('href') ?? '';
     final cb = onLink;
-    final label = Text(
-      c.str('value') ?? '',
-      style: TextStyle(
-        color: Theme.of(context).colorScheme.primary,
-        decoration: TextDecoration.underline,
-      ),
-    );
+    // Children or text, never both -- the schema refuses a link that
+    // carries neither. Wrapped children are not underlined or
+    // recoloured: a logo inside a link is still a logo.
+    final kids = c.children;
+    final Widget label = kids.isNotEmpty
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: kids.map((k) => build(context, k)).toList())
+        : Text(
+            c.str('value') ?? '',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              decoration: TextDecoration.underline,
+            ),
+          );
     // No handler, no tap target: an InkWell with an empty onTap
     // looks tappable and does nothing.
     if (cb == null) return label;
@@ -721,7 +742,7 @@ class GlintyRenderer {
       } else if (isDownload) {
         onTicket?.call(id, 'download');
       } else {
-        onEvent?.call(id);
+        onEvent?.call(id, value: c.str('value'));
       }
     }
 
@@ -812,6 +833,68 @@ class GlintyRenderer {
       ),
     );
   }
+
+  /// A container's share of its parent, from `grow` and `width`.
+  ///
+  /// The same pair CSS spends as flex-grow and flex-basis. `Expanded`
+  /// is only legal inside a Flex, and a container is not always in
+  /// one -- a grown column at the root of a dialog, say -- so the
+  /// wrapper checks rather than assuming, because an Expanded outside
+  /// a Row or Column is a build-time crash, not a layout quirk.
+  Widget _sized(GlintyComponent c, Widget child) {
+    final width = c.integer('width');
+    if (width != null) {
+      child = SizedBox(width: width.toDouble(), child: child);
+    }
+    final grow = c.integer('grow') ?? 0;
+    if (grow > 0) {
+      return _MaybeExpanded(flex: grow, child: child);
+    }
+    return child;
+  }
+
+  /// A picture that is part of the UI, not an output.
+  ///
+  /// Same decoding as an `image` output value -- data: and http(s),
+  /// anything else named rather than drawn -- because the difference
+  /// between the two is where the src came from, not what it is.
+  Widget _staticImage(GlintyComponent c) {
+    final src = c.str('src');
+    if (src == null || src.isEmpty) return const SizedBox.shrink();
+    final w = c.integer('width')?.toDouble();
+    final h = c.integer('height')?.toDouble();
+    final label = c.str('alt');
+    Widget wrap(Widget img) =>
+        Semantics(label: label, image: true, child: img);
+    if (src.startsWith('data:')) {
+      try {
+        return wrap(Image.memory(UriData.parse(src).contentAsBytes(),
+            width: w, height: h, fit: BoxFit.contain));
+      } on FormatException {
+        return _problem(const Color(0xFFF8D7DA), '[this image did not decode]');
+      }
+    }
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return wrap(Image.network(src, width: w, height: h,
+          fit: BoxFit.contain));
+    }
+    // A relative src is served by the glinty app itself, and this
+    // client has no base URL to resolve it against -- the embedder
+    // knows the origin, the renderer does not.
+    return _problem(const Color(0xFFFFF3CD),
+        '[cannot load an image from "$src" without an absolute URL]');
+  }
+
+  /// A section the user can fold away.
+  Widget _collapse(BuildContext context, GlintyComponent c) => ExpansionTile(
+        key: Key(c.str('id') ?? 'g-collapse-${c.str('title')}'),
+        title: Text(c.str('title') ?? ''),
+        initiallyExpanded: c.boolean('open'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.only(bottom: spacing * 2),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: c.children.map((k) => build(context, k)).toList(),
+      );
 
   /// A plot: the client picks the size, the server draws to it.
   ///
@@ -1085,4 +1168,26 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         onChanged: _onChanged,
         onSubmitted: _onSubmitted,
       );
+}
+
+/// `Expanded`, but only where `Expanded` is legal.
+///
+/// A grown container is usually a Row or Column child, where Expanded
+/// is exactly right. It is not always: `render_ui()` can return a
+/// grown column into an output slot, and a dialog body is a
+/// SingleChildScrollView. Expanded outside a Flex throws at build
+/// time rather than laying out oddly, so this asks the element tree
+/// what it is inside instead of assuming.
+class _MaybeExpanded extends StatelessWidget {
+  const _MaybeExpanded({required this.flex, required this.child});
+
+  final int flex;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final inFlex = context.findAncestorRenderObjectOfType<RenderFlex>() != null;
+    if (!inFlex) return child;
+    return Expanded(flex: flex, child: child);
+  }
 }

@@ -173,7 +173,7 @@ void main() {
 
   testWidgets('button emits an event, carrying no value', (tester) async {
     String? fired;
-    final r = GlintyRenderer(onEvent: (id) => fired = id);
+    final r = GlintyRenderer(onEvent: (id, {value}) => fired = id);
     final c = GlintyComponent.fromJson({
       'component': 'button',
       'id': 'go',

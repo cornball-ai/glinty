@@ -5,13 +5,53 @@ lowerings render it: R to HTML for the server-rendered first paint,
 `inst/www/glinty.js` to DOM, and `dart/glinty_flutter` to Flutter
 widgets. Protocol 2 is gone.
 
-Frozen means the component vocabulary, the message types and their
-field shapes are settled. Clients may still grow — the Flutter one
-refuses `ui_output`, `audio_output` and markup by name, and that is
-implementation work behind a stable wire, not a protocol gap. Adding
-a component or a message type is a v4 conversation; adding a
-*variant* or a *feature* is not, because both were designed to grow
-without breaking a client one release behind.
+Frozen means what already exists does not move. Clients may still
+grow — the Flutter one refuses `ui_output`, `audio_output` and markup
+by name, and that is implementation work behind a stable wire, not a
+protocol gap.
+
+**What forces a v4:** removing or renaming a component, changing what
+an existing field means, changing its type, or changing the shape of a
+message. Those break a client that was reading the old thing.
+
+**What does not:** adding a component, adding an optional field,
+adding a variant, adding a feature. All four are backwards compatible
+*because of* the honest-failure rule — a client meeting a component it
+does not know draws a visible placeholder naming it, and one meeting a
+field it does not know ignores it. A client a release behind degrades
+visibly instead of breaking, which is exactly what that rule was for.
+
+An earlier draft of this paragraph said adding a component was a v4
+conversation. That was stricter than the design requires and would
+have made the vocabulary unable to grow at all.
+
+### v3.1
+
+Protocol still 3. Additions, driven by porting two real apps onto the
+frozen vocabulary — the third consumer after the browser and Flutter,
+and the first that had to *build* a UI with it rather than render one:
+
+- `grow` and `width` on `row`, `column` and `panel`. A fixed sidebar
+  beside a filling centre could not be said. Not a CSS import: CSS
+  spends it as flex-grow and flex-basis, Flutter as `Expanded(flex:)`
+  and `SizedBox(width:)`, and every layout system has the pair.
+- `image`, a picture that is part of the UI. `image_output` is a slot
+  the server fills; a logo in a header is not that.
+- `collapse`, a section the user can fold. `<details>` in the browser,
+  `ExpansionTile` in Flutter — native to both, so neither has to
+  rebuild it out of a button and a hidden div.
+- `children` on `link`, so a link can wrap a logo. `value` stopped
+  being required and the two are now alternatives; a link carrying
+  neither is refused, because it would be an invisible clickable
+  nothing.
+- `value` on `button`, carried on the event it emits. One server
+  handler then serves a whole list — the press says which row. Every
+  row needing its own id and its own observer is impossible when the
+  rows are built per render, which is what both apps' history lists
+  do.
+- `icon`'s `name` became a closed set. It had been free text, so a
+  name no frontend drew rendered nothing in the browser and a
+  question-mark glyph in Flutter — silent in both at once.
 
 Two checked-in artifacts are the contract, generated from R and read
 by all three test suites: `inst/fixtures/components.json` (every

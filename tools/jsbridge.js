@@ -1059,6 +1059,104 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
     /* ---------------------------------------------------------- */
     /* ---------------------------------------------------------- */
+    section("v3.1: sizing, images, collapse, valued buttons");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+        const host = page.document.getElementById("panel");
+        const put = (v) => page.ws().deliver({
+            type: "output", id: "panel", kind: "ui", value: v });
+
+        /* A fixed sidebar beside a filling centre: the shape both
+           migrated apps are built on, and the one thing row/column
+           could not say before. */
+        put({ component: "row", gap: 16, children: [
+            { component: "panel", variant: "sidebar", width: 280,
+              children: [] },
+            { component: "column", grow: 1, children: [] }
+        ] });
+        const side = host.children[0].children[0];
+        const centre = host.children[0].children[1];
+        check("a width becomes a fixed flex basis",
+              side.getAttribute("style").includes("flex:0 0 280px") &&
+              side.getAttribute("style").includes("width:280px"));
+        check("a grow becomes flex-grow with a zero basis",
+              centre.getAttribute("style").includes("flex:1 1 0"));
+        check("gap survives beside them",
+              host.children[0].getAttribute("style").includes("gap:16px"));
+
+        /* Neither set means no sizing at all, rather than a style
+           attribute holding nothing. */
+        put({ component: "row", children: [] });
+        const bare = host.children[0].getAttribute("style");
+        check("a container with neither carries no sizing",
+              bare === null || !bare.includes("flex:"));
+
+        put({ component: "image", src: "/static/logo.png",
+              alt: "cornball.ai", width: 32 });
+        const img = host.children[0];
+        check("an image is an img with its src, alt and size",
+              img.tagName === "IMG" &&
+              img.getAttribute("src") === "/static/logo.png" &&
+              img.getAttribute("alt") === "cornball.ai" &&
+              String(img.getAttribute("width")) === "32");
+
+        put({ component: "collapse", title: "Parameters", open: true,
+              children: [{ component: "text", value: "inside",
+                           variant: "normal" }] });
+        const det = host.children[0];
+        check("a collapse is details/summary, open when told",
+              det.tagName === "DETAILS" &&
+              det.getAttribute("open") !== null &&
+              det.querySelector("summary").textContent === "Parameters" &&
+              det.textContent.includes("inside"));
+
+        put({ component: "collapse", title: "API", children: [] });
+        check("and folded when not",
+              host.children[0].getAttribute("open") === null);
+
+        /* value= and children= are alternatives; the schema refuses a
+           link with neither, so the client never has to guess. */
+        put({ component: "link", href: "https://cornball.ai",
+              external: true,
+              children: [{ component: "image", src: "/l.png", alt: "" }] });
+        const a = host.children[0];
+        check("a link wraps children instead of its own text",
+              a.tagName === "A" &&
+              a.querySelector("img") !== null &&
+              a.getAttribute("target") === "_blank");
+
+        /* One handler serves a list of rows: the press says which
+           row. Every row needing its own observer is impossible when
+           the rows are built per render. */
+        put({ component: "row", children: [
+            { component: "button", id: "history_view", label: "12:04",
+              value: "entry_7", variant: "default" },
+            { component: "button", id: "go", label: "Run",
+              variant: "primary" }
+        ] });
+        const before = page.frames("event").length;
+        page.fire("click", page.document.getElementById("history_view"));
+        const valued = page.frames("event").slice(before);
+        check("a valued button sends its value with the event",
+              valued.length === 1 && valued[0].id === "history_view" &&
+              valued[0].value === "entry_7");
+
+        page.fire("click", page.document.getElementById("go"));
+        const plain = page.frames("event").pop();
+        check("an ordinary button sends no value at all",
+              plain.id === "go" && !("value" in plain));
+
+        /* A button's value is not input state: harvesting it would
+           make a row id look like a form field. */
+        check("a button value never lands in the input store",
+              !page.frames("input").some((m) => m.value === "entry_7"));
+    }
+
+    /* ---------------------------------------------------------- */
     section("every icon in the set has artwork");
     {
         /* An icon lowers to an empty span and the glyph comes from

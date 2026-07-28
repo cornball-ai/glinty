@@ -30,6 +30,8 @@ component_to_html <- function(x) {
            heading = html_heading(x),
            link = html_link(x),
            icon = html_icon(x),
+           image = html_image(x),
+           collapse = html_collapse(x),
            divider = html_divider(x),
            spacer = html_spacer(x),
            page = html_container(x, "div", "g-page"),
@@ -136,7 +138,53 @@ html_link <- function(x) {
         attrs$target <- "_blank"
         attrs$rel <- "noopener noreferrer"
     }
-    html_el("a", attrs, html_escape(x$value))
+    inner <- if (length(x$children) > 0L) {
+        children_to_html(x$children)
+    } else {
+        html_escape(x$value)
+    }
+    html_el("a", attrs, inner)
+}
+
+#' Inline style for a container's share of its parent
+#'
+#' `grow` and `width` are numbers on both sides of the wire; this is
+#' the only place they become CSS. flex-grow with a zero basis is what
+#' makes "fill the rest" behave the same whatever the content is,
+#' which is the whole reason the field exists.
+#'
+#' @param x the component
+#' @return character style fragment, or NULL
+#' @keywords internal
+html_flex_style <- function(x) {
+    parts <- character(0L)
+    if (!is.null(x$grow) && x$grow > 0L) {
+        parts <- c(parts, paste0("flex:", x$grow, " 1 0"))
+    }
+    if (!is.null(x$width)) {
+        parts <- c(parts, paste0("flex:0 0 ", x$width, "px"),
+                   paste0("width:", x$width, "px"))
+    }
+    if (length(parts) == 0L) {
+        NULL
+    } else {
+        paste(parts, collapse = ";")
+    }
+}
+
+html_image <- function(x) {
+    html_el("img", list(class = "g-image", src = x$src, alt = x$alt,
+                        width = x$width, height = x$height), void = TRUE)
+}
+
+html_collapse <- function(x) {
+    summary <- html_el("summary", list(class = "g-collapse-title"),
+                       html_escape(x$title))
+    html_el("details",
+            list(class = "g-collapse", id = x$id,
+                 open = if (isTRUE(x$open)) "open" else NULL),
+            paste0(summary, html_el("div", list(class = "g-collapse-body"),
+                                    children_to_html(x$children))))
 }
 
 html_icon <- function(x) {
@@ -181,7 +229,9 @@ html_layout <- function(x, cls) {
                         end = "flex-end")
         style <- paste(c(style, paste0("align-items:", align)), collapse = ";")
     }
-    html_el("div", list(class = cls, id = x$id, style = style),
+    style <- paste(c(style, html_flex_style(x)), collapse = ";")
+    html_el("div", list(class = cls, id = x$id,
+                        style = if (nzchar(style)) style else NULL),
             children_to_html(x$children))
 }
 
@@ -192,7 +242,7 @@ html_panel <- function(x) {
                                 html_escape(x$title)), inner)
     }
     html_el("div", list(class = paste0("g-panel g-panel-", x$variant),
-                        id = x$id), inner)
+                        id = x$id, style = html_flex_style(x)), inner)
 }
 
 # --- inputs ---
@@ -240,6 +290,13 @@ html_bind <- function(x) {
     out[["data-g-message"]] <- meta$message
     if (!is.null(x$emit)) {
         out[["data-g-event"]] <- emit_event(x$emit)
+    }
+    # A button's value rides along on the event it emits, which is
+    # what lets one handler serve a list of rows. The tabset lowering
+    # has always used this attribute for the same purpose; a button
+    # can now say it too.
+    if (!is.null(x$value) && identical(meta$message, "event")) {
+        out[["data-g-value"]] <- x$value
     }
     out
 }

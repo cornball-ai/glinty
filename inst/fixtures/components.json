@@ -491,6 +491,109 @@
       }
     },
     {
+      "name": "image",
+      "notes": "a picture that is part of the UI, not an output a renderer produced",
+      "component": {
+        "component": "image",
+        "src": "/static/logo.png",
+        "alt": "cornball.ai",
+        "width": 32,
+        "height": 32
+      }
+    },
+    {
+      "name": "collapse",
+      "notes": "details/summary in the browser, ExpansionTile in Flutter",
+      "component": {
+        "component": "collapse",
+        "children": [
+          {
+            "component": "text",
+            "value": "inside",
+            "variant": "normal"
+          }
+        ],
+        "title": "Parameters",
+        "open": true
+      }
+    },
+    {
+      "name": "collapse-closed",
+      "notes": "open defaults FALSE; both lowerings start it folded",
+      "component": {
+        "component": "collapse",
+        "children": [
+          {
+            "component": "text",
+            "value": "hidden",
+            "variant": "normal"
+          }
+        ],
+        "title": "API Settings",
+        "open": false
+      }
+    },
+    {
+      "name": "link-wrapping",
+      "notes": "a link around a logo; value= and children= are alternatives, never both",
+      "component": {
+        "component": "link",
+        "href": "https://cornball.ai",
+        "children": [
+          {
+            "component": "image",
+            "src": "/static/logo.png",
+            "alt": "cornball.ai"
+          }
+        ],
+        "external": true
+      }
+    },
+    {
+      "name": "row-sized",
+      "notes": "a fixed sidebar beside a filling centre -- the shape both migrated apps are built on",
+      "component": {
+        "component": "row",
+        "children": [
+          {
+            "component": "panel",
+            "children": [
+              {
+                "component": "text",
+                "value": "side",
+                "variant": "normal"
+              }
+            ],
+            "variant": "sidebar",
+            "width": 280
+          },
+          {
+            "component": "column",
+            "children": [
+              {
+                "component": "text",
+                "value": "fills",
+                "variant": "normal"
+              }
+            ],
+            "grow": 1
+          }
+        ],
+        "gap": 16
+      }
+    },
+    {
+      "name": "button-valued",
+      "notes": "the value rides on the event, so one handler serves a list of rows",
+      "component": {
+        "component": "button",
+        "value": "entry_7",
+        "id": "history_view",
+        "label": "12:04",
+        "variant": "default"
+      }
+    },
+    {
       "name": "icon-play",
       "notes": "every frontend must draw play -- the name is in the closed set, so there is no falling back to nothing",
       "component": {

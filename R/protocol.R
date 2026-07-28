@@ -187,8 +187,16 @@ dispatch_client_message <- function(session, txt) {
             handle_input(session, msg$id, normalize_value(msg$value))
         }
     } else if (identical(msg$type, "event")) {
-        if (is.character(msg$id)) {
-            handle_event(session, msg$id)
+        if (is.character(msg$id) && !startsWith(msg$id, "..")) {
+            # A value is optional and, when present, must be a single
+            # string: it is a row id the app chose, not a payload.
+            # Anything else counts as no value rather than being
+            # written into session state unchecked.
+            v <- msg$value
+            if (!(is.character(v) && length(v) == 1L && !is.na(v))) {
+                v <- NULL
+            }
+            handle_event(session, msg$id, v)
         }
     } else if (identical(msg$type, "measure")) {
         handle_measure(session, msg)

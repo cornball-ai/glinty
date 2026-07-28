@@ -3,12 +3,17 @@
 \alias{column}
 \title{Arrange children in a vertical column}
 \usage{
-column(..., gap = NULL, id = NULL)
+column(..., gap = NULL, grow = NULL, width = NULL, id = NULL)
 }
 \arguments{
 \item{...}{child components}
 
 \item{gap}{integer space between children, in pixels}
+
+\item{grow}{integer share of the parent's spare space; 0 or NULL
+takes none}
+
+\item{width}{integer fixed width in pixels}
 
 \item{id}{character element ID}
 }

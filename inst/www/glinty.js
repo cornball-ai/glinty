@@ -16,7 +16,8 @@
     var SUPPORTED_COMPONENTS = [
         "audio_output", "button", "checkbox_input", "column",
         "conditional_panel", "date_input", "divider", "download_button",
-        "file_input", "heading", "html_output", "icon", "image_output",
+        "collapse", "file_input", "heading", "html_output", "icon",
+        "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "raw_html", "row", "select_input",
         "slider_input", "spacer", "tabset", "text", "text_input",
@@ -308,7 +309,15 @@
                input/change events, not through clicks. */
             if (el.dataset.gMessage === "event") {
                 if (el.dataset.gDownload === undefined) {
-                    send({ type: "event", id: el.dataset.gTarget });
+                    /* A button may carry a value, which rides along so
+                       one handler can serve a list of rows: the press
+                       says which row. Absent on an ordinary button,
+                       where the press is the whole message. */
+                    var frame = { type: "event", id: el.dataset.gTarget };
+                    if (el.dataset.gValue !== undefined) {
+                        frame.value = el.dataset.gValue;
+                    }
+                    send(frame);
                 }
                 return;
             }
@@ -499,6 +508,13 @@
         attrs["data-g-target"] = c.id;
         attrs["data-g-message"] = message;
         if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
+        /* A button's value rides along on the event, so one handler
+           serves a list of rows. The delegated click handler already
+           reads this attribute for tab buttons. */
+        if (message === "event" && c.value !== null &&
+                c.value !== undefined) {
+            attrs["data-g-value"] = c.value;
+        }
         return attrs;
     }
 
@@ -534,6 +550,20 @@
         });
     }
 
+    /* grow and width are numbers on the wire and become CSS only
+       here. flex-grow with a zero basis is what makes "fill the rest"
+       behave the same whatever the content is, which is the reason
+       the field exists rather than an app measuring things. */
+    function flexStyle(c) {
+        var out = [];
+        if (c.grow) out.push("flex:" + c.grow + " 1 0");
+        if (c.width !== null && c.width !== undefined) {
+            out.push("flex:0 0 " + c.width + "px");
+            out.push("width:" + c.width + "px");
+        }
+        return out;
+    }
+
     function buildLayout(c, cls) {
         var style = [];
         if (c.gap !== null && c.gap !== undefined) {
@@ -544,6 +574,7 @@
                         end: "flex-end" };
             style.push("align-items:" + map[c.align]);
         }
+        style = style.concat(flexStyle(c));
         var node = el("div", {
             "class": cls,
             id: c.id,
@@ -738,7 +769,35 @@
                 target: c.external ? "_blank" : null,
                 rel: c.external ? "noopener noreferrer" : null
             });
-            node.textContent = c.value;
+            /* children or text, never both -- the schema refuses a
+               link carrying neither, which would be an invisible
+               clickable nothing. */
+            if (c.children && c.children.length) {
+                appendChildren(node, c.children);
+            } else {
+                node.textContent = c.value;
+            }
+            return node;
+        case "image":
+            return el("img", {
+                "class": "g-image",
+                src: c.src,
+                alt: c.alt === null || c.alt === undefined ? "" : c.alt,
+                width: c.width,
+                height: c.height
+            });
+        case "collapse":
+            node = el("details", {
+                "class": "g-collapse",
+                id: c.id,
+                open: c.open ? "open" : null
+            });
+            var summary = el("summary", { "class": "g-collapse-title" });
+            summary.textContent = c.title;
+            node.appendChild(summary);
+            var body = el("div", { "class": "g-collapse-body" });
+            appendChildren(body, c.children);
+            node.appendChild(body);
             return node;
         case "icon":
             node = el("span", {
@@ -775,9 +834,11 @@
         case "column":
             return buildLayout(c, "g-layout-col");
         case "panel":
+            var panelStyle = flexStyle(c);
             node = el("div", {
                 "class": "g-panel g-panel-" + checkVariant("panel", c.variant),
-                id: c.id
+                id: c.id,
+                style: panelStyle.length ? panelStyle.join(";") : null
             });
             if (c.title) {
                 var pt = el("div", { "class": "g-panel-title" });

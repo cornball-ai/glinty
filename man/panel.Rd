@@ -3,7 +3,7 @@
 \alias{panel}
 \title{Group children in a container}
 \usage{
-panel(..., variant = "plain", title = NULL, id = NULL)
+panel(..., variant = "plain", title = NULL, grow = NULL, width = NULL, id = NULL)
 }
 \arguments{
 \item{...}{child components}
@@ -11,6 +11,11 @@ panel(..., variant = "plain", title = NULL, id = NULL)
 \item{variant}{character "plain", "card" or "sidebar"}
 
 \item{title}{character heading shown above the contents}
+
+\item{grow}{integer share of the parent's spare space; 0 or NULL
+takes none}
+
+\item{width}{integer fixed width in pixels}
 
 \item{id}{character element ID}
 }

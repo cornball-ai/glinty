@@ -209,6 +209,89 @@ plain <- component_to_html(component("button", id = "go", label = "Run"))
 expect_true(grepl('data-g-message="event"', plain, fixed = TRUE))
 expect_false(grepl("data-g-modal-close", plain, fixed = TRUE))
 
+# --- v3.1: how a container takes space in its parent ---
+#
+# grow and width are numbers on the wire and become CSS only here.
+# Without them a fixed sidebar beside a filling centre -- the shape
+# both migrated apps are built on -- could not be said at all.
+grown <- component_to_html(component("column", grow = 1L,
+                                     children = list(component("text",
+                                                               value = "x"))))
+expect_true(grepl("flex:1 1 0", grown, fixed = TRUE))
+
+fixed <- component_to_html(component("panel", width = 280L,
+                                     variant = "sidebar",
+                                     children = list()))
+expect_true(grepl("flex:0 0 280px", fixed, fixed = TRUE))
+expect_true(grepl("width:280px", fixed, fixed = TRUE))
+
+# a container with neither carries no sizing style at all, rather
+# than a style attribute holding nothing
+plainrow <- component_to_html(component("row",
+                                        children = list(component("text",
+                                                                  value = "x"))))
+expect_false(grepl("flex:", plainrow, fixed = TRUE))
+expect_false(grepl('style=""', plainrow, fixed = TRUE))
+
+# gap and grow compose rather than one clobbering the other
+both <- component_to_html(component("row", gap = 16L, grow = 2L,
+                                    children = list(component("text",
+                                                              value = "x"))))
+expect_true(grepl("gap:16px", both, fixed = TRUE))
+expect_true(grepl("flex:2 1 0", both, fixed = TRUE))
+
+# --- v3.1: an image that is part of the UI ---
+img <- component_to_html(component("image", src = "/static/logo.png",
+                                   alt = "cornball.ai", width = 32L))
+expect_true(grepl('<img class="g-image"', img, fixed = TRUE))
+expect_true(grepl('src="/static/logo.png"', img, fixed = TRUE))
+expect_true(grepl('alt="cornball.ai"', img, fixed = TRUE))
+expect_true(grepl('width="32"', img, fixed = TRUE))
+
+# --- v3.1: a link wraps children, or carries text, never both ---
+wrapping <- component_to_html(component("link", href = "https://cornball.ai",
+                                        children = list(component("image",
+                                                                  src = "/l.png"))))
+expect_true(grepl("<a href=", wrapping, fixed = TRUE))
+expect_true(grepl("<img", wrapping, fixed = TRUE))
+
+expect_error(component("link", href = "https://x"), "either value")
+expect_error(component("link", href = "https://x", value = "text",
+                       children = list(component("text", value = "y"))),
+             "not both")
+
+# --- v3.1: a collapsible section ---
+open_one <- component_to_html(component("collapse", title = "Parameters",
+                                        open = TRUE,
+                                        children = list(component("text",
+                                                                  value = "in"))))
+expect_true(grepl("<details", open_one, fixed = TRUE))
+expect_true(grepl('open="open"', open_one, fixed = TRUE))
+expect_true(grepl("<summary", open_one, fixed = TRUE))
+expect_true(grepl(">Parameters<", open_one, fixed = TRUE))
+
+shut <- component_to_html(component("collapse", title = "API",
+                                    children = list(component("text",
+                                                              value = "in"))))
+expect_false(grepl("open=", shut, fixed = TRUE))
+
+# --- v3.1: a button's value rides on its event ---
+#
+# One handler serves a list of rows: the press says which row. Every
+# row needing its own id and its own observer is impossible when the
+# rows are built per render, which is what the history lists in both
+# migrated apps do.
+valued <- component_to_html(component("button", id = "history_view",
+                                      label = "12:04", value = "entry_7"))
+expect_true(grepl('data-g-value="entry_7"', valued, fixed = TRUE))
+expect_true(grepl('data-g-message="event"', valued, fixed = TRUE))
+
+# an ordinary button carries none: the press is the whole message
+expect_false(grepl("data-g-value",
+                   component_to_html(component("button", id = "go",
+                                               label = "Run")),
+                   fixed = TRUE))
+
 # --- what each input reports is what INPUT_META declares ---
 #
 # The declaration used to be documentation nothing checked, which is

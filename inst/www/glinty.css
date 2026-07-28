@@ -138,6 +138,32 @@ h1, h2, h3, h4 {
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='21' x2='12' y2='9'/%3E%3Cpolyline points='7 14 12 9 17 14'/%3E%3Cpath d='M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'/%3E%3C/g%3E%3C/svg%3E");
 }
 
+/* A folded section. The browser gets <details>, which brings its own
+   disclosure triangle and keyboard behaviour -- there is no reason to
+   rebuild either. */
+.g-collapse {
+    border: 1px solid var(--g-border);
+    border-radius: var(--g-radius);
+    padding: calc(var(--g-space) * 2);
+}
+
+.g-collapse-title {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.g-collapse-body {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--g-space) * 2);
+    margin-top: calc(var(--g-space) * 2);
+}
+
+.g-image {
+    max-width: 100%;
+    height: auto;
+}
+
 .g-divider {
     border: none;
     border-top: 1px solid var(--g-border);
