@@ -157,20 +157,35 @@ html_link <- function(x) {
 #' @return character style fragment, or NULL
 #' @keywords internal
 html_flex_style <- function(x) {
-    parts <- character(0L)
+    if (!html_is_sized(x)) {
+        return(NULL)
+    }
+    # All four, always. Custom properties inherit, so a sized element
+    # that set only some of them picked the rest up from a sized
+    # ancestor: a fixed-width child inside a grown parent inherited
+    # --g-grow and grew, and a grown child inside a fixed parent
+    # inherited --g-width and did not. Setting every one makes each
+    # element say its whole size and inherit none of it.
     if (!is.null(x$grow) && x$grow > 0L) {
-        parts <- c(parts, paste0("--g-grow:", x$grow), "--g-basis:0")
+        grow <- x$grow
+    } else {
+        grow <- 0L
     }
     if (!is.null(x$width)) {
-        parts <- c(parts, "--g-shrink:0",
-                   paste0("--g-basis:", x$width, "px"),
-                   paste0("--g-width:", x$width, "px"))
-    }
-    if (length(parts) == 0L) {
-        NULL
+        basis <- paste0(x$width, "px")
+        width <- basis
+        shrink <- 0L
     } else {
-        paste(parts, collapse = ";")
+        if (grow > 0L) {
+            basis <- "0"
+        } else {
+            basis <- "auto"
+        }
+        width <- "auto"
+        shrink <- 1L
     }
+    paste0("--g-grow:", grow, ";--g-shrink:", shrink, ";--g-basis:",
+           basis, ";--g-width:", width)
 }
 
 #' Does this component carry sizing?

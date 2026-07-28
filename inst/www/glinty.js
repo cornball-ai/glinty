@@ -560,17 +560,20 @@
        ignore the layout at a breakpoint where proportions stop
        making sense. */
     function flexStyle(c) {
-        var out = [];
-        if (c.grow) {
-            out.push("--g-grow:" + c.grow);
-            out.push("--g-basis:0");
-        }
-        if (c.width !== null && c.width !== undefined) {
-            out.push("--g-shrink:0");
-            out.push("--g-basis:" + c.width + "px");
-            out.push("--g-width:" + c.width + "px");
-        }
-        return out;
+        var hasWidth = c.width !== null && c.width !== undefined;
+        var grow = c.grow ? c.grow : 0;
+        if (!grow && !hasWidth) return [];
+        /* All four, always. Custom properties inherit, so an element
+           that set only some of them picked the rest up from a sized
+           ancestor -- a fixed-width child inside a grown parent
+           inherited --g-grow and grew. Setting every one makes each
+           element say its whole size and inherit none of it. */
+        return [
+            "--g-grow:" + grow,
+            "--g-shrink:" + (hasWidth ? 0 : 1),
+            "--g-basis:" + (hasWidth ? c.width + "px" : (grow ? "0" : "auto")),
+            "--g-width:" + (hasWidth ? c.width + "px" : "auto")
+        ];
     }
 
     function sizedClass(c) {

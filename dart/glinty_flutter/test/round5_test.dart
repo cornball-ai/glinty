@@ -1128,12 +1128,20 @@ void _v31() {
           // crashed.
           {'component': 'button', 'id': 'history_view', 'label': 'row a',
             'value': 'a', 'variant': 'ghost'},
+          // And two *unvalued* buttons sharing an id, which is the
+          // plain case: a form with Save at the top and the bottom.
+          // Nothing makes a button id unique, so nothing derived from
+          // it can be a key.
+          {'component': 'button', 'id': 'save', 'label': 'Save top',
+            'variant': 'ghost'},
+          {'component': 'button', 'id': 'save', 'label': 'Save bottom',
+            'variant': 'ghost'},
         ]},
       ],
     }, 'rk2');
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(TextButton), findsNWidgets(4));
+    expect(find.byType(TextButton), findsNWidgets(6));
 
     // and pressing one says which
     await tester.tap(find.text('row b'));

@@ -787,39 +787,38 @@ class GlintyRenderer {
       }
     }
 
-    // Keyed only when there is an identity to key on.
+    // Never keyed. Routing is not identity.
     //
-    // An unvalued button's id is unique by construction: it names one
-    // handler and one control. A valued button's is not -- the id is
-    // routing and the value is data, and the protocol guarantees
-    // neither is distinct, so two rows may legitimately carry the
-    // same pair. Deriving a key from routing produced exactly that
-    // collision, and duplicate keys among siblings are an error in
-    // Flutter.
+    // A button's `id` says which handler hears the press, and nothing
+    // makes it unique: two buttons may legitimately carry the same
+    // one, with or without a value -- a form with Save at the top and
+    // bottom is the plain case. Duplicate keys among siblings are an
+    // error in Flutter, so deriving one from the id crashed on
+    // exactly the trees the protocol permits.
     //
     // Unkeyed is correct rather than a workaround: a button holds no
     // state a key would preserve, and Flutter matches unkeyed
-    // siblings positionally, which is what a list of rows wants.
-    final Key? key = c.str('value') == null ? Key(id) : null;
+    // siblings positionally. Controls that *do* hold state -- text
+    // fields, sliders -- keep their keys, because their ids really
+    // are identities: an input id names one value in one store.
 
     final scheme = Theme.of(context).colorScheme;
     return switch (_variant(c.type, c.str('variant'))) {
       'primary' =>
-        FilledButton(key: key, onPressed: dead ? null : fire, child: child),
+        FilledButton(onPressed: dead ? null : fire, child: child),
       'secondary' =>
-        OutlinedButton(key: key, onPressed: dead ? null : fire, child: child),
+        OutlinedButton(onPressed: dead ? null : fire, child: child),
       // danger comes from the theme's danger token, which
       // glintyThemeData maps onto the scheme's error slot
       'danger' => FilledButton(
-          key: key,
           onPressed: dead ? null : fire,
           style: FilledButton.styleFrom(
               backgroundColor: scheme.error, foregroundColor: scheme.onError),
           child: child),
       'ghost' =>
-        TextButton(key: key, onPressed: dead ? null : fire, child: child),
+        TextButton(onPressed: dead ? null : fire, child: child),
       _ =>
-        ElevatedButton(key: key, onPressed: dead ? null : fire, child: child),
+        ElevatedButton(onPressed: dead ? null : fire, child: child),
     };
   }
 

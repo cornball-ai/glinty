@@ -237,6 +237,39 @@ expect_false(grepl("--g-", plainrow, fixed = TRUE))
 expect_false(grepl("g-sized", plainrow, fixed = TRUE))
 expect_false(grepl('style=""', plainrow, fixed = TRUE))
 
+# --- sizing never inherits ---
+#
+# Custom properties cascade. An element that set only the properties
+# it needed picked the rest up from a sized ancestor: a fixed-width
+# child inside a grown parent inherited --g-grow and grew, and a grown
+# child inside a fixed parent inherited --g-width and did not. Every
+# sized element states all four, so nothing is inherited.
+fixed_in_grown <- component_to_html(
+    component("row", grow = 1L, children = list(
+            component("panel", width = 280L, children = list())
+        )))
+expect_true(grepl("--g-grow:1;--g-shrink:1;--g-basis:0;--g-width:auto",
+                  fixed_in_grown, fixed = TRUE))
+expect_true(grepl("--g-grow:0;--g-shrink:0;--g-basis:280px;--g-width:280px",
+                  fixed_in_grown, fixed = TRUE))
+
+grown_in_fixed <- component_to_html(
+    component("panel", width = 280L, children = list(
+            component("column", grow = 1L, children = list())
+        )))
+expect_true(grepl("--g-grow:0;--g-shrink:0;--g-basis:280px;--g-width:280px",
+                  grown_in_fixed, fixed = TRUE))
+expect_true(grepl("--g-grow:1;--g-shrink:1;--g-basis:0;--g-width:auto",
+                  grown_in_fixed, fixed = TRUE))
+
+# every sized element names all four, whichever field was set
+for (h in c(fixed_in_grown, grown_in_fixed)) {
+    n_sized <- length(gregexpr("g-sized", h)[[1]])
+    for (v in c("--g-grow", "--g-shrink", "--g-basis", "--g-width")) {
+        expect_equal(length(gregexpr(v, h, fixed = TRUE)[[1]]), n_sized)
+    }
+}
+
 # grow and width are contradictory instructions, and the two lowerings
 # resolve them differently -- the browser lets the later CSS rule win,
 # Flutter lets Expanded win. Refused rather than silently divergent.

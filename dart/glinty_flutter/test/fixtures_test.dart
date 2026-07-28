@@ -181,7 +181,9 @@ void main() {
       'variant': 'primary',
     });
     await pumpComponent(tester, c, renderer: r);
-    await tester.tap(find.byKey(const Key('go')));
+    // By label, not by key: buttons are unkeyed, because an id is
+    // routing and two buttons may share one.
+    await tester.tap(find.text('Run'));
     expect(fired, 'go');
   });
 

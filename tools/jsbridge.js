@@ -1186,6 +1186,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               !CSS_SRC.includes("flex:0 0 ") &&
               /\.g-sized\s*\{[^}]*flex:\s*var\(--g-grow/.test(CSS_SRC));
 
+        /* Custom properties inherit, so an element that set only what
+           it needed picked the rest up from a sized ancestor: a fixed
+           child inside a grown parent inherited --g-grow and grew.
+           Every sized element states all four. */
+        const allFour = (el) => ["--g-grow", "--g-shrink", "--g-basis",
+                                 "--g-width"]
+            .every((v) => (el.getAttribute("style") || "").includes(v));
+
+        put({ component: "row", grow: 1, children: [
+            { component: "panel", width: 280, children: [] }
+        ] });
+        const outerGrown = host.children[0];
+        const innerFixed = outerGrown.children[0];
+        check("a fixed child inside a grown parent states its own size",
+              allFour(outerGrown) && allFour(innerFixed) &&
+              innerFixed.getAttribute("style").includes("--g-grow:0") &&
+              innerFixed.getAttribute("style").includes("--g-width:280px"));
+
+        put({ component: "panel", width: 280, children: [
+            { component: "column", grow: 1, children: [] }
+        ] });
+        const outerFixed = host.children[0];
+        const innerGrown = outerFixed.children[0];
+        check("a grown child inside a fixed parent states its own size",
+              allFour(outerFixed) && allFour(innerGrown) &&
+              innerGrown.getAttribute("style").includes("--g-grow:1") &&
+              innerGrown.getAttribute("style").includes("--g-width:auto"));
+
         put({ component: "image", src: "/static/logo.png",
               alt: "cornball.ai", width: 32 });
         const img = host.children[0];
