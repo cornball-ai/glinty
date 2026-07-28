@@ -838,11 +838,18 @@ class GlintyRenderer {
     final declaredH = c.integer('height')?.toDouble();
     return LayoutBuilder(builder: (context, box) {
       final width = declaredW ??
-          (box.maxWidth.isFinite ? box.maxWidth : double.infinity);
+          (box.maxWidth.isFinite
+              ? box.maxWidth
+              // A height-only plot in a Row has neither a declared
+              // width nor a bounded one, but it does have a ratio
+              // and a height -- so the width follows, the same 4:3
+              // rule read the other way. Without this the plot never
+              // measured, which took the dpr with it.
+              : (declaredH != null ? declaredH * 4 / 3 : double.infinity));
       if (!width.isFinite) {
-        // No declared width and an unbounded one: nothing to measure
-        // from. Draw what arrived, if anything, and wait for a parent
-        // with an opinion about width.
+        // Neither axis declared and both unbounded: nothing to
+        // measure from at all. Draw what arrived, if anything, and
+        // wait for a parent with an opinion about size.
         return _image(c);
       }
       // Height usually does not come from the parent: a Column lays

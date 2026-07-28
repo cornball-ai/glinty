@@ -717,6 +717,33 @@ void _round7() {
     expect(m['height'], 150);
   });
 
+  testWidgets('a height-only plot in a Row derives its width',
+      (tester) async {
+    // A Row gives its children an unbounded horizontal axis, so a
+    // height-only plot has neither a declared width nor a bounded
+    // one. It does have a height and a ratio, so the width follows
+    // -- the same 4:3 rule read the other way. Without it the plot
+    // never measured, and never measuring took the dpr with it.
+    final socket = await boot(tester, {
+      'component': 'page',
+      'title': 'Plots',
+      'children': [
+        {
+          'component': 'row',
+          'children': [
+            {'component': 'plot_output', 'id': 'tall', 'height': 300},
+          ],
+        },
+      ],
+    }, 'rh');
+
+    final m = socket.sent.firstWhere((f) => f['type'] == 'measure');
+    expect(m['id'], 'tall');
+    expect(m['height'], 300);
+    expect(m['width'], 400);
+    expect(m['dpr'], isNotNull);
+  });
+
   testWidgets('an image_output draws at the size the wire gave it',
       (tester) async {
     // Flutter sizes an Image to the raster's pixel count when no size

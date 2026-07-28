@@ -1,5 +1,69 @@
 # glinty (development version)
 
+**Protocol v3 is frozen.** The component vocabulary, the message
+types and their field shapes are settled, and three lowerings render
+them: R to HTML, `glinty.js` to DOM, `dart/glinty_flutter` to Flutter
+widgets. PROTOCOL.md said the spec would stay draft until two clients
+agreed on shared fixtures; they do.
+
+Breaking: protocol 2 is gone, and `run_app_native()` with it. flitR is
+retired rather than retrofitted -- Flutter desktop covers the same
+platforms with real widgets, real text input and an accessibility tree
+flitR could not offer.
+
+The freeze came out of eight adversarial review rounds, and what they
+were best at was catching claims nothing checked:
+
+- The fixture list said "every component, once" and was missing 13 of
+  them; the test asserted `length >= 20`. It now asserts against
+  `COMPONENT_SCHEMA`, so the claim is checked rather than repeated.
+- `INPUT_META`'s own documentation said it was "what the conformance
+  test holds both lowerings to". Nothing read the field. It is now
+  checked against what each input actually seeds -- which is how
+  `select_input` was found declaring `"string"` for a control whose
+  value is a list.
+- The Flutter client declared the `measure` feature and never
+  measured, three lines below a comment stating that a feature named
+  without an implementation is a claim the server believes.
+
+Fixed in those rounds:
+
+- `select_input(multiple = TRUE)` was scalar in five places: the
+  schema rejected `c("a", "b")` outright, both lowerings compared a
+  choice against the whole selection by equality (so an app choosing
+  three options rendered none chosen), the browser's `input_update`
+  assigned an array to `el.value` and silently cleared the control,
+  and R seeded `NULL` where the browser harvests `[]`. `selected` is
+  now plural, held to `multiple` by a new cross-field check, and is an
+  array at **every** length -- a one-element selection that collapsed
+  to a bare string would have clients parsing a list sometimes and a
+  string other times. `update_select_input()` follows the same rule
+  and gained a `multiple` argument for the one- and zero-value cases.
+- The Flutter client dropped `modal`, `progress` and `custom` frames,
+  making `show_modal()` and `with_progress()` no-ops against it. All
+  three are handled now: dialogs and progress reports draw, and a
+  `custom` frame naming a handler nothing registered is named on
+  screen. Handlers arrive as `GlintyApp(customHandlers:)`.
+- `modal_button()` closed nothing in either client. The browser's
+  click delegation had always looked for `data-g-modal-close`; no
+  lowering ever set it, so a Cancel rendered and did nothing.
+- `plot_output` and `image_output` render in Flutter, which is what
+  makes the `measure` declaration true. Every plot reports its box --
+  fixed ones included, because the size is only half of a measurement
+  and the device pixel ratio is the half the app cannot supply.
+- Outputs carry their `kind` and their scoped errors through to the
+  Flutter renderer. A `text_output` handed an image value used to
+  stringify the payload; an errored slot used to go blank.
+- Input handling in Flutter: a `settle` slider reports on release
+  rather than streaming, a `settle` text field reports on blur as
+  well as enter, and a server push refused because a field has focus
+  is counted rather than compared -- so an identical later push still
+  lands instead of being swallowed.
+- Transport: the welcome deadline is armed before the connect, not
+  after, so a socket that never opens still spends the retry budget;
+  attempts are numbered so a late socket is closed rather than
+  adopted; and a terminal stop closes the wire it stopped on.
+
 Protocol v3, stages 1 through 4. The wire now carries semantic
 components rather than DOM instructions, which is what lets a
 frontend that is not a browser render a glinty app; the bootstrap

@@ -1,6 +1,24 @@
 # glinty protocol v3
 
-Status: **draft**. Not implemented. Protocol 2 is what ships today.
+Status: **frozen**. Implemented and shipping. Three independent
+lowerings render it: R to HTML for the server-rendered first paint,
+`inst/www/glinty.js` to DOM, and `dart/glinty_flutter` to Flutter
+widgets. Protocol 2 is gone.
+
+Frozen means the component vocabulary, the message types and their
+field shapes are settled. Clients may still grow — the Flutter one
+refuses `ui_output`, `audio_output` and markup by name, and that is
+implementation work behind a stable wire, not a protocol gap. Adding
+a component or a message type is a v4 conversation; adding a
+*variant* or a *feature* is not, because both were designed to grow
+without breaking a client one release behind.
+
+Two checked-in artifacts are the contract, generated from R and read
+by all three test suites: `inst/fixtures/components.json` (every
+component in the schema, at least once) and
+`inst/fixtures/transcripts.json` (the frames of an exchange, in
+order). A component only counts as frontend-neutral once more than
+one lowering has had to answer for it.
 
 ## Why
 
@@ -711,8 +729,8 @@ exists than after.
   being portable.
 - Class-based styling becomes browser-only. `class = "history-item"`
   keeps working in the browser and does nothing elsewhere.
-- Protocol 2 clients stop working. There is one, and it ships in this
-  repo.
+- Protocol 2 clients stop working. There was one, it shipped in this
+  repo, and it was replaced rather than retrofitted.
 - `run_app_native()` stops working at stage 1 and stays broken until
   someone retrofits it. See below.
 
@@ -817,6 +835,24 @@ make it slower.
    retained widget state goes with them. The browser reloads the
    page for exactly this reason.
 
+7. **Adversarial review to a freeze.** *(done)* Eight rounds against
+   a second reviewer, each one gated on fixing everything it found.
+   What the rounds were actually good at was catching claims nothing
+   checked: a fixture list that said "every component, once" and was
+   missing thirteen; an `INPUT_META` whose doc said the conformance
+   test held both lowerings to it while nothing read the field; a
+   `hello` declaring the `measure` feature from a client that never
+   measured, three lines under a comment stating that a feature
+   named without an implementation is a claim the server believes.
+
+   Each fix is mutation-tested — the fix reverted, the test watched
+   to fail, the fix restored — because the rounds also caught tests
+   that passed for the wrong reason. One of them was mine: a test
+   for a refused input push used a `settle` field, whose blur report
+   writes the local value back through the store and moves it, which
+   let a naive value comparison pass by accident. `live` is where it
+   actually breaks.
+
 ### flitR is retired, not retrofitted
 
 An earlier draft had flitR retrofitted alongside the browser in stage
@@ -846,3 +882,30 @@ fixtures — the same component tree rendering equivalently in each.
 The second implementation always exposes assumptions the first one
 silently satisfied, and a spec frozen before that is a spec frozen
 around the browser's habits.
+
+**That condition is met, and the spec is frozen.** Both clients pass
+the shared fixtures, and the second implementation earned its keep as
+predicted. A partial list of what it exposed, none of which the
+browser had complained about:
+
+- `select_input(multiple = TRUE)` was scalar in five places. HTML has
+  a native multi-select, so the browser satisfied the shape without
+  the schema ever having to state it. Flutter has no such widget, and
+  asking what the value *is* found a `field("string")` that could not
+  hold two.
+- `emit` was a DOM event name in disguise. `input` and `change` do
+  the live/settle distinction for free in a browser; Flutter has to
+  spend it deliberately, which is how a `settle` slider that streamed
+  and a `settle` field that never reported on blur both surfaced.
+- Refusing a server push while a field has focus needs a push
+  *counter*, not a value comparison. `document.activeElement` made
+  the browser's version look like a value check.
+- `measure` needed the device pixel ratio for fixed-size plots too,
+  which is invisible on a 1x display and obvious on a phone.
+- Every dead control — a download button with no handler, a
+  `modal_button()` no lowering marked — was a listener with no
+  producer. Two lowerings make that a compile-time-shaped question
+  rather than something you notice in a running app.
+
+None of these were protocol bugs the browser would ever have found.
+That is the whole argument for a second frontend, and it held.
