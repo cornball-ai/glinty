@@ -289,7 +289,7 @@ AUDIO_MIME <- c(wav = "audio/wav", wave = "audio/wav", mp3 = "audio/mpeg",
 #' @return character media type
 #' @keywords internal
 audio_mime <- function(src) {
-    if (grepl("^data:", src)) {
+    if (grepl("^data:", src, ignore.case = TRUE)) {
         declared <- data_uri_mime(src)
         if (is.null(declared)) {
             stop("audio data URI declares no media type; pass mime = ",
@@ -312,10 +312,16 @@ audio_mime <- function(src) {
 #'   declares no type
 #' @keywords internal
 data_uri_mime <- function(src) {
-    if (!grepl("^data:", src)) {
+    # Case-insensitively, because a URI scheme is: DATA:audio/wav is
+    # the same URI as data:audio/wav. Matched literally, the second
+    # one was a data URI and the first was a filename with no
+    # extension -- so an explicit mime that contradicted it was never
+    # compared against anything.
+    if (!grepl("^data:", src, ignore.case = TRUE)) {
         return(NULL)
     }
-    declared <- tolower(sub("^data:([^;,]*).*$", "\\1", src))
+    declared <- tolower(sub("^data:([^;,]*).*$", "\\1", src,
+                            ignore.case = TRUE))
     if (!nzchar(declared) || identical(declared, tolower(src))) {
         return(NULL)
     }

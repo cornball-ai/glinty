@@ -178,6 +178,20 @@ expect_error(av(list(src = "data:audio/wav;base64,UklGRg",
 # agreeing is fine, and case is not disagreement
 expect_equal(av(list(src = "data:audio/wav;base64,UklGRg",
                      mime = "AUDIO/WAV"))$mime, "audio/wav")
+
+# A URI scheme is case-insensitive, so DATA: is the same URI. Matched
+# literally it was not a data URI at all -- it was a filename with no
+# extension, and the type it declares had nothing to be compared
+# against.
+expect_equal(glinty:::data_uri_mime("DATA:audio/wav;base64,UklGRg"),
+             "audio/wav")
+expect_equal(av(list(src = "Data:AUDIO/Wav;base64,UklGRg"))$mime,
+             "audio/wav")
+expect_error(av(list(src = "DATA:audio/wav;base64,UklGRg",
+                     mime = "audio/mpeg")),
+             "declares audio/wav and mime = says audio/mpeg", fixed = TRUE)
+expect_error(av(list(src = "DATA:;base64,UklGRg")),
+             "declares no media type")
 # and a path carries no declaration to contradict
 expect_equal(av(list(src = "/gen/out.bin", mime = "audio/flac"))$mime,
              "audio/flac")
