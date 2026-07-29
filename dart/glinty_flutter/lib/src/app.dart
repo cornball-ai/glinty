@@ -35,6 +35,7 @@ class GlintyApp extends StatefulWidget {
     this.token,
     this.onDownload,
     this.onLink,
+    this.audioBuilder,
     this.customHandlers,
     this.open,
   });
@@ -52,6 +53,11 @@ class GlintyApp extends StatefulWidget {
 
   /// Where a link tap goes; without it links are not tappable.
   final void Function(String href, {bool external})? onLink;
+
+  /// Builds the player for an audio_output. Playing audio needs a
+  /// platform plugin, which this package does not take on; without
+  /// one the slot says so rather than sitting there silent.
+  final GlintyAudioBuilder? audioBuilder;
 
   /// Handlers for `custom` frames, by name -- the Flutter half of
   /// `send_custom_message()`. glinty has no idea what an app's
@@ -133,7 +139,10 @@ class _GlintyAppState extends State<GlintyApp> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: _conn,
-        builder: (context, _) => GlintyView(connection: _conn),
+        builder: (context, _) => GlintyView(
+          connection: _conn,
+          audioBuilder: widget.audioBuilder,
+        ),
       );
 }
 
@@ -144,13 +153,21 @@ class _GlintyAppState extends State<GlintyApp> {
 /// client that draws a stale tree over a refusal is exactly the
 /// silent failure this protocol keeps refusing to ship.
 class GlintyView extends StatelessWidget {
-  const GlintyView({super.key, this.session, this.connection, this.renderer})
+  const GlintyView(
+      {super.key,
+      this.session,
+      this.connection,
+      this.renderer,
+      this.audioBuilder})
       : assert(session != null || connection != null,
             'GlintyView needs a session or a connection');
 
   final GlintySession? session;
   final GlintyConnection? connection;
   final GlintyRenderer? renderer;
+
+  /// Builds the player for an audio_output; see [GlintyApp].
+  final GlintyAudioBuilder? audioBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +221,7 @@ class GlintyView extends StatelessWidget {
           // A relative image src is served by the same app; only the
           // connection knows what address that is.
           assetBase: conn?.assetBase,
+          audioBuilder: audioBuilder,
           // A download registers itself as the waiter for its own
           // request, so a refusal reaches the control that asked.
           awaitTicket: s.awaitTicket,

@@ -508,6 +508,103 @@ void main() {
       expect(find.text('Nova'), findsOneWidget);
     });
 
+    testWidgets('an audio value reaches the app that can play it',
+        (tester) async {
+      // Playing audio needs a platform plugin this package will not
+      // take on, so it goes where onLink and onDownload go: glinty
+      // says where the player belongs and what to play, the app says
+      // how.
+      final played = <GlintyAudioSource>[];
+      late FakeSocket socket;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => socket = FakeSocket(),
+            audioBuilder: (context, source) {
+              played.add(source);
+              return const Text('player');
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Audio',
+        'children': [
+          {'component': 'audio_output', 'id': 'player', 'controls': true,
+            'autoplay': true},
+        ],
+      }, 'ra'));
+      await tester.pumpAndSettle();
+      expect(played, isEmpty, reason: 'nothing to play yet');
+
+      socket.deliver(frames(transcript('audio-output'), 'out').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('player'), findsOneWidget);
+      expect(played, hasLength(1));
+      expect(played.single.src.scheme, 'data');
+      expect(played.single.mime, 'audio/wav');
+      expect(played.single.duration, 1.5);
+      expect(played.single.autoplay, isTrue);
+    });
+
+    testWidgets('an audio slot with no player says so', (tester) async {
+      // Not an empty box. A slot that draws nothing is
+      // indistinguishable from audio that failed to play, and the
+      // gap is the embedder's to close.
+      final socket = await boot(tester, {
+        'component': 'page',
+        'title': 'Audio',
+        'children': [{'component': 'audio_output', 'id': 'player'}],
+      }, 'ra2');
+      socket.deliver(frames(transcript('audio-output'), 'out').first);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('no audio player wired'), findsOneWidget);
+    });
+
+    testWidgets('a relative audio src resolves against the server',
+        (tester) async {
+      // The same rule an image follows: only the connection knows the
+      // address the app is served from.
+      final played = <GlintyAudioSource>[];
+      late FakeSocket socket;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://example.test:8080/ws'),
+            open: (_) async => socket = FakeSocket(),
+            audioBuilder: (context, source) {
+              played.add(source);
+              return const Text('player');
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Audio',
+        'children': [{'component': 'audio_output', 'id': 'player'}],
+      }, 'ra3'));
+      await tester.pumpAndSettle();
+      socket.deliver({
+        'type': 'output', 'id': 'player', 'kind': 'audio',
+        'value': {'src': '/static/chime.wav', 'mime': 'audio/wav'},
+      });
+      await tester.pumpAndSettle();
+
+      expect(played.single.src.toString(),
+          'http://example.test:8080/static/chime.wav');
+      expect(played.single.duration, isNull,
+          reason: 'the server did not say, so neither does this');
+      expect(played.single.controls, isFalse,
+          reason: 'and the component did not ask for them');
+    });
+
     testWidgets('the app still fills the box it was given', (tester) async {
       // Making the Stack unconditional put a widget between the app
       // and its parent, and a Stack loosens the constraints it passes

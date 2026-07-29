@@ -27,6 +27,10 @@ const supportedComponents = <String>{
   'text_output', 'verbatim_output', 'table_output',
   'plot_output', 'image_output', 'image',
   'tabset', 'conditional_panel', 'collapse', 'ui_output',
+  // Drawn by the embedder's player, through audioBuilder. Declared
+  // supported because the protocol asks what this client can render,
+  // and it can -- given somewhere to send the sound.
+  'audio_output',
 };
 
 /// Components the protocol defines that this client cannot render.
@@ -35,7 +39,6 @@ const supportedComponents = <String>{
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
   'file_input', // needs the file_picker package, outside the SDK
-  'audio_output', // needs an audio package, outside the SDK
   // Both carry markup, which has no Flutter equivalent by design.
   // raw_html is markup in the tree; html_output is markup arriving
   // as a value. Same refusal for the same reason.
@@ -67,6 +70,49 @@ typedef GlintyTicketSink = void Function(String id, String purpose);
 typedef GlintyMeasureSink = void Function(
     String id, double width, double height, double dpr);
 
+/// An audio value, ready to hand to a player.
+///
+/// The src is resolved: a data URI stays as it is, a relative path
+/// has been joined to the address serving the app. [mime] is what the
+/// protocol requires an audio value to carry, because a platform
+/// player asks what it is being given.
+class GlintyAudioSource {
+  const GlintyAudioSource({
+    required this.src,
+    required this.mime,
+    this.duration,
+    this.controls = true,
+    this.autoplay = false,
+  });
+
+  final Uri src;
+  final String mime;
+
+  /// Length in seconds, when the server knew it.
+  final double? duration;
+
+  /// What the component asked for. A player that shows no transport
+  /// makes `controls` meaningless, which is the app's call to make,
+  /// not this renderer's.
+  final bool controls;
+  final bool autoplay;
+}
+
+/// Builds the widget that plays an audio value.
+///
+/// Playing audio needs a platform plugin, which this package does not
+/// take on: it has exactly one dependency and a note explaining why.
+/// Every app that used glinty would inherit an audio engine whether
+/// or not it ever played a sound.
+///
+/// So the same seam as [GlintyRenderer.onLink] and
+/// [GlintyRenderer.onDownload]: glinty says where the player goes and
+/// what to play, the app says how. Without one, the slot draws a
+/// visible placeholder rather than an empty box that looks like
+/// silence.
+typedef GlintyAudioBuilder = Widget Function(
+    BuildContext context, GlintyAudioSource source);
+
 class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
@@ -77,6 +123,7 @@ class GlintyRenderer {
       this.onModalClose,
       this.onMeasure,
       this.assetBase,
+      this.audioBuilder,
       this.awaitTicket,
       this.values = const {},
       this.kinds = const {},
@@ -120,6 +167,11 @@ class GlintyRenderer {
   /// app. Null in a fixture render, where there is no server, and a
   /// relative src is then named rather than guessed at.
   final Uri? assetBase;
+
+  /// Builds the player for an audio_output. Without one the slot
+  /// says so, the way a download button with nowhere to send its
+  /// grant renders disabled.
+  final GlintyAudioBuilder? audioBuilder;
 
   /// Where a responsive plot reports its box. Null in a fixture
   /// render, where there is no server to tell -- the plot then draws
@@ -318,6 +370,8 @@ class GlintyRenderer {
         return _slot(context, c, 'image', () => _plot(context, c));
       case 'image_output':
         return _slot(context, c, 'image', () => _image(c));
+      case 'audio_output':
+        return _slot(context, c, 'audio', () => _audio(context, c));
       case 'ui_output':
         return _slot(context, c, 'ui', () => _dynamicUi(context, c));
       case 'tabset':
@@ -1026,6 +1080,59 @@ class GlintyRenderer {
     }
     return _problem(const Color(0xFFFFF3CD),
         '[cannot load "$src": no server address to resolve it against]');
+  }
+
+  /// An audio value, handed to the app's player.
+  ///
+  /// The value carries what it is as well as where it is, which is
+  /// the whole reason `mime` is required: a browser sniffs the bytes
+  /// and a platform player asks. A value missing it is a server
+  /// speaking the protocol wrongly, and saying so beats handing a
+  /// player something it will fail on for reasons nobody can see.
+  Widget _audio(BuildContext context, GlintyComponent c) {
+    final build = audioBuilder;
+    if (build == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no audio player wired: pass audioBuilder to play this]');
+    }
+    final value = values[c.str('id')];
+    if (value is! Map) return const SizedBox.shrink();
+    final src = value['src'];
+    final mime = value['mime'];
+    if (src is! String || src.isEmpty) return const SizedBox.shrink();
+    if (mime is! String || mime.isEmpty) {
+      return _problem(const Color(0xFFF8D7DA),
+          '[this audio arrived without a media type]');
+    }
+
+    final Uri resolved;
+    if (src.startsWith('data:') ||
+        src.startsWith('http://') ||
+        src.startsWith('https://')) {
+      resolved = Uri.parse(src);
+    } else {
+      // The same rule an image follows: a relative src is served by
+      // the glinty app itself, and only the connection knows that
+      // address. A bare renderer says so rather than guessing a host.
+      final base = assetBase;
+      if (base == null) {
+        return _problem(const Color(0xFFFFF3CD),
+            '[cannot load "$src": no server address to resolve it against]');
+      }
+      resolved = base.resolve(src);
+    }
+
+    return build(
+        context,
+        GlintyAudioSource(
+          src: resolved,
+          mime: mime,
+          duration: value['duration'] is num
+              ? (value['duration'] as num).toDouble()
+              : null,
+          controls: c.boolean('controls'),
+          autoplay: c.boolean('autoplay'),
+        ));
   }
 
   /// A section the user can fold away.

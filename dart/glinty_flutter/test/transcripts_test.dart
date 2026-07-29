@@ -574,12 +574,10 @@ void main() {
     });
 
     test('an audio value keeps what it is, not only where it is', () {
-      // This client cannot play it -- audio_output is a named
-      // refusal until it grows a platform player -- but the value
-      // has to survive intact, because the type is the whole reason
-      // a native client can hand it to one. The browser sniffs the
-      // bytes and never needed the field, which is exactly how it
-      // went missing from render_audio() for so long.
+      // The type is the whole reason this client can hand the value
+      // to a platform player at all. The browser sniffs the bytes and
+      // never needed the field, which is exactly how it went missing
+      // from render_audio() for so long.
       final s = GlintySession();
       s.receive(serverFrame('hello-welcome', 'welcome'));
       s.receive(serverFrame('audio-output', 'output'));

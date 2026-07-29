@@ -35,6 +35,36 @@ A component this client does not know draws a **visible placeholder
 naming it**, never nothing. `unsupportedComponents` lists what is
 deliberately not rendered, and why.
 
+## Seams
+
+Four things need a platform plugin, and this package has exactly one
+dependency. Rather than take on four more that every glinty app would
+inherit whether or not it used them, `GlintyApp` asks:
+
+| seam | without it |
+|---|---|
+| `onDownload` | download buttons render disabled |
+| `onLink` | links render as styled text, not tappable |
+| `audioBuilder` | an `audio_output` names the missing player |
+| `customHandlers` | a `custom` frame draws a notice naming its handler |
+
+```dart
+GlintyApp(
+  url: Uri.parse('ws://10.0.2.2:8080/ws'),
+  audioBuilder: (context, source) => MyPlayer(
+    // resolved for you: a data URI as-is, a relative path joined to
+    // the address serving the app
+    url: source.src,
+    // what it is, which a platform player asks and a browser sniffs
+    mime: source.mime,
+    autoplay: source.autoplay,
+  ),
+)
+```
+
+None of them fails quietly. That is the rule the whole client is
+built on.
+
 ## Versioning
 
 Living in glinty's repository means the client and server are authored
@@ -45,8 +75,7 @@ those checks are load-bearing.
 
 ## Status
 
-Early. Renders the static, layout, input and simple-output components.
-Not yet: the WebSocket transport, `plot_output` (needs the `measure`
-round trip), `ui_output` (needs runtime subtrees), `audio_output` and
-`file_input` (packages outside the SDK), `date_input` (a dialog rather
-than an inline control).
+Alpha, and rendering the whole vocabulary bar two: `file_input`
+(needs the `file_picker` package) and `date_input` (a dialog rather
+than an inline control). `raw_html` and `html_output` carry markup and
+are refused by design, not by omission.
