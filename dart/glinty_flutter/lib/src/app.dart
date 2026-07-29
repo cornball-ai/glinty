@@ -262,10 +262,37 @@ class GlintyView extends StatelessWidget {
           generation: s.generation,
           onDismiss: dismiss,
         ),
-      // A reconnect in progress is honest, not hidden: the app stays
-      // usable and says what is happening.
-      if (conn != null && conn.state == GlintyConnectionState.reconnecting)
-        const _ReconnectBanner(),
+      // What the connection has to say, in one strip at the top.
+      //
+      // Not Positioned, which is the part that is easy to get wrong:
+      // a positioned child does not count towards the Stack's size,
+      // and the Stack here is only as tall as the app inside it. A
+      // page that sizes to its content is shorter than this strip,
+      // so a positioned strip drew past the bottom edge and was
+      // clipped out of hit testing -- visible, and untouchable, which
+      // for a notice with a dismiss button is worse than not drawing
+      // at all. Aligned and unpositioned, it participates in sizing,
+      // and the Stack grows to hold whichever is taller.
+      if (conn != null &&
+          (conn.state == GlintyConnectionState.reconnecting ||
+              conn.droppedInteractions > 0))
+        Align(
+          alignment: Alignment.topCenter,
+          heightFactor: 1,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // A reconnect in progress is honest, not hidden: the app
+            // stays usable and says what is happening.
+            if (conn.state == GlintyConnectionState.reconnecting)
+              const _ReconnectBanner(),
+            // And so is work the app could not send. The user is the
+            // only one who can redo it, and only if they are told.
+            if (conn.droppedInteractions > 0)
+              _DroppedNotice(
+                count: conn.droppedInteractions,
+                onDismiss: conn.clearDroppedInteractions,
+              ),
+          ]),
+        ),
     ]);
 
     // Not conditional in the same way: the theme arrives with the
@@ -451,20 +478,62 @@ class _UnhandledCustomNotice extends StatelessWidget {
       );
 }
 
+/// What the app had to throw away, and how much of it.
+///
+/// The send queue is capped so a user tapping at a dead app cannot
+/// grow memory without limit, which means that past the cap an
+/// interaction is lost. Lost quietly, it looks to the user like the
+/// app simply ignored them -- so it says so, and stays until
+/// dismissed. Not a toast: this is a report of work that has to be
+/// redone, and it should still be there when they look up.
+class _DroppedNotice extends StatelessWidget {
+  const _DroppedNotice({required this.count, required this.onDismiss});
+
+  final int count;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+        child: Row(children: [
+          Expanded(
+            child: Text(
+              count == 1
+                  ? '1 thing you did could not be sent, and has been '
+                      'lost. Please check and try it again.'
+                  : '$count things you did could not be sent, and have '
+                      'been lost. Please check and try them again.',
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+          ),
+          IconButton(
+            onPressed: onDismiss,
+            icon: const Icon(Icons.close),
+            color: scheme.onErrorContainer,
+            tooltip: 'Dismiss',
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 class _ReconnectBanner extends StatelessWidget {
   const _ReconnectBanner();
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Material(
-        color: scheme.primary,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+    return Material(
+      color: scheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: SizedBox(
+          width: double.infinity,
           child: Text('Reconnecting…',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onPrimary)),

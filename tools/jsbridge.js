@@ -1543,6 +1543,39 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
+    section("a queued input is superseded, an event is not");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+        page.ws().close();
+
+        /* A field typed into while the socket is down. Stacked, the
+           queue fills with values nobody will ever read. */
+        const G = page.G;
+        for (let i = 0; i < 200; i += 1) {
+            G.setInputValue("volume", "draft " + i);
+        }
+        const btn = page.document.getElementById("go");
+        page.fire("click", btn);
+        page.fire("click", btn);
+
+        const before = page.sent.length;
+        page.ws().open();
+        page.ws().deliver(Object.assign({}, frames(hyd, "out")[0],
+                                        { resumed: true }));
+        const flushed = page.sent.slice(before);
+        const inputs = flushed.filter((m) => m.type === "input");
+        check("the latest value is the value",
+              inputs.length === 1 && inputs[0].value === "draft 199" &&
+              inputs[0].id === "volume");
+        check("and two presses are still two presses",
+              flushed.filter((m) => m.type === "event").length === 2);
+    }
+
+    /* ---------------------------------------------------------- */
     section("an audio value says what it is, not only where");
     {
         const hyd = transcript("hello-welcome-hydrated");

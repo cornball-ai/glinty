@@ -14,6 +14,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:web_socket/web_socket.dart';
@@ -57,7 +58,10 @@ class GlintyConnection extends ChangeNotifier {
     GlintySocketOpener? open,
     this.onDownload,
     this.onLink,
-  }) : _open = open ?? _defaultOpener {
+  })  : assert(retryBase <= retryCap,
+            'retryBase is where the backoff starts and retryCap is where it stops; '
+            'a start past the stop is a configuration nobody meant'),
+        _open = open ?? _defaultOpener {
     session = GlintySession(
       client: client,
       token: token,
@@ -220,9 +224,53 @@ class GlintyConnection extends ChangeNotifier {
   }
 
   bool _queue(GlintyOutgoing frame) {
-    if (_pending.length >= _pendingCap) return false;
+    // An input carries state, not an occurrence: the newest value for
+    // an id is the whole truth about it, so an older one still
+    // waiting is nothing to keep. A slider dragged through a
+    // reconnect would otherwise fill this queue with values nobody
+    // will ever see, and push out the presses behind them. A measure
+    // is the same -- one box reported twice is one box.
+    //
+    // An event is not. Two presses are two presses, and coalescing
+    // them would lose one.
+    final id = frame.body['id'];
+    if (id != null && (frame.type == 'input' || frame.type == 'measure')) {
+      final at = _pending.indexWhere(
+          (f) => f.type == frame.type && f.body['id'] == id);
+      if (at >= 0) {
+        _pending[at] = frame;
+        return true;
+      }
+    }
+    if (_pending.length >= _pendingCap) {
+      // An input or an event is something the user did. Throwing one
+      // away is the failure this queue exists to prevent, so when it
+      // has to happen anyway it is counted and said out loud rather
+      // than disappearing.
+      if (frame.type == 'input' || frame.type == 'event') {
+        _dropped += 1;
+        if (!_disposed) notifyListeners();
+      }
+      return false;
+    }
     _pending.add(frame);
     return true;
+  }
+
+  /// How many of the user's interactions this connection threw away.
+  ///
+  /// Frames made while the socket was down, after the queue was
+  /// already full. Sticky on purpose: a report of lost work must not
+  /// vanish the moment the connection returns, because that is
+  /// exactly when the user can read it and redo what was lost.
+  int get droppedInteractions => _dropped;
+  int _dropped = 0;
+
+  /// Acknowledge the report, once it has been shown.
+  void clearDroppedInteractions() {
+    if (_dropped == 0) return;
+    _dropped = 0;
+    if (!_disposed) notifyListeners();
   }
 
   /// Forget the transfer requests still waiting to go out.
@@ -370,10 +418,15 @@ class GlintyConnection extends ChangeNotifier {
       _stop('lost connection to the server');
       return;
     }
+    // min(), not clamp(): the backoff starts at base and doubles up
+    // to the cap, and a cap below the base is still a cap. clamp()
+    // reads its bounds as low-then-high and threw an ArgumentError
+    // when they crossed -- at the first disconnect, from inside the
+    // retry path, on a connection that was configured wrong an hour
+    // earlier.
     final delay = Duration(
-        milliseconds:
-            (retryBase.inMilliseconds * (1 << _retries)).clamp(
-                retryBase.inMilliseconds, retryCap.inMilliseconds));
+        milliseconds: math.min(retryBase.inMilliseconds * (1 << _retries),
+            retryCap.inMilliseconds));
     _retries += 1;
     _setState(GlintyConnectionState.reconnecting);
     _retryTimer?.cancel();

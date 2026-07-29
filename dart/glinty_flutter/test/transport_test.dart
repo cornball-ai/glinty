@@ -294,6 +294,74 @@ void main() {
     c.conn.dispose();
   });
 
+  test('a queued input is superseded rather than stacked', () async {
+    // A slider dragged while the socket is down is one value by the
+    // time anyone sees it. Stacked, the intermediate values fill the
+    // queue with numbers nobody will ever read and push out the
+    // presses behind them.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    for (var i = 0; i < 200; i++) {
+      c.conn.session.sendInput('volume', i);
+    }
+    // and a press in the middle of the drag is still a press
+    c.conn.session.sendEvent('apply');
+    c.conn.session.sendEvent('apply');
+
+    expect(c.conn.droppedInteractions, 0,
+        reason: 'nothing had to be thrown away');
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    c.sockets.last.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+
+    final sent = c.sockets.last.sent;
+    final inputs = sent.where((m) => m['type'] == 'input').toList();
+    expect(inputs, hasLength(1), reason: 'the latest value is the value');
+    expect(inputs.single['value'], 199);
+    expect(sent.where((m) => m['type'] == 'event'), hasLength(2),
+        reason: 'two presses are two presses');
+    c.conn.dispose();
+  });
+
+  test('an interaction that had to be dropped is counted, not hidden',
+      () async {
+    // Past the cap the queue has to throw something away, and a user
+    // who is not told just sees an app that ignored them.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    // distinct ids, so nothing coalesces
+    for (var i = 0; i < 64; i++) {
+      c.conn.session.sendInput('field$i', i);
+    }
+    expect(c.conn.droppedInteractions, 0);
+
+    c.conn.session.sendInput('one-too-many', 1);
+    c.conn.session.sendEvent('go');
+    expect(c.conn.droppedInteractions, 2);
+
+    // and the report does not evaporate when the connection returns
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    c.sockets.last.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    expect(c.conn.droppedInteractions, 2,
+        reason: 'the work is still lost, and only the user can redo it');
+
+    c.conn.clearDroppedInteractions();
+    expect(c.conn.droppedInteractions, 0);
+    c.conn.dispose();
+  });
+
   test('a request past the send queue cap is refused, not dropped',
       () async {
     // The queue is capped so a user tapping at a dead app cannot grow

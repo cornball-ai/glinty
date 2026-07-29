@@ -258,9 +258,25 @@
     function send(msg) {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
-        } else {
-            pending.push(msg);
+            return;
         }
+        /* An input carries state, not an occurrence: the newest value
+           for an id is the whole truth about it, so an older one
+           still waiting is nothing to keep. A slider dragged while
+           the socket is down would otherwise queue every intermediate
+           value, none of which anyone will ever see. A measure is the
+           same -- one box reported twice is one box.
+
+           An event is not. Two presses are two presses. */
+        if (msg.id && (msg.type === "input" || msg.type === "measure")) {
+            for (var i = 0; i < pending.length; i++) {
+                if (pending[i].type === msg.type && pending[i].id === msg.id) {
+                    pending[i] = msg;
+                    return;
+                }
+            }
+        }
+        pending.push(msg);
     }
 
     function flushPending() {

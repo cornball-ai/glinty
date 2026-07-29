@@ -293,6 +293,55 @@ void main() {
       expect(find.textContaining('cannot display image'), findsOneWidget);
     });
 
+    testWidgets('work the app could not send is said out loud',
+        (tester) async {
+      // Counting a dropped interaction is only half of it. A count
+      // nobody draws is the same silence, one layer further in.
+      final sockets = <FakeSocket>[];
+      final conn = GlintyConnection(
+        url: Uri.parse('ws://x/ws'),
+        // long enough that the retry never fires mid-test
+        retryBase: const Duration(seconds: 30),
+        retryCap: const Duration(seconds: 30),
+        open: (_) async {
+          sockets.add(FakeSocket());
+          return sockets.last;
+        },
+      );
+      unawaited(conn.start());
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: conn,
+            builder: (context, _) => GlintyView(connection: conn),
+          ),
+        ),
+      ));
+      await tester.pump();
+      sockets.last.deliver(welcomeOf(buttonTree, 'rd'));
+      await tester.pumpAndSettle();
+
+      sockets.last.drop();
+      await tester.pump();
+      expect(find.textContaining('could not be sent'), findsNothing);
+
+      // fill the queue past its cap with distinct ids, then one more
+      for (var i = 0; i < 65; i++) {
+        conn.session.sendInput('field$i', i);
+      }
+      await tester.pump();
+
+      expect(find.textContaining('1 thing you did could not be sent'),
+          findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      await tester.pump();
+      expect(find.textContaining('could not be sent'), findsNothing,
+          reason: 'dismissing is the user saying they have read it');
+      conn.dispose();
+    });
+
     testWidgets('the app still fills the box it was given', (tester) async {
       // Making the Stack unconditional put a widget between the app
       // and its parent, and a Stack loosens the constraints it passes
