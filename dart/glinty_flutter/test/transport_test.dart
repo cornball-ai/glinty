@@ -362,6 +362,60 @@ void main() {
     c.conn.dispose();
   });
 
+  test('a refused resume counts the work it throws away', () async {
+    // The session those frames belonged to is gone, so replaying them
+    // into a fresh one would apply one user's interactions to
+    // another's state. Not sending them is right. Clearing them
+    // without a word is the same silence the cap counter exists to
+    // end, one branch further along.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    c.conn.session.sendInput('note', 'typed while down');
+    c.conn.session.sendEvent('save');
+    c.conn.session.sendMeasure('plot', 100, 100, dpr: 1);
+    expect(c.conn.droppedInteractions, 0);
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    final welcome = Map<String, dynamic>.from(
+        serverFrame('hello-welcome', 'welcome'))
+      ..['resumed'] = false;
+    c.sockets.last.deliver(welcome);
+    await pump();
+
+    expect(c.conn.droppedInteractions, 2,
+        reason: 'one input and one press; a measure is not the user');
+    expect(c.sockets.last.sent.where((m) => m['type'] == 'input'), isEmpty,
+        reason: 'and none of it reached the new session');
+    c.conn.dispose();
+  });
+
+  test('a terminal refusal counts the work it throws away', () async {
+    // The server has said no and will keep saying no, so the queue is
+    // never going out. That is the case where the work is most
+    // certainly lost and least likely to be mentioned.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+    c.conn.session.sendInput('note', 'typed while down');
+    c.conn.session.sendEvent('save');
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    c.sockets.last.deliver(serverFrame('hello-refused', 'error'));
+    await pump();
+
+    expect(c.conn.state, GlintyConnectionState.stopped);
+    expect(c.conn.droppedInteractions, 2);
+    c.conn.dispose();
+  });
+
   test('a request past the send queue cap is refused, not dropped',
       () async {
     // The queue is capped so a user tapping at a dead app cannot grow

@@ -162,13 +162,16 @@ class GlintyView extends StatelessWidget {
     final refusal = s.refusalMessage;
     if (refusal != null) {
       return GlintyRefusalView(
-          title: 'Connection refused', message: refusal);
+          title: 'Connection refused',
+          message: refusal,
+          lost: conn?.droppedInteractions ?? 0);
     }
     if (conn != null && conn.state == GlintyConnectionState.stopped) {
       return GlintyRefusalView(
           title: 'Disconnected',
           message: conn.stoppedReason ??
-              'The connection to the server ended.');
+              'The connection to the server ended.',
+          lost: conn.droppedInteractions);
     }
 
     final ui = s.ui;
@@ -564,10 +567,19 @@ class GlintyProtocolErrorView extends StatelessWidget {
 /// be trusted to show.
 class GlintyRefusalView extends StatelessWidget {
   const GlintyRefusalView(
-      {super.key, required this.title, required this.message});
+      {super.key, required this.title, required this.message, this.lost = 0});
 
   final String title;
   final String message;
+
+  /// How many of the user's interactions went unsent when the
+  /// connection ended.
+  ///
+  /// Reported here rather than in the notice the running app draws,
+  /// because this screen *replaces* that app: a terminal refusal is
+  /// exactly the case where the work is most certainly lost and least
+  /// likely to be mentioned.
+  final int lost;
 
   @override
   Widget build(BuildContext context) {
@@ -590,6 +602,15 @@ class GlintyRefusalView extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(message, style: TextStyle(color: scheme.onErrorContainer)),
+          if (lost > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              lost == 1
+                  ? '1 thing you did was never sent.'
+                  : '$lost things you did were never sent.',
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+          ],
         ],
       ),
     );

@@ -342,6 +342,97 @@ void main() {
       conn.dispose();
     });
 
+    testWidgets('a refusal says what went unsent with it', (tester) async {
+      // The refusal screen replaces the app, and the notice the
+      // running app draws goes with it. So the count has to be said
+      // here or not at all -- and this is the case where the work is
+      // most certainly lost.
+      final sockets = <FakeSocket>[];
+      final conn = GlintyConnection(
+        url: Uri.parse('ws://x/ws'),
+        retryBase: const Duration(milliseconds: 10),
+        retryCap: const Duration(milliseconds: 20),
+        open: (_) async {
+          sockets.add(FakeSocket());
+          return sockets.last;
+        },
+      );
+      unawaited(conn.start());
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: conn,
+            builder: (context, _) => GlintyView(connection: conn),
+          ),
+        ),
+      ));
+      await tester.pump();
+      sockets.last.deliver(welcomeOf(buttonTree, 'rr'));
+      await tester.pumpAndSettle();
+
+      // typed while the wire is down; it queues for the next socket
+      sockets.last.drop();
+      await tester.pump();
+      conn.session.sendInput('note', 'half a thought');
+
+      // and the next socket says no, so it is never going out
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(sockets, hasLength(2));
+      sockets.last.deliver({'type': 'error', 'message': 'that token expired'});
+      await tester.pumpAndSettle();
+
+      expect(find.text('Connection refused'), findsOneWidget);
+      expect(find.textContaining('that token expired'), findsOneWidget);
+      expect(find.textContaining('1 thing you did was never sent'),
+          findsOneWidget);
+      conn.dispose();
+    });
+
+    testWidgets('and so does giving up on the connection', (tester) async {
+      // The other way this screen is reached: the retries ran out
+      // rather than the server saying no. Same loss, same screen,
+      // and the count has to survive both routes into _stop().
+      final sockets = <FakeSocket>[];
+      final conn = GlintyConnection(
+        url: Uri.parse('ws://x/ws'),
+        maxRetries: 1,
+        retryBase: const Duration(milliseconds: 10),
+        retryCap: const Duration(milliseconds: 20),
+        open: (_) async {
+          sockets.add(FakeSocket());
+          return sockets.last;
+        },
+      );
+      unawaited(conn.start());
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: conn,
+            builder: (context, _) => GlintyView(connection: conn),
+          ),
+        ),
+      ));
+      await tester.pump();
+      sockets.last.deliver(welcomeOf(buttonTree, 'rg'));
+      await tester.pumpAndSettle();
+
+      sockets.last.drop();
+      await tester.pump();
+      conn.session.sendInput('note', 'half a thought');
+      conn.session.sendEvent('save');
+
+      // the last retry connects and dies without a welcome
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(sockets, hasLength(2));
+      sockets.last.drop();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Disconnected'), findsOneWidget);
+      expect(find.textContaining('2 things you did were never sent'),
+          findsOneWidget);
+      conn.dispose();
+    });
+
     testWidgets('the app still fills the box it was given', (tester) async {
       // Making the Stack unconditional put a widget between the app
       // and its parent, and a Stack loosens the constraints it passes

@@ -286,6 +286,22 @@ class GlintyConnection extends ChangeNotifier {
     _pending.removeWhere((frame) => frame.type == 'ticket');
   }
 
+  /// Throw the queue away, counting what the user loses with it.
+  ///
+  /// A queued input or press is work someone did. Whether it goes
+  /// because the queue was full or because the session it belonged to
+  /// no longer exists, the loss is the same and so is what has to be
+  /// said about it. Cleared quietly, these were the same silence the
+  /// cap counter was added to end -- one branch further along.
+  void _discardPending() {
+    final lost =
+        _pending.where((f) => f.type == 'input' || f.type == 'event').length;
+    _pending.clear();
+    if (lost == 0) return;
+    _dropped += lost;
+    if (!_disposed) notifyListeners();
+  }
+
   void _flushPending() {
     final socket = _socket;
     if (socket == null || _pending.isEmpty) return;
@@ -316,8 +332,9 @@ class GlintyConnection extends ChangeNotifier {
             // The session those frames belonged to is gone. Replaying
             // them into a fresh session would apply one user's
             // interactions to another's state -- the same reason the
-            // session clears its values here.
-            _pending.clear();
+            // session clears its values here. Not sending them is
+            // right; not saying so is not.
+            _discardPending();
           }
           // The app is usable now, not when the socket opened. A
           // welcome is also proof this endpoint works, so the retry
@@ -452,7 +469,7 @@ class GlintyConnection extends ChangeNotifier {
     _events = null;
     unawaited(_socket?.close().catchError((_) {}));
     _socket = null;
-    _pending.clear();
+    _discardPending();
     // A refusal arrives on a socket that is still open, so this is
     // not always reached through _onClosed. Terminal means no answer
     // is coming, for transfers as much as for anything else.
