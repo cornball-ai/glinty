@@ -628,6 +628,60 @@ void main() {
           reason: 'the tree it re-sent declares an empty field');
     });
 
+    test('a re-rendered slot loses the pushes applied to its old one', () {
+      // update_select_input() changes a control the tree still
+      // describes with the old choices, so the client holds the
+      // change as an override the renderer prefers. When the server
+      // rebuilds that region, the override is describing a control
+      // that no longer exists -- and the browser loses it by
+      // construction, because the element carrying it is thrown away
+      // with the rest of the subtree.
+      final s = GlintySession();
+      s.receive({
+        'type': 'welcome',
+        'session': 's1',
+        'protocol': 3,
+        'ui_revision': 'r1',
+        'ui': {
+          'component': 'page',
+          'title': 'Slot',
+          'children': [{'component': 'ui_output', 'id': 'panel'}],
+        },
+      });
+      s.receive({
+        'type': 'output', 'id': 'panel', 'kind': 'ui',
+        'value': {
+          'component': 'select_input', 'id': 'voice', 'label': 'Voice:',
+          'emit': 'settle', 'selected': 'alloy',
+          'choices': [{'value': 'alloy', 'label': 'Alloy'}],
+        },
+      });
+      s.receive({
+        'type': 'input_update', 'id': 'voice', 'selected': 'echo',
+        'choices': [
+          {'value': 'alloy', 'label': 'Alloy'},
+          {'value': 'echo', 'label': 'Echo'},
+        ],
+      });
+      expect(s.overrides['voice']?['choices'], isNotNull);
+      expect(s.pushes['voice'], 1);
+
+      s.receive({
+        'type': 'output', 'id': 'panel', 'kind': 'ui',
+        'value': {
+          'component': 'select_input', 'id': 'voice', 'label': 'Voice:',
+          'emit': 'settle', 'selected': 'nova',
+          'choices': [{'value': 'nova', 'label': 'Nova'}],
+        },
+      });
+
+      expect(s.overrides.containsKey('voice'), isFalse,
+          reason: 'the new tree describes the control now');
+      expect(s.pushes.containsKey('voice'), isFalse,
+          reason: 'and the push it answered was to the old one');
+      expect(s.inputs['voice'], 'nova');
+    });
+
     test('a slot takes back the inputs it stops carrying', () {
       // The control is off the screen. A value left behind would go
       // on answering conditional panels on behalf of a widget nobody

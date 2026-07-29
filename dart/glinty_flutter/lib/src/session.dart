@@ -236,11 +236,19 @@ class GlintySession {
     }
 
     final seeds = seedInputs(tree);
-    for (final gone in _slotInputs[id] ?? const <String>{}) {
-      if (seeds.containsKey(gone) || _staticInputs.contains(gone)) continue;
-      inputs.remove(gone);
-      overrides.remove(gone);
-      pushes.remove(gone);
+    // Everything this slot had a hand in, whether the new subtree
+    // still carries it or not. The region has been replaced, so
+    // nothing left over from the last one survives it: an
+    // update_select_input() that changed a picker's choices applied
+    // to a control the server has since rebuilt, and the browser
+    // loses those by construction when it throws the old DOM away.
+    // The push counter goes with them, or a control would go on
+    // treating the answered push as the latest thing it was told.
+    for (final key in {...?_slotInputs[id], ...seeds.keys}) {
+      if (_staticInputs.contains(key)) continue;
+      overrides.remove(key);
+      pushes.remove(key);
+      if (!seeds.containsKey(key)) inputs.remove(key);
     }
     _slotInputs[id] = seeds.keys.toSet();
     // Assigned, not filled in. A re-rendered slot is the server
