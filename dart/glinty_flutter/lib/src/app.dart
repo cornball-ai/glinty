@@ -139,7 +139,6 @@ class _GlintyAppState extends State<GlintyApp> {
     super.dispose();
   }
 
-  @override
   // The connection carries the builder, not this. It has to hold it
   // anyway -- what the client can draw is part of what hello says --
   // and one copy cannot go stale against the other. didUpdateWidget
