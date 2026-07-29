@@ -592,16 +592,106 @@ void main() {
       expect(value['duration'], 1.5);
     });
 
-    test('a ui-kind output stores its tree without being drawable', () {
-      // ui_output is on this client's unsupported list until stage 2
-      // of its own growth; the session must still accept the value
-      // rather than dying on it.
+    test('a ui-kind output is parsed into a tree, and seeds its store', () {
+      // Both halves of what welcome does, at the scale of one slot:
+      // hold the tree, and seed the store so the controls in it have
+      // values to draw and a conditional panel keyed on them can be
+      // evaluated. The raw value stays too -- it is still an output.
       final s = GlintySession();
       s.receive(serverFrame('hello-welcome', 'welcome'));
       s.receive(serverFrame('event-then-ui', 'output'));
 
       expect(s.refused, isFalse);
       expect(s.values['panel'], isA<Map<String, dynamic>>());
+      expect(s.uiValues['panel']?.type, 'column');
+      expect(s.inputs['extra'], '',
+          reason: 'the text input inside it starts where the tree says');
+      expect(s.sent.where((f) => f.type == 'input'), isEmpty,
+          reason: 'the server built this subtree and knows its defaults');
+    });
+
+    test('a re-rendered slot holds what the new tree says', () {
+      // The server replaced that region, so the controls in it take
+      // the values it sent. The browser does this by construction --
+      // it throws the old subtree's DOM away and builds elements
+      // carrying the new values -- and a client that instead kept the
+      // user's last edit would leave the two frontends disagreeing
+      // about what is on screen.
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive(serverFrame('event-then-ui', 'output'));
+      s.sendInput('extra', 'typed by hand');
+      expect(s.inputs['extra'], 'typed by hand');
+
+      s.receive(serverFrame('event-then-ui', 'output'));
+      expect(s.inputs['extra'], '',
+          reason: 'the tree it re-sent declares an empty field');
+    });
+
+    test('a slot takes back the inputs it stops carrying', () {
+      // The control is off the screen. A value left behind would go
+      // on answering conditional panels on behalf of a widget nobody
+      // can see.
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive(serverFrame('event-then-ui', 'output'));
+      expect(s.inputs.containsKey('extra'), isTrue);
+
+      s.receive({
+        'type': 'output',
+        'id': 'panel',
+        'kind': 'ui',
+        'value': {
+          'component': 'text_input',
+          'id': 'different',
+          'label': 'Other:',
+          'value': 'x',
+        },
+      });
+      expect(s.inputs.containsKey('extra'), isFalse);
+      expect(s.inputs['different'], 'x');
+
+      // and emptying the slot takes the rest
+      s.receive({
+        'type': 'output', 'id': 'panel', 'kind': 'ui', 'value': null,
+      });
+      expect(s.inputs.containsKey('different'), isFalse);
+      expect(s.uiValues.containsKey('panel'), isFalse);
+    });
+
+    test('a slot never takes back an input the page itself declares', () {
+      // Same id in the page and in a subtree. The static control is
+      // still on screen when the slot changes, and its value is not
+      // the slot's to remove.
+      final s = GlintySession();
+      s.receive({
+        'type': 'welcome',
+        'session': 's1',
+        'protocol': 3,
+        'ui_revision': 'r1',
+        'ui': {
+          'component': 'page',
+          'title': 'Both',
+          'children': [
+            {'component': 'text_input', 'id': 'shared', 'label': 'Shared:',
+              'value': 'from the page'},
+            {'component': 'ui_output', 'id': 'panel'},
+          ],
+        },
+      });
+      s.receive({
+        'type': 'output', 'id': 'panel', 'kind': 'ui',
+        'value': {'component': 'text_input', 'id': 'shared',
+          'label': 'Shared:', 'value': 'from the slot'},
+      });
+      expect(s.inputs['shared'], 'from the page',
+          reason: 'seeding only fills what is missing');
+
+      s.receive({
+        'type': 'output', 'id': 'panel', 'kind': 'ui', 'value': null,
+      });
+      expect(s.inputs['shared'], 'from the page',
+          reason: 'the page still shows it');
     });
 
     test('input_update is ignored until this client renders inputs live',

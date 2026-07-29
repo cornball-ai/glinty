@@ -191,6 +191,75 @@ class GlintySession {
   final Map<String, Map<String, dynamic>> tickets =
       <String, Map<String, dynamic>>{};
 
+  /// The parsed tree behind each `ui` output, by output id.
+  ///
+  /// Parsed once here rather than in the renderer, which runs on
+  /// every frame: a component tree is the same tree until the next
+  /// frame replaces it.
+  final Map<String, GlintyComponent> uiValues = <String, GlintyComponent>{};
+
+  /// Which input ids each dynamic slot put into the store.
+  ///
+  /// A slot that re-renders without an input it used to carry has
+  /// taken that control off the screen, and a value left behind
+  /// would go on answering conditional panels on behalf of a widget
+  /// nobody can see.
+  final Map<String, Set<String>> _slotInputs = <String, Set<String>>{};
+
+  /// Input ids the page tree itself declares.
+  ///
+  /// A dynamic slot never takes one of these back, however its own
+  /// subtree changes: the static control is still on screen, and the
+  /// value is not the slot's to remove.
+  Set<String> _staticInputs = <String>{};
+
+  /// Take on a component tree that arrived as an output value.
+  ///
+  /// The same two jobs `welcome` does for the page, at the scale of
+  /// one slot: hold the tree, and seed the store so the controls in
+  /// it have values to draw and any conditional panel keyed on them
+  /// can be evaluated. And nothing is emitted, for the same reason --
+  /// the server built this subtree, so it already knows every default
+  /// it put there.
+  ///
+  /// Server-side those inputs stay NULL until the user touches one,
+  /// which is what `render_ui()` documents. That is the server's
+  /// half. The client still has to draw something, and drawing a
+  /// control whose value it refuses to hold is how a select renders
+  /// empty next to a tree that plainly says which choice is selected.
+  void _adoptDynamicUi(String id, dynamic value) {
+    final tree = value == null ? null : GlintyComponent.fromJson(value);
+    if (tree == null) {
+      uiValues.remove(id);
+    } else {
+      uiValues[id] = tree;
+    }
+
+    final seeds = seedInputs(tree);
+    for (final gone in _slotInputs[id] ?? const <String>{}) {
+      if (seeds.containsKey(gone) || _staticInputs.contains(gone)) continue;
+      inputs.remove(gone);
+      overrides.remove(gone);
+      pushes.remove(gone);
+    }
+    _slotInputs[id] = seeds.keys.toSet();
+    // Assigned, not filled in. A re-rendered slot is the server
+    // replacing that region, and the controls in it hold what the
+    // new tree says they hold -- which is what the browser does by
+    // construction, because it throws the old subtree's DOM away and
+    // builds fresh elements carrying those values. A client that
+    // instead kept the user's last edit would leave the two
+    // frontends disagreeing about what is on screen.
+    //
+    // Except an id the page itself declares, which is not this
+    // slot's to set: that control is still there, showing its own
+    // value, and would visibly contradict the change.
+    seeds.forEach((key, seed) {
+      if (_staticInputs.contains(key)) return;
+      inputs[key] = seed;
+    });
+  }
+
   /// Requests sent and not yet answered, in the order they went out,
   /// per "purpose:id".
   ///
@@ -382,6 +451,7 @@ class GlintySession {
       case 'output':
         final id = msg['id'];
         if (id is String) {
+          if (msg['kind'] == 'ui') _adoptDynamicUi(id, msg['value']);
           values[id] = msg['value'];
           // The kind says what the value IS. Dropping it left a slot
           // stringifying whatever arrived: an image value rendered
@@ -540,6 +610,8 @@ class GlintySession {
       kinds.clear();
       errors.clear();
       pushes.clear();
+      uiValues.clear();
+      _slotInputs.clear();
       modal = null;
       progress.clear();
       unhandledCustom.clear();
@@ -570,7 +642,9 @@ class GlintySession {
       // hidden -- the one case where adoption would disagree with
       // the server about what is on screen. Only fills what is
       // missing: an edit already made is not undone by adopting.
-      seedInputs(_ui).forEach((id, v) => inputs.putIfAbsent(id, () => v));
+      final seeds = seedInputs(_ui);
+      _staticInputs = seeds.keys.toSet();
+      seeds.forEach((id, v) => inputs.putIfAbsent(id, () => v));
     } else {
       // Invariant 3, the mismatching half: whatever we cached
       // describes a different tree. Replace it. Patching a stale tree
@@ -583,9 +657,16 @@ class GlintySession {
       // its own from the same tree (R/seed.R). Without this a
       // control reads its value out of the component every rebuild
       // and can never change.
+      final seeds = seedInputs(_ui);
+      _staticInputs = seeds.keys.toSet();
       inputs
         ..clear()
-        ..addAll(seedInputs(_ui));
+        ..addAll(seeds);
+      // The slots that held these trees are gone with the page. A
+      // record of what they used to seed would have the next slot of
+      // the same name take back values it never put there.
+      uiValues.clear();
+      _slotInputs.clear();
     }
     // Invariant 2: nothing is emitted here. Adoption is not user
     // interaction, and the server built this tree, so it already knows

@@ -153,6 +153,17 @@ final buttonTree = {
   ],
 };
 
+/// A slot the server fills with a component tree later. How both apps
+/// build everything that depends on state.
+final uiSlotTree = {
+  'component': 'page',
+  'title': 'Dynamic',
+  'children': [
+    {'component': 'text', 'value': 'the static part', 'variant': 'normal'},
+    {'component': 'ui_output', 'id': 'panel'},
+  ],
+};
+
 /// A section the user opens themselves: state no frame carries, so
 /// losing it can only come from the client throwing the tree away.
 final collapsedTree = {
@@ -431,6 +442,70 @@ void main() {
       expect(find.textContaining('2 things you did were never sent'),
           findsOneWidget);
       conn.dispose();
+    });
+
+    testWidgets('a ui output builds into its slot, bindings and all',
+        (tester) async {
+      // render_ui() is how both apps build everything that depends on
+      // state: cornfab's history list, voice picker, model section and
+      // both container panels are all ui_output. Refused, most of the
+      // app was a placeholder.
+      final socket = await boot(tester, uiSlotTree, 'ru');
+      expect(find.textContaining('unsupported'), findsNothing);
+
+      socket.deliver({
+        'type': 'output',
+        'id': 'panel',
+        'kind': 'ui',
+        'value': {
+          'component': 'column',
+          'children': [
+            {'component': 'text', 'value': 'from the server',
+              'variant': 'normal'},
+            {'component': 'button', 'id': 'go', 'label': 'Run',
+              'variant': 'primary', 'value': 'row-7'},
+          ],
+        },
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('from the server'), findsOneWidget);
+      await tester.tap(find.text('Run'));
+      await tester.pumpAndSettle();
+
+      final events = socket.sent.where((m) => m['type'] == 'event').toList();
+      expect(events, hasLength(1));
+      expect(events.single['id'], 'go');
+      expect(events.single['value'], 'row-7',
+          reason: 'a button that arrived late is still a button');
+    });
+
+    testWidgets('a control that arrives in a slot has a value to draw',
+        (tester) async {
+      // Server-side these inputs are NULL until touched, which is what
+      // render_ui() documents. The client still has to draw something,
+      // and a select that refuses to hold the value its own tree
+      // declares renders empty next to a tree that plainly says which
+      // choice is selected.
+      final socket = await boot(tester, uiSlotTree, 'ru2');
+      socket.deliver({
+        'type': 'output',
+        'id': 'panel',
+        'kind': 'ui',
+        'value': {
+          'component': 'select_input',
+          'id': 'voice',
+          'label': 'Voice:',
+          'emit': 'settle',
+          'selected': 'nova',
+          'choices': [
+            {'value': 'alloy', 'label': 'Alloy'},
+            {'value': 'nova', 'label': 'Nova'},
+          ],
+        },
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Nova'), findsOneWidget);
     });
 
     testWidgets('the app still fills the box it was given', (tester) async {

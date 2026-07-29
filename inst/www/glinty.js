@@ -1155,10 +1155,24 @@
             el.textContent = "";
             var node = buildComponent(msg.value);
             if (node) el.appendChild(node);
-            /* the new subtree may contain conditional panels that
-               have never been evaluated, and plots that have never
-               reported a box (refreshConditionals also schedules a
-               measure pass) */
+            /* The subtree's own controls have to reach the store, or
+               a conditional panel keyed on one reads "unset matches
+               nothing" and hides a section whose control is right
+               there on the page saying otherwise. rebuildRoot() does
+               this for the page and this path did not, so an input
+               that first appeared inside dynamic UI was invisible to
+               every condition.
+
+               Cleared and re-harvested from the whole document, the
+               way rebuildRoot() does it: an element holds what it
+               holds, so reading them all back is exact, and a control
+               the new subtree no longer carries is dropped by not
+               being there to read. */
+            inputValues = {};
+            harvestLocal();
+            /* the new subtree may also contain plots that have never
+               reported a box (refreshConditionals schedules a measure
+               pass) */
             refreshConditionals();
             observeMeasured();
             break;

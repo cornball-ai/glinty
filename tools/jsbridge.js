@@ -228,6 +228,16 @@ function makeEl(doc, tag) {
 
         get value() {
             if (this._value !== undefined) return this._value;
+            /* A select has no value of its own: a real one reports
+               its selected option, and a harness that reported ""
+               instead made a built select look valueless to anything
+               that reads it back -- harvestLocal(), for one. */
+            if (this.tagName === "SELECT") {
+                const chosen = this.selectedOptions;
+                if (chosen.length > 0) return chosen[0].value;
+                const all = this.options;
+                return all.length > 0 ? all[0].value : "";
+            }
             return "value" in this.attrs ? this.attrs.value : "";
         },
         set value(v) { this._value = v; },
@@ -1540,6 +1550,48 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.fire("click", page.document.querySelector('[data-g-target="go2"]'));
         check("its button reports through root delegation",
               page.frames("event").some((m) => m.id === "go2"));
+
+        /* An input that first appears inside dynamic UI has to reach
+           the store, or a conditional panel keyed on it reads "unset
+           matches nothing" and hides a section whose control is right
+           there on the page saying otherwise. rebuildRoot() harvested
+           for the page and this path did not. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: {
+                component: "column",
+                children: [
+                    { component: "select_input", id: "mode", label: "Mode:",
+                      emit: "settle", selected: "b",
+                      choices: [{ value: "a", label: "A" },
+                                { value: "b", label: "B" }] },
+                    { component: "conditional_panel",
+                      condition: { op: "is", id: "mode", values: ["b"] },
+                      children: [{ component: "text", value: "mode is b",
+                                   variant: "normal" }] }
+                ]
+            }
+        });
+        const cond = page.document.querySelector("[data-g-cond]");
+        check("a condition keyed on a control that arrived with it holds",
+              cond !== null && !cond.classList.contains("g-hidden"));
+
+        /* and a control the next subtree does not carry is gone from
+           the store rather than answering conditions on behalf of a
+           widget nobody can see: the same panel, now with no select
+           to key on, reads unset and hides. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: {
+                component: "conditional_panel",
+                condition: { op: "is", id: "mode", values: ["b"] },
+                children: [{ component: "text", value: "mode is b",
+                             variant: "normal" }]
+            }
+        });
+        const orphan = page.document.querySelector("[data-g-cond]");
+        check("a control the slot stopped carrying stops answering",
+              orphan !== null && orphan.classList.contains("g-hidden"));
     }
 
     /* ---------------------------------------------------------- */

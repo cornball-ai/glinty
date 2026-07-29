@@ -217,6 +217,7 @@ class GlintyView extends StatelessWidget {
           onLink: conn?.onLink,
           values: s.values,
           kinds: s.kinds,
+          uiValues: s.uiValues,
           errors: s.errors,
           inputs: s.inputs,
           pushes: s.pushes,

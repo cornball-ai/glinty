@@ -26,7 +26,7 @@ const supportedComponents = <String>{
   'button', 'download_button',
   'text_output', 'verbatim_output', 'table_output',
   'plot_output', 'image_output', 'image',
-  'tabset', 'conditional_panel', 'collapse',
+  'tabset', 'conditional_panel', 'collapse', 'ui_output',
 };
 
 /// Components the protocol defines that this client cannot render.
@@ -35,10 +35,6 @@ const supportedComponents = <String>{
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
   'file_input', // needs the file_picker package, outside the SDK
-  // The protocol side of this exists (the `ui` output kind); this
-  // renderer has not grown the client half -- building a component
-  // tree that arrived as a value into its slot.
-  'ui_output',
   'audio_output', // needs an audio package, outside the SDK
   // Both carry markup, which has no Flutter equivalent by design.
   // raw_html is markup in the tree; html_output is markup arriving
@@ -84,6 +80,7 @@ class GlintyRenderer {
       this.awaitTicket,
       this.values = const {},
       this.kinds = const {},
+      this.uiValues = const {},
       this.errors = const {},
       this.inputs = const {},
       this.pushes = const {},
@@ -193,6 +190,13 @@ class GlintyRenderer {
   /// an image would render as `{src: data:image/png;base64,iVBOR...`.
   final Map<String, String> kinds;
 
+  /// The parsed tree behind each `ui` output, by output id.
+  ///
+  /// Parsed by the session rather than here, because this runs on
+  /// every frame and the tree is the same tree until the next one
+  /// replaces it.
+  final Map<String, GlintyComponent> uiValues;
+
   /// Registers a control as waiting on the next ticket answer for a
   /// resource, and returns a canceller. Null in a fixture render,
   /// where there is no session to ask.
@@ -226,6 +230,27 @@ class GlintyRenderer {
           '[cannot display $kind here: ${c.type} shows $expected]');
     }
     return draw();
+  }
+
+  /// A component tree that arrived as a value, built into its slot.
+  ///
+  /// The same `build()` the page goes through, on a subtree the
+  /// server sent later. Bindings included: a button in here reports
+  /// through the same sinks as one in the page, because it is the
+  /// same lowering and there is nothing about arriving late that
+  /// changes what a button is.
+  ///
+  /// Deliberately unkeyed. Every control that holds state is already
+  /// keyed by its own id, because an input id really is an identity,
+  /// so a field replaced by a different field does not inherit its
+  /// controller. Wrapping the subtree in a key of its own would
+  /// instead throw that state away on every re-render -- and a slot
+  /// like a container-status panel on a five-second poll re-renders
+  /// constantly.
+  Widget _dynamicUi(BuildContext context, GlintyComponent c) {
+    final tree = uiValues[c.str('id')];
+    if (tree == null) return const SizedBox.shrink();
+    return build(context, tree);
   }
 
   Widget _problem(Color background, String message) => Container(
@@ -293,6 +318,8 @@ class GlintyRenderer {
         return _slot(context, c, 'image', () => _plot(context, c));
       case 'image_output':
         return _slot(context, c, 'image', () => _image(c));
+      case 'ui_output':
+        return _slot(context, c, 'ui', () => _dynamicUi(context, c));
       case 'tabset':
         return _tabset(context, c);
       case 'conditional_panel':
