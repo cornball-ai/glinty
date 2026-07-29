@@ -161,6 +161,14 @@ h1, h2, h3, h4 {
 
 .g-image {
     max-width: 100%;
+}
+
+/* Only the dimension the component did not give. CSS beats a
+   presentational attribute, so a blanket height:auto silently
+   defeated image(height = ): the attribute was on the element and
+   this rule overruled it, which is how a 32px logo rendered at its
+   full source size. */
+.g-image:not([height]) {
     height: auto;
 }
 
@@ -350,6 +358,12 @@ h1, h2, h3, h4 {
     display: block;
     margin: 0.5rem 0;
     max-width: 100%;
+}
+
+/* Same rule, same reason: the client sets width and height on an
+   image_output from the value the server measured for, and a
+   blanket auto would overrule what it just set. */
+.g-image-output:not([height]) {
     height: auto;
 }
 

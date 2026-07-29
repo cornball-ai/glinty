@@ -1353,6 +1353,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
+    section("the stylesheet does not overrule a size the app asked for");
+    {
+        /* image(height = 32) lowers to <img height="32">, and CSS
+           beats a presentational attribute. A blanket
+           `.g-image { height: auto }` therefore silently defeated it:
+           the attribute was on the element, the browser ignored it,
+           and a 32px logo rendered at its full source size. Nothing
+           caught it because the lowering was correct and the fixture
+           render never applies a stylesheet.
+
+           The same rule on .g-image-output would overrule the width
+           and height the client sets from a measured output value. */
+        for (const sel of [".g-image", ".g-image-output"]) {
+            const rule = new RegExp(
+                "\\" + sel + "\\s*\\{[^}]*height:\\s*auto", "m");
+            check(`${sel} does not set height on every one of them`,
+                  !rule.test(CSS_SRC));
+            const guarded = new RegExp(
+                "\\" + sel + ":not\\(\\[height\\]\\)\\s*\\{[^}]*height:\\s*auto");
+            check(`${sel} sets it only where the app did not`,
+                  guarded.test(CSS_SRC));
+        }
+    }
+
+    /* ---------------------------------------------------------- */
     section("every icon in the set has artwork");
     {
         /* An icon lowers to an empty span and the glyph comes from
