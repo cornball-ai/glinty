@@ -136,6 +136,66 @@ with_session(s, {
 flush_reactions()
 expect_null(last_msg(s)$value)
 
+# --- an audio value is scalars, and says so where the mistake is ---
+#
+# Every field on this wire is one value. as.character() on a
+# two-element vector is a JSON array against a contract that promised
+# a string, and the client that meets it can only report that
+# something is wrong with the audio -- the app is where it can be
+# named.
+av <- glinty:::audio_value
+
+expect_error(av(list(src = c("a.wav", "b.wav"))), "one non-empty src")
+expect_error(av(list(src = character(0))), "one non-empty src")
+expect_error(av(list(src = NA_character_)), "one non-empty src")
+expect_error(av(list(src = "")), "one non-empty src")
+expect_error(av(list(mime = "audio/wav")), "one non-empty src")
+expect_error(av(list(src = 42)), "one non-empty src")
+
+expect_error(av(list(src = "a.wav", mime = c("audio/wav", "audio/mpeg"))),
+             "one media type")
+expect_error(av(list(src = "a.wav", mime = NA_character_)), "one media type")
+expect_error(av(list(src = "a.wav", mime = "text/plain")),
+             "not an audio media type")
+# a source that is not audio at all is caught on the derived path too
+expect_error(av(list(src = "data:image/png;base64,iVBOR")),
+             "not an audio media type")
+
+expect_error(av(list(src = "a.wav", duration = c(1, 2))), "one finite")
+expect_error(av(list(src = "a.wav", duration = NA_real_)), "one finite")
+expect_error(av(list(src = "a.wav", duration = Inf)), "one finite")
+expect_error(av(list(src = "a.wav", duration = -1)), "one finite")
+expect_error(av(list(src = "a.wav", duration = "12")), "one finite")
+# zero is a real length, not a missing one
+expect_equal(av(list(src = "a.wav", duration = 0))$duration, 0)
+
+# A data URI states its own type. Two answers to one question is not
+# something to pick a winner from: whichever won, the other half of
+# the value would be a lie.
+expect_error(av(list(src = "data:audio/wav;base64,UklGRg",
+                     mime = "audio/mpeg")),
+             "declares audio/wav and mime = says audio/mpeg", fixed = TRUE)
+# agreeing is fine, and case is not disagreement
+expect_equal(av(list(src = "data:audio/wav;base64,UklGRg",
+                     mime = "AUDIO/WAV"))$mime, "audio/wav")
+# and a path carries no declaration to contradict
+expect_equal(av(list(src = "/gen/out.bin", mime = "audio/flac"))$mime,
+             "audio/flac")
+
+# The refusal reaches the slot that asked, as an error frame scoped to
+# it. A malformed value is an app bug, and an app bug in one output is
+# not a reason to take the session down.
+with_session(s, {
+    s$output$bad_snd <- render_audio(function() {
+        list(src = "data:audio/wav;base64,UklGRg", duration = -3)
+    })
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_equal(m$id, "bad_snd")
+expect_true(grepl("finite, non-negative", m$message))
+
 # --- render_plot: kind image, value {src, width, height} ---
 if (capabilities("png")) {
     with_session(s, {

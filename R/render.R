@@ -195,7 +195,11 @@ render_plot <- function(fn, width = NULL, height = NULL, res = 72) {
 #' }
 #'
 #' An extension this does not know is an error naming the fix rather
-#' than a value invented to fill the field.
+#' than a value invented to fill the field. So is anything that would
+#' not survive the wire as the scalar the protocol says it is: every
+#' field here is one value, and a coercion that quietly turned a
+#' two-element vector into a JSON array would put a shape on the wire
+#' that no client can read.
 #'
 #' @param fn zero-arg function returning the source string, or a list
 #'   with `src` and optionally `mime` and `duration` (seconds)
@@ -214,14 +218,58 @@ render_audio <- function(fn) {
         if (!is.list(v)) {
             v <- list(src = v)
         }
-        src <- as.character(v$src)
-        mime <- if (is.null(v$mime)) audio_mime(src) else as.character(v$mime)
-        out <- list(src = src, mime = mime)
-        if (!is.null(v$duration)) {
-            out$duration <- as.numeric(v$duration)
-        }
-        out
+        audio_value(v)
     }, "audio")
+}
+
+#' Check an audio value into the shape the protocol states
+#'
+#' Every field is a scalar, so every check here is the same check: one
+#' value, present, and of the kind the field means. as.character() on
+#' a two-element vector is a JSON array on a wire that promised a
+#' string, and the client that meets it has no way to say what went
+#' wrong -- the app does, here, where the mistake was made.
+#'
+#' @param v list with `src` and optionally `mime` and `duration`
+#' @return list(src, mime, duration?)
+#' @keywords internal
+audio_value <- function(v) {
+    src <- v$src
+    if (!is.character(src) || length(src) != 1L || is.na(src) || !nzchar(src)) {
+        stop("render_audio() needs one non-empty src string", call. = FALSE)
+    }
+
+    mime <- if (is.null(v$mime)) {
+        audio_mime(src)
+    } else {
+        given <- v$mime
+        if (!is.character(given) || length(given) != 1L || is.na(given)) {
+            stop("render_audio() mime must be one media type string",
+                 call. = FALSE)
+        }
+        given <- check_audio_mime(tolower(trimws(given)))
+        # A data URI states its own type. Two answers to one question
+        # is not something to pick a winner from: whichever this
+        # honoured, the other half of the value would be a lie.
+        declared <- data_uri_mime(src)
+        if (!is.null(declared) && !identical(declared, given)) {
+            stop("the audio data URI declares ", declared,
+                 " and mime = says ", given, call. = FALSE)
+        }
+        given
+    }
+
+    out <- list(src = src, mime = mime)
+    if (!is.null(v$duration)) {
+        d <- v$duration
+        if (!is.numeric(d) || length(d) != 1L || is.na(d) || !is.finite(d) ||
+            d < 0) {
+            stop("render_audio() duration must be one finite, non-negative ",
+                 "number of seconds", call. = FALSE)
+        }
+        out$duration <- as.numeric(d)
+    }
+    out
 }
 
 # Media types glinty can name without being told. Every format a
@@ -242,12 +290,12 @@ AUDIO_MIME <- c(wav = "audio/wav", wave = "audio/wav", mp3 = "audio/mpeg",
 #' @keywords internal
 audio_mime <- function(src) {
     if (grepl("^data:", src)) {
-        declared <- sub("^data:([^;,]+).*$", "\\1", src)
-        if (nzchar(declared) && !identical(declared, src)) {
-            return(declared)
+        declared <- data_uri_mime(src)
+        if (is.null(declared)) {
+            stop("audio data URI declares no media type; pass mime = ",
+                 call. = FALSE)
         }
-        stop("audio data URI declares no media type; pass mime = ",
-             call. = FALSE)
+        return(check_audio_mime(declared))
     }
     ext <- tolower(tools::file_ext(sub("[?#].*$", "", src)))
     if (!ext %in% names(AUDIO_MIME)) {
@@ -255,6 +303,40 @@ audio_mime <- function(src) {
              "\"; return list(src = , mime = ) instead", call. = FALSE)
     }
     unname(AUDIO_MIME[[ext]])
+}
+
+#' The media type a data URI declares, or NULL for anything else
+#'
+#' @param src character source
+#' @return character media type, or NULL when src is not a data URI or
+#'   declares no type
+#' @keywords internal
+data_uri_mime <- function(src) {
+    if (!grepl("^data:", src)) {
+        return(NULL)
+    }
+    declared <- tolower(sub("^data:([^;,]*).*$", "\\1", src))
+    if (!nzchar(declared) || identical(declared, tolower(src))) {
+        return(NULL)
+    }
+    declared
+}
+
+#' Refuse a media type that is not one
+#'
+#' The field names an audio source, so a type outside the audio family
+#' is a mistake worth catching where it was made -- a native client
+#' would hand it to a player that cannot open it and report something
+#' about the file instead.
+#'
+#' @param mime character lowercase media type
+#' @return mime, invisibly refused by stop() when it is not audio
+#' @keywords internal
+check_audio_mime <- function(mime) {
+    if (!grepl("^audio/[!#$%&'*+.^_`|~0-9a-z-]+$", mime)) {
+        stop("\"", mime, "\" is not an audio media type", call. = FALSE)
+    }
+    mime
 }
 
 #' Render a dynamic UI subtree

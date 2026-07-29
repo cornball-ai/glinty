@@ -30,7 +30,11 @@ duration = 12.5))
 }
 
 An extension this does not know is an error naming the fix rather
-than a value invented to fill the field.
+than a value invented to fill the field. So is anything that would
+not survive the wire as the scalar the protocol says it is: every
+field here is one value, and a coercion that quietly turned a
+two-element vector into a JSON array would put a shape on the wire
+that no client can read.
 
 }
 \examples{
