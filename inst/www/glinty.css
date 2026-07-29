@@ -6,7 +6,35 @@
    are the defaults for apps with no theme; a themed app's tokens
    arrive as an inline style block after this sheet (and again over
    the socket), so they win, including over the dark-mode block: a
-   supplied theme is exact. */
+   supplied theme is exact.
+
+   ---------------------------------------------------------------
+   Restyling from an app: do not style a base class that carries
+   variants.
+
+   Four of them do, and a component lowers to both, as in
+   class="g-btn g-btn-ghost":
+
+       .g-btn      -default -primary -secondary -danger -ghost
+       .g-panel    -plain -card -sidebar
+       .g-text     -normal -muted -strong -heading
+       .g-divider  -line -labelled
+
+   An app stylesheet loads after this one, so at equal specificity
+   its rule wins. A rule on .g-btn therefore cancels every variant
+   defined below, and nothing fails: the app just has one kind of
+   button, which reads as a design choice rather than a bug. That is
+   how a set of quiet ghost history rows shipped as a column of
+   gradient pills.
+
+   Put the treatment on the variant it describes, keep the base
+   class for what all of them share (family, size, radius, cursor),
+   and reach for #id .g-btn or .g-btn.g-btn-ghost when you do mean
+   to beat a variant on specificity.
+
+   glinty::css_variant_conflicts("path/to/app.css") returns the
+   findings; assert it is empty in your tests.
+   --------------------------------------------------------------- */
 
 :root {
     --g-primary: #2456d6;
