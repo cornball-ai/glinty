@@ -630,19 +630,89 @@ void main() {
       expect(claimed, contains('ui_output'),
           reason: 'the ones it does draw are still claimed');
 
-      late FakeSocket wired;
+      // Wiring one in is a different claim, so it is a different
+      // connection. Deliberately the same widget position and no key:
+      // this goes through didUpdateWidget, which is where an app that
+      // wires its player after a login would actually hit it. Keyed,
+      // the test would build a fresh GlintyApp and never exercise
+      // that path at all.
+      final sockets = <FakeSocket>[bare];
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: GlintyApp(
-            key: const ValueKey('wired'),
             url: Uri.parse('ws://x/ws'),
-            open: (_) async => wired = FakeSocket(),
+            open: (_) async {
+              sockets.add(FakeSocket());
+              return sockets.last;
+            },
             audioBuilder: (context, source) => const Text('player'),
           ),
         ),
       ));
       await tester.pump();
-      expect(wired.sent.single['components'], contains('audio_output'));
+      expect(sockets, hasLength(2), reason: 'a new claim is a new hello');
+      expect(sockets.last.sent.single['components'],
+          contains('audio_output'));
+
+      // and back out again
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async {
+              sockets.add(FakeSocket());
+              return sockets.last;
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+      expect(sockets, hasLength(3));
+      expect(sockets.last.sent.single['components'],
+          isNot(contains('audio_output')));
+    });
+
+    testWidgets('a rebuilt player closure is the one that gets called',
+        (tester) async {
+      // Same capability, new closure: not a reconnect, but the slot
+      // has to reach the one the app is holding now. A builder
+      // captured at connect time would go on calling into a closure
+      // over state the app has already moved past.
+      late FakeSocket socket;
+      final calls = <String>[];
+      Widget appWith(String tag) => MaterialApp(
+            home: Scaffold(
+              body: GlintyApp(
+                url: Uri.parse('ws://x/ws'),
+                open: (_) async => socket = FakeSocket(),
+                audioBuilder: (context, source) {
+                  calls.add(tag);
+                  return Text('player $tag');
+                },
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(appWith('first'));
+      await tester.pump();
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Audio',
+        'children': [{'component': 'audio_output', 'id': 'player'}],
+      }, 'rb'));
+      await tester.pumpAndSettle();
+      socket.deliver(frames(transcript('audio-output'), 'out').first);
+      await tester.pumpAndSettle();
+      expect(calls, contains('first'));
+
+      calls.clear();
+      await tester.pumpWidget(appWith('second'));
+      await tester.pumpAndSettle();
+
+      expect(calls, isNotEmpty);
+      expect(calls, everyElement('second'),
+          reason: 'the stale closure is not the app any more');
+      expect(find.text('player second'), findsOneWidget);
     });
 
     testWidgets('an audio slot with no player says so', (tester) async {

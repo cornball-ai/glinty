@@ -108,14 +108,15 @@ class _GlintyAppState extends State<GlintyApp> {
     // that logs a user out and back in, or points at another server,
     // must not keep talking on the old connection.
     //
-    // Wiring or unwiring onDownload changes what hello declares, so
-    // it needs a new connection too. Compared by nullness rather
-    // than identity: a closure rebuilt each frame is the same
-    // capability, and reconnecting on every build would be worse
-    // than the bug.
+    // Wiring or unwiring onDownload or audioBuilder changes what
+    // hello declares -- one a feature, the other a component -- so
+    // either needs a new connection. Compared by nullness rather than
+    // identity: a closure rebuilt each frame is the same capability,
+    // and reconnecting on every build would be worse than the bug.
     if (old.url != widget.url ||
         old.token != widget.token ||
-        (old.onDownload == null) != (widget.onDownload == null)) {
+        (old.onDownload == null) != (widget.onDownload == null) ||
+        (old.audioBuilder == null) != (widget.audioBuilder == null)) {
       _conn.dispose();
       _conn = _connect();
       return;
@@ -128,6 +129,7 @@ class _GlintyAppState extends State<GlintyApp> {
     // reach the closure the app is holding now.
     _conn.onDownload = widget.onDownload;
     _conn.onLink = widget.onLink;
+    _conn.audioBuilder = widget.audioBuilder;
     _wireHandlers(_conn);
   }
 
@@ -138,12 +140,14 @@ class _GlintyAppState extends State<GlintyApp> {
   }
 
   @override
+  // The connection carries the builder, not this. It has to hold it
+  // anyway -- what the client can draw is part of what hello says --
+  // and one copy cannot go stale against the other. didUpdateWidget
+  // is what keeps it current.
+  @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: _conn,
-        builder: (context, _) => GlintyView(
-          connection: _conn,
-          audioBuilder: widget.audioBuilder,
-        ),
+        builder: (context, _) => GlintyView(connection: _conn),
       );
 }
 

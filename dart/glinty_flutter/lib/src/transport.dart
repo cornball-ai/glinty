@@ -118,7 +118,7 @@ class GlintyConnection extends ChangeNotifier {
   /// Builds the player for an audio_output. Held here rather than
   /// only at the view, because what this client can draw is part of
   /// what it tells the server in hello.
-  final GlintyAudioBuilder? audioBuilder;
+  GlintyAudioBuilder? audioBuilder;
 
   late final GlintySession session;
 

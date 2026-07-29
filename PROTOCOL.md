@@ -374,12 +374,16 @@ rather than an intention.
 | `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
 | `html_output`, `raw_html` | — | **refused by name**; see below |
 
-Of the three this table flagged before any Dart existed, one is
-closed and two hold. `select_input(multiple = TRUE)` has no single
-Flutter widget, but it does not need one: the value is a list, and a
-`Wrap` of `FilterChip`s carries a list. `date_input` is still a
+Of the three this table flagged before any Dart existed, one turned
+out not to be a gap and two hold. `select_input(multiple = TRUE)` has
+no single Flutter widget and does not need one: the value is a list,
+and a `Wrap` of `FilterChip`s carries a list. `date_input` is still a
 dialog rather than an inline control, and `file_input` still needs a
 package outside the SDK, so both are refused by name.
+
+Those two, plus the markup pair below, are the whole refusal list.
+`plot_output`, `ui_output` and `audio_output` were all on it once and
+are not now.
 
 `icon` needed a name-to-`IconData` map, which dart/glinty_flutter now
 has.
