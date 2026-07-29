@@ -819,9 +819,11 @@ final List<String> supportedComponentsList =
 /// server would believe if `hello` still listed it. The same rule the
 /// `download` feature already follows: declare what is wired, not
 /// what could be.
-List<String> componentsFor({bool audio = true}) => audio
-    ? supportedComponentsList
-    : (supportedComponentsList.where((c) => c != 'audio_output').toList());
+List<String> componentsFor({bool audio = true, bool files = true}) =>
+    supportedComponentsList
+        .where((c) => audio || c != 'audio_output')
+        .where((c) => files || c != 'file_input')
+        .toList();
 
 /// One request's place in the ledger for a resource's ticket answers.
 ///

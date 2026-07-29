@@ -6,8 +6,8 @@ lowerings render it: R to HTML for the server-rendered first paint,
 widgets. Protocol 2 is gone.
 
 Frozen means what already exists does not move. Clients may still
-grow — the Flutter one refuses markup, `file_input` and `date_input`
-by name, and that is implementation work behind a stable wire, not a
+grow — the Flutter one refuses markup and `date_input` by name,
+and that is implementation work behind a stable wire, not a
 protocol gap.
 
 **The test is not "is it additive". It is: what does a client that
@@ -372,18 +372,19 @@ rather than an intention.
 | `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
 | `ui_output` | the same `build()`, on a subtree that arrived as a value | seeds the input store the way `welcome` does, and takes those inputs back when the slot stops carrying them |
 | `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
+| `file_input` | the embedder.s picker and POST, through `onUpload` | glinty owns the ticket in between, and asks for it only once files are in hand |
 | `html_output`, `raw_html` | — | **refused by name**; see below |
 
 Of the three this table flagged before any Dart existed, one turned
 out not to be a gap and two hold. `select_input(multiple = TRUE)` has
 no single Flutter widget and does not need one: the value is a list,
 and a `Wrap` of `FilterChip`s carries a list. `date_input` is still a
-dialog rather than an inline control, and `file_input` still needs a
-package outside the SDK, so both are refused by name.
+dialog rather than an inline control, so it is refused by name.
 
-Those two, plus the markup pair below, are the whole refusal list.
-`plot_output`, `ui_output` and `audio_output` were all on it once and
-are not now.
+
+That one, plus the markup pair below, is the whole refusal list.
+`plot_output`, `ui_output`, `audio_output` and `file_input` were all
+on it once and are not now.
 
 `icon` needed a name-to-`IconData` map, which dart/glinty_flutter now
 has.

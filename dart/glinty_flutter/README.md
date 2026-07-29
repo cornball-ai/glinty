@@ -37,15 +37,17 @@ deliberately not rendered, and why.
 
 ## Seams
 
-Four things need a platform plugin, and this package has exactly one
-dependency. Rather than take on four more that every glinty app would
-inherit whether or not it used them, `GlintyApp` asks:
+Five things need a platform plugin, and this package has exactly one
+dependency. Rather than take on the plugins each would need --
+which every glinty app would inherit whether or not it used them --
+`GlintyApp` asks:
 
 | seam | without it |
 |---|---|
 | `onDownload` | download buttons render disabled |
 | `onLink` | links render as styled text, not tappable |
 | `audioBuilder` | an `audio_output` names the missing player |
+| `onUpload` | a `file_input` names the missing picker |
 | `customHandlers` | a `custom` frame draws a notice naming its handler |
 
 ```dart
@@ -75,7 +77,7 @@ those checks are load-bearing.
 
 ## Status
 
-Alpha, and rendering the whole vocabulary bar two: `file_input`
-(needs the `file_picker` package) and `date_input` (a dialog rather
-than an inline control). `raw_html` and `html_output` carry markup and
-are refused by design, not by omission.
+Alpha, and rendering the whole vocabulary bar one: `date_input`,
+which is a dialog rather than an inline control. `raw_html` and
+`html_output` carry markup and are refused by design, not by
+omission.

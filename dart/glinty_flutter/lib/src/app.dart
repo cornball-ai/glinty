@@ -36,6 +36,7 @@ class GlintyApp extends StatefulWidget {
     this.onDownload,
     this.onLink,
     this.audioBuilder,
+    this.onUpload,
     this.customHandlers,
     this.open,
   });
@@ -58,6 +59,11 @@ class GlintyApp extends StatefulWidget {
   /// platform plugin, which this package does not take on; without
   /// one the slot says so rather than sitting there silent.
   final GlintyAudioBuilder? audioBuilder;
+
+  /// Picks files and sends them for a `file_input`. The dialog and
+  /// the POST are platform work; glinty owns the ticket in between.
+  /// Without one the control says so rather than opening nothing.
+  final GlintyUploadHandler? onUpload;
 
   /// Handlers for `custom` frames, by name -- the Flutter half of
   /// `send_custom_message()`. glinty has no idea what an app's
@@ -89,6 +95,7 @@ class _GlintyAppState extends State<GlintyApp> {
       onDownload: widget.onDownload,
       onLink: widget.onLink,
       audioBuilder: widget.audioBuilder,
+      onUpload: widget.onUpload,
       open: widget.open,
     );
     _wireHandlers(conn);
@@ -108,15 +115,16 @@ class _GlintyAppState extends State<GlintyApp> {
     // that logs a user out and back in, or points at another server,
     // must not keep talking on the old connection.
     //
-    // Wiring or unwiring onDownload or audioBuilder changes what
-    // hello declares -- one a feature, the other a component -- so
-    // either needs a new connection. Compared by nullness rather than
+    // Wiring or unwiring onDownload, audioBuilder or onUpload
+    // changes what hello declares -- a feature or a component -- so
+    // any of them needs a new connection. Compared by nullness rather
     // identity: a closure rebuilt each frame is the same capability,
     // and reconnecting on every build would be worse than the bug.
     if (old.url != widget.url ||
         old.token != widget.token ||
         (old.onDownload == null) != (widget.onDownload == null) ||
-        (old.audioBuilder == null) != (widget.audioBuilder == null)) {
+        (old.audioBuilder == null) != (widget.audioBuilder == null) ||
+        (old.onUpload == null) != (widget.onUpload == null)) {
       _conn.dispose();
       _conn = _connect();
       return;
@@ -130,6 +138,7 @@ class _GlintyAppState extends State<GlintyApp> {
     _conn.onDownload = widget.onDownload;
     _conn.onLink = widget.onLink;
     _conn.audioBuilder = widget.audioBuilder;
+    _conn.onUpload = widget.onUpload;
     _wireHandlers(_conn);
   }
 
@@ -226,6 +235,8 @@ class GlintyView extends StatelessWidget {
           // connection knows what address that is.
           assetBase: conn?.assetBase,
           audioBuilder: audioBuilder ?? conn?.audioBuilder,
+          onUpload: conn?.onUpload,
+          tickets: s.tickets,
           // A download registers itself as the waiter for its own
           // request, so a refusal reaches the control that asked.
           awaitTicket: s.awaitTicket,

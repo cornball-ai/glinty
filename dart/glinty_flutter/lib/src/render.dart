@@ -10,6 +10,7 @@
 /// is a finding, not a workaround.
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'component.dart';
@@ -31,6 +32,9 @@ const supportedComponents = <String>{
   // supported because the protocol asks what this client can render,
   // and it can -- given somewhere to send the sound.
   'audio_output',
+  // Same shape: the app picks the files and posts them, through
+  // onUpload; glinty owns the ticket in between.
+  'file_input',
 };
 
 /// Components the protocol defines that this client cannot render.
@@ -38,7 +42,6 @@ const supportedComponents = <String>{
 /// Named rather than omitted, so the gap is visible in a running app.
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
-  'file_input', // needs the file_picker package, outside the SDK
   // Both carry markup, which has no Flutter equivalent by design.
   // raw_html is markup in the tree; html_output is markup arriving
   // as a value. Same refusal for the same reason.
@@ -98,6 +101,66 @@ class GlintyAudioSource {
   final bool autoplay;
 }
 
+/// The server refused a transfer, or the connection did.
+///
+/// Thrown out of [GlintyUploadRequest.target] so a handler that only
+/// wants the happy path can ignore it: glinty catches it and puts the
+/// reason beside the control that asked.
+class GlintyTransferRefused implements Exception {
+  const GlintyTransferRefused(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// One file_input's request to pick files and send them.
+///
+/// Picking is a platform dialog and posting is an HTTP request;
+/// neither belongs to a package with one dependency. The ticket does
+/// belong here, so [target] is glinty's half: call it once files are
+/// in hand and it asks the server for an upload ticket and resolves
+/// the URL to POST to.
+///
+/// Ordering matters, which is why this is a callback rather than a
+/// URL handed over up front. A ticket is short-lived and a picker
+/// dialog is as long as the user takes; one minted before the dialog
+/// opened would routinely expire in front of them. The browser
+/// client asks in the same order for the same reason.
+class GlintyUploadRequest {
+  const GlintyUploadRequest({
+    required this.id,
+    required this.accept,
+    required this.multiple,
+    required this.target,
+  });
+
+  /// The input this belongs to, which is also what the server will
+  /// deliver the files to.
+  final String id;
+
+  /// Extensions the app asked for, as written: `['.wav', '.mp3']`.
+  /// Empty means it did not narrow.
+  final List<String> accept;
+  final bool multiple;
+
+  /// Asks for an upload ticket and resolves the POST target.
+  ///
+  /// The body is `multipart/form-data` with each file under the field
+  /// name `file`. Throws [GlintyTransferRefused] when the server says
+  /// no or the connection goes away.
+  final Future<Uri> Function() target;
+}
+
+/// Picks files and sends them, for a `file_input`.
+///
+/// Returns when the upload is done. Throwing -- or letting
+/// [GlintyUploadRequest.target]'s refusal through -- puts the message
+/// beside the control. Returning without calling `target` is how a
+/// handler says the user cancelled.
+typedef GlintyUploadHandler = Future<void> Function(
+    BuildContext context, GlintyUploadRequest request);
+
 /// Builds the widget that plays an audio value.
 ///
 /// Playing audio needs a platform plugin, which this package does not
@@ -124,6 +187,8 @@ class GlintyRenderer {
       this.onMeasure,
       this.assetBase,
       this.audioBuilder,
+      this.onUpload,
+      this.tickets = const {},
       this.awaitTicket,
       this.values = const {},
       this.kinds = const {},
@@ -172,6 +237,14 @@ class GlintyRenderer {
   /// says so, the way a download button with nowhere to send its
   /// grant renders disabled.
   final GlintyAudioBuilder? audioBuilder;
+
+  /// Picks files and sends them for a file_input. Without one the
+  /// control says so rather than opening nothing.
+  final GlintyUploadHandler? onUpload;
+
+  /// Ticket grants by "purpose:id", owned by the session. A file
+  /// input reads its own grant back out to build the POST target.
+  final Map<String, Map<String, dynamic>> tickets;
 
   /// Where a responsive plot reports its box. Null in a fixture
   /// render, where there is no server to tell -- the plot then draws
@@ -370,6 +443,8 @@ class GlintyRenderer {
         return _slot(context, c, 'image', () => _plot(context, c));
       case 'image_output':
         return _slot(context, c, 'image', () => _image(c));
+      case 'file_input':
+        return _fileInput(context, c);
       case 'audio_output':
         return _slot(context, c, 'audio', () => _audio(context, c));
       case 'ui_output':
@@ -1144,6 +1219,37 @@ class GlintyRenderer {
         ));
   }
 
+  /// A control that picks files and sends them.
+  ///
+  /// The button and the state around it are glinty's; the dialog and
+  /// the POST are the app's, through [onUpload]. Without a handler it
+  /// is a disabled control naming the gap -- the same answer a
+  /// download button gives when its grant has nowhere to go.
+  Widget _fileInput(BuildContext context, GlintyComponent c) {
+    final id = c.str('id');
+    final handler = onUpload;
+    if (id == null || handler == null || awaitTicket == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no file picker wired: pass onUpload to send files]');
+    }
+    final base = assetBase;
+    if (base == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no server address to upload to]');
+    }
+    return _GlintyFileInput(
+      key: Key(id),
+      id: id,
+      label: c.str('label') ?? '',
+      accept: c.strings('accept'),
+      multiple: c.boolean('multiple'),
+      handler: handler,
+      awaitTicket: awaitTicket!,
+      ticketFor: (key) => tickets[key],
+      base: base,
+    );
+  }
+
   /// A section the user can fold away.
   Widget _collapse(BuildContext context, GlintyComponent c) => ExpansionTile(
         key: Key(c.str('id') ?? 'g-collapse-${c.str('title')}'),
@@ -1511,4 +1617,128 @@ class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
   @override
   Widget build(BuildContext context) =>
       widget.build(context, _press, _refusal, _waiting);
+}
+
+/// The file_input control: a button, what it is doing, and why it
+/// stopped if it did.
+///
+/// Stateful for the same reason the download button is: the answer to
+/// its own request belongs to it, and holding it against the input id
+/// would put one control's refusal under another sharing the name.
+class _GlintyFileInput extends StatefulWidget {
+  const _GlintyFileInput({
+    super.key,
+    required this.id,
+    required this.label,
+    required this.accept,
+    required this.multiple,
+    required this.handler,
+    required this.awaitTicket,
+    required this.ticketFor,
+    required this.base,
+  });
+
+  final String id;
+  final String label;
+  final List<String> accept;
+  final bool multiple;
+  final GlintyUploadHandler handler;
+  final void Function() Function(String, String, void Function(String?))
+      awaitTicket;
+  final Map<String, dynamic>? Function(String key) ticketFor;
+  final Uri base;
+
+  @override
+  State<_GlintyFileInput> createState() => _GlintyFileInputState();
+}
+
+class _GlintyFileInputState extends State<_GlintyFileInput> {
+  bool _busy = false;
+  String? _problem;
+  void Function()? _cancel;
+
+  @override
+  void dispose() {
+    // The request is on the wire and its answer still has to be
+    // consumed, or the next control in line is handed it.
+    _cancel?.call();
+    super.dispose();
+  }
+
+  /// Asks for a ticket and turns the grant into a POST target.
+  Future<Uri> _target() {
+    final answer = Completer<Uri>();
+    _cancel = widget.awaitTicket(widget.id, 'upload', (refusal) {
+      _cancel = null;
+      if (answer.isCompleted) return;
+      if (refusal != null) {
+        answer.completeError(GlintyTransferRefused(refusal));
+        return;
+      }
+      final token = widget.ticketFor('upload:${widget.id}')?['token'];
+      if (token is! String || token.isEmpty) {
+        answer.completeError(
+            const GlintyTransferRefused('the server answered without a '
+                'ticket'));
+        return;
+      }
+      answer.complete(widget.base.replace(
+          path: '/upload', queryParameters: {'ticket': token}));
+    });
+    return answer.future;
+  }
+
+  Future<void> _press() async {
+    setState(() {
+      _problem = null;
+      _busy = true;
+    });
+    String? failure;
+    try {
+      await widget.handler(
+          context,
+          GlintyUploadRequest(
+            id: widget.id,
+            accept: widget.accept,
+            multiple: widget.multiple,
+            target: _target,
+          ));
+    } on GlintyTransferRefused catch (e) {
+      failure = e.message;
+    } catch (e) {
+      failure = 'the upload did not complete';
+    }
+    if (!mounted) return;
+    setState(() {
+      _problem = failure;
+      _busy = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.label.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(widget.label),
+          ),
+        OutlinedButton.icon(
+          // Unpressable while it works, like every other control that
+          // has a request in flight.
+          onPressed: _busy ? null : _press,
+          icon: const Icon(Icons.attach_file, size: 18),
+          label: Text(_busy ? 'Sending…' : 'Choose file'),
+        ),
+        if (_problem != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(_problem!, style: TextStyle(color: scheme.error)),
+          ),
+      ],
+    );
+  }
 }

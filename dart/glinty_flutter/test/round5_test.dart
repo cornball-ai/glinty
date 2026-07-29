@@ -715,6 +715,134 @@ void main() {
       expect(find.text('player second'), findsOneWidget);
     });
 
+    testWidgets('a file input picks, then asks for its ticket',
+        (tester) async {
+      // Ordering is the whole reason target() is a callback: a ticket
+      // lives 30 seconds and a picker dialog lasts as long as the
+      // user does, so one minted before the dialog opened would
+      // routinely expire in front of them. The browser asks in the
+      // same order.
+      late FakeSocket socket;
+      final asked = <String>[];
+      Uri? target;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://example.test:8080/ws'),
+            open: (_) async => socket = FakeSocket(),
+            onUpload: (context, request) async {
+              asked.addAll(request.accept);
+              // the "dialog": nothing is requested until it returns
+              await Future<void>.delayed(Duration.zero);
+              target = await request.target();
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Upload',
+        'children': [
+          {'component': 'file_input', 'id': 'voice_upload',
+            'label': 'Add Voice', 'accept': ['.wav', '.mp3'],
+            'multiple': false},
+        ],
+      }, 'rf'));
+      await tester.pumpAndSettle();
+
+      expect(socket.sent.where((m) => m['type'] == 'ticket'), isEmpty,
+          reason: 'nothing asked for yet');
+      await tester.tap(find.text('Choose file'));
+      await tester.pumpAndSettle();
+      expect(asked, ['.wav', '.mp3']);
+
+      final ticketFrame =
+          socket.sent.lastWhere((m) => m['type'] == 'ticket');
+      expect(ticketFrame['purpose'], 'upload');
+      expect(ticketFrame['id'], 'voice_upload');
+
+      socket.deliver({
+        'type': 'ticket', 'id': 'voice_upload', 'purpose': 'upload',
+        'token': 'tk_up', 'expires': 30,
+      });
+      await tester.pumpAndSettle();
+
+      expect(target.toString(),
+          'http://example.test:8080/upload?ticket=tk_up');
+    });
+
+    testWidgets('a refused upload gives the control back and says why',
+        (tester) async {
+      late FakeSocket socket;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => socket = FakeSocket(),
+            // lets the refusal through, which is the point: a handler
+            // that only wants the happy path writes no error handling
+            onUpload: (context, request) => request.target(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Upload',
+        'children': [{'component': 'file_input', 'id': 'voice_upload'}],
+      }, 'rf2'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Choose file'));
+      await tester.pump();
+      expect(
+          tester
+              .widget<OutlinedButton>(find.byType(OutlinedButton))
+              .onPressed,
+          isNull,
+          reason: 'unpressable while it works');
+
+      socket.deliver({
+        'type': 'ticket', 'id': 'voice_upload', 'purpose': 'upload',
+        'error': 'too many pending transfers',
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('too many pending transfers'), findsOneWidget);
+      expect(
+          tester
+              .widget<OutlinedButton>(find.byType(OutlinedButton))
+              .onPressed,
+          isNotNull,
+          reason: 'and given back rather than left dead');
+    });
+
+    testWidgets('a file input with no handler says so, and is not claimed',
+        (tester) async {
+      late FakeSocket socket;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => socket = FakeSocket(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final hello = socket.sent.single;
+      expect(hello['components'], isNot(contains('file_input')));
+      expect(hello['features'], isNot(contains('upload')));
+
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Upload',
+        'children': [{'component': 'file_input', 'id': 'voice_upload'}],
+      }, 'rf3'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('no file picker wired'), findsOneWidget);
+    });
+
     testWidgets('an audio slot with no player says so', (tester) async {
       // Not an empty box. A slot that draws nothing is
       // indistinguishable from audio that failed to play, and the
