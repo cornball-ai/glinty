@@ -88,6 +88,7 @@ class _GlintyAppState extends State<GlintyApp> {
       token: widget.token,
       onDownload: widget.onDownload,
       onLink: widget.onLink,
+      audioBuilder: widget.audioBuilder,
       open: widget.open,
     );
     _wireHandlers(conn);
@@ -221,7 +222,7 @@ class GlintyView extends StatelessWidget {
           // A relative image src is served by the same app; only the
           // connection knows what address that is.
           assetBase: conn?.assetBase,
-          audioBuilder: audioBuilder,
+          audioBuilder: audioBuilder ?? conn?.audioBuilder,
           // A download registers itself as the waiter for its own
           // request, so a refusal reaches the control that asked.
           awaitTicket: s.awaitTicket,

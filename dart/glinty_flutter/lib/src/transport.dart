@@ -19,6 +19,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:web_socket/web_socket.dart';
 
+import 'render.dart' show GlintyAudioBuilder;
 import 'session.dart';
 
 /// Opens a socket to [url]. Injectable so tests drive the client
@@ -58,6 +59,7 @@ class GlintyConnection extends ChangeNotifier {
     GlintySocketOpener? open,
     this.onDownload,
     this.onLink,
+    this.audioBuilder,
   })  : assert(retryBase <= retryCap,
             'retryBase is where the backoff starts and retryCap is where it stops; '
             'a start past the stop is a configuration nobody meant'),
@@ -69,6 +71,11 @@ class GlintyConnection extends ChangeNotifier {
       // Declared only when wired: a feature named in hello that the
       // embedder never supplied is a claim the server would believe.
       features: [if (onDownload != null) 'download'],
+      // And only the components it can really draw. audio_output
+      // renders through the embedder's player; without one it is a
+      // placeholder naming the gap -- honest on screen, but a claim
+      // the server would believe if hello still listed it.
+      components: componentsFor(audio: audioBuilder != null),
       // A local edit changes what the controls draw; without this
       // the store updates and the UI never hears until some later
       // server frame happens to arrive.
@@ -107,6 +114,11 @@ class GlintyConnection extends ChangeNotifier {
   /// plugin, so the embedder decides; without one, links render as
   /// styled text and are not tappable.
   void Function(String href, {bool external})? onLink;
+
+  /// Builds the player for an audio_output. Held here rather than
+  /// only at the view, because what this client can draw is part of
+  /// what it tells the server in hello.
+  final GlintyAudioBuilder? audioBuilder;
 
   late final GlintySession session;
 

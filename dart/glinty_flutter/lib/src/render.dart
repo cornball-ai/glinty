@@ -1057,7 +1057,11 @@ class GlintyRenderer {
     final label = c.str('alt');
     Widget wrap(Widget img) =>
         Semantics(label: label, image: true, child: img);
-    if (src.startsWith('data:')) {
+    // By scheme, not by prefix: a URI scheme is case-insensitive, so
+    // DATA: names the same thing data: does, and matched literally it
+    // read as a relative path to be joined to the server address.
+    final scheme = (Uri.tryParse(src)?.scheme ?? '').toLowerCase();
+    if (scheme == 'data') {
       try {
         return wrap(Image.memory(UriData.parse(src).contentAsBytes(),
             width: w, height: h, fit: BoxFit.contain));
@@ -1065,7 +1069,7 @@ class GlintyRenderer {
         return _problem(const Color(0xFFF8D7DA), '[this image did not decode]');
       }
     }
-    if (src.startsWith('http://') || src.startsWith('https://')) {
+    if (scheme == 'http' || scheme == 'https') {
       return wrap(Image.network(src, width: w, height: h,
           fit: BoxFit.contain));
     }
@@ -1105,11 +1109,16 @@ class GlintyRenderer {
           '[this audio arrived without a media type]');
     }
 
+    // By scheme, not by prefix. A URI scheme is case-insensitive, so
+    // DATA:audio/wav is the same URI as data:audio/wav -- matched
+    // literally it read as a relative path and got joined to the
+    // server address, which is nowhere.
+    final parsed = Uri.tryParse(src);
+    final scheme = parsed?.scheme.toLowerCase() ?? '';
     final Uri resolved;
-    if (src.startsWith('data:') ||
-        src.startsWith('http://') ||
-        src.startsWith('https://')) {
-      resolved = Uri.parse(src);
+    if (parsed != null &&
+        (scheme == 'data' || scheme == 'http' || scheme == 'https')) {
+      resolved = parsed;
     } else {
       // The same rule an image follows: a relative src is served by
       // the glinty app itself, and only the connection knows that

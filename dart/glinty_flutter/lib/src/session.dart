@@ -69,6 +69,7 @@ class GlintySession {
     this.client = 'glinty_flutter/0.0.1',
     this.token,
     this.features = const <String>[],
+    this.components,
     GlintyComponent? cachedUi,
     String? cachedRevision,
     bool Function(GlintyOutgoing)? onSend,
@@ -85,6 +86,11 @@ class GlintySession {
   /// feature named here that nothing implements is a claim the
   /// server would believe.
   final List<String> features;
+
+  /// The components this client will actually draw, for `hello`.
+  /// Null means all of them; a connection narrows it when a seam the
+  /// embedder did not wire would leave one as a placeholder.
+  final List<String>? components;
 
   /// Opaque auth token for hello, or null. glinty never parses it:
   /// the server's run_app(auth = ) verifier does, and a refused token
@@ -425,7 +431,7 @@ class GlintySession {
       'type': 'hello',
       'protocol': glintyProtocolVersion,
       'client': client,
-      'components': supportedComponentsList,
+      'components': components ?? supportedComponentsList,
       // The output kinds this client can draw. `audio`, `ui` and
       // `html` are absent because the components that carry them are,
       // and a kind declared without a slot to put it in is a lie.
@@ -804,6 +810,18 @@ class GlintySession {
 /// is not something to make a wire format depend on.
 final List<String> supportedComponentsList =
     (supportedComponents.toList()..sort());
+
+/// The components this client draws *in a given configuration*.
+///
+/// Some need a seam the embedder supplies. `audio_output` renders
+/// through [GlintyAudioBuilder], and without one the slot draws a
+/// placeholder naming the gap -- honest on screen, but a claim the
+/// server would believe if `hello` still listed it. The same rule the
+/// `download` feature already follows: declare what is wired, not
+/// what could be.
+List<String> componentsFor({bool audio = true}) => audio
+    ? supportedComponentsList
+    : (supportedComponentsList.where((c) => c != 'audio_output').toList());
 
 /// One request's place in the ledger for a resource's ticket answers.
 ///

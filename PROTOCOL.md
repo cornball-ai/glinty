@@ -6,7 +6,7 @@ lowerings render it: R to HTML for the server-rendered first paint,
 widgets. Protocol 2 is gone.
 
 Frozen means what already exists does not move. Clients may still
-grow — the Flutter one refuses `ui_output`, `audio_output` and markup
+grow — the Flutter one refuses markup, `file_input` and `date_input`
 by name, and that is implementation work behind a stable wire, not a
 protocol gap.
 
@@ -370,7 +370,9 @@ rather than an intention.
 | `image` | `Image.memory` / `Image.network` | data:, http(s), or relative resolved against the server address |
 | `collapse` | `ExpansionTile` | `open` becomes `initiallyExpanded` |
 | `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
-| `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
+| `ui_output` | the same `build()`, on a subtree that arrived as a value | seeds the input store the way `welcome` does, and takes those inputs back when the slot stops carrying them |
+| `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
+| `html_output`, `raw_html` | — | **refused by name**; see below |
 
 Of the three this table flagged before any Dart existed, one is
 closed and two hold. `select_input(multiple = TRUE)` has no single
@@ -385,10 +387,15 @@ has.
 The rest of the refusals are deliberate rather than pending.
 `raw_html` and `html_output` carry markup, which has no Flutter
 equivalent by design -- the first in the tree, the second as a value.
-`audio_output` needs an audio package outside the SDK. `ui_output`
-has its protocol half (the `ui` kind) and not its client half:
-building a component tree that arrived as a value into its slot. That
-is the honest remaining work.
+
+`audio_output` is neither refused nor built in. Playing sound needs a
+platform plugin, and a client with one dependency does not take on an
+audio engine that every app using it would inherit. It renders
+through `audioBuilder`, the same seam `onLink` and `onDownload` use,
+and a client without one leaves `audio_output` out of its `hello`
+rather than claiming a component it can only draw a placeholder for.
+**Declaring what is wired, not what could be, is the rule** -- the
+same reason the `download` feature is conditional.
 
 None are blocking. All are cheaper to know now than after the
 vocabulary is frozen.

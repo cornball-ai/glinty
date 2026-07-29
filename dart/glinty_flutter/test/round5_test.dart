@@ -551,6 +551,100 @@ void main() {
       expect(played.single.autoplay, isTrue);
     });
 
+    testWidgets('a mixed-case data URI is decoded, not fetched',
+        (tester) async {
+      // A URI scheme is case-insensitive, and R accepts DATA: for
+      // that reason. Matched by prefix, an image with one skipped the
+      // decode branch and the http branch and ended up in
+      // Image.network -- asking the network for a URI that carries
+      // its own bytes.
+      final socket = await boot(tester, {
+        'component': 'page',
+        'title': 'Image',
+        'children': [
+          {'component': 'image', 'alt': 'dot',
+            'src': 'DATA:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'},
+        ],
+      }, 'rimg');
+      await tester.pumpAndSettle();
+      expect(socket.sent, isNotEmpty);
+
+      final img = tester.widget<Image>(find.byType(Image));
+      expect(img.image, isA<MemoryImage>(),
+          reason: 'a data URI carries its own bytes');
+    });
+
+    testWidgets('an audio src is read by scheme, not by prefix',
+        (tester) async {
+      // The audio path happened to survive prefix matching, because
+      // resolving an absolute reference against a base returns it
+      // unchanged -- the fallback was accidentally right. Reading the
+      // scheme makes that deliberate rather than lucky.
+      final played = <GlintyAudioSource>[];
+      late FakeSocket socket;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => socket = FakeSocket(),
+            audioBuilder: (context, source) {
+              played.add(source);
+              return const Text('player');
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+      socket.deliver(welcomeOf({
+        'component': 'page',
+        'title': 'Audio',
+        'children': [{'component': 'audio_output', 'id': 'player'}],
+      }, 'ra4'));
+      await tester.pumpAndSettle();
+      socket.deliver({
+        'type': 'output', 'id': 'player', 'kind': 'audio',
+        'value': {'src': 'DATA:audio/wav;base64,UklGRg', 'mime': 'audio/wav'},
+      });
+      await tester.pumpAndSettle();
+
+      expect(played.single.src.scheme, 'data');
+    });
+
+    testWidgets('hello does not claim audio without a player wired',
+        (tester) async {
+      // A component this client only draws a placeholder for is not
+      // one it renders, and hello is where the server is told. The
+      // same rule the download feature already follows.
+      late FakeSocket bare;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => bare = FakeSocket(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final claimed = bare.sent.single['components'] as List;
+      expect(claimed, isNot(contains('audio_output')));
+      expect(claimed, contains('ui_output'),
+          reason: 'the ones it does draw are still claimed');
+
+      late FakeSocket wired;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: GlintyApp(
+            key: const ValueKey('wired'),
+            url: Uri.parse('ws://x/ws'),
+            open: (_) async => wired = FakeSocket(),
+            audioBuilder: (context, source) => const Text('player'),
+          ),
+        ),
+      ));
+      await tester.pump();
+      expect(wired.sent.single['components'], contains('audio_output'));
+    });
+
     testWidgets('an audio slot with no player says so', (tester) async {
       // Not an empty box. A slot that draws nothing is
       // indistinguishable from audio that failed to play, and the
