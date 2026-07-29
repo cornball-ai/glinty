@@ -275,6 +275,223 @@ void main() {
     c.conn.dispose();
   });
 
+  test('a refusal gives back the controls waiting on a transfer', () async {
+    // Terminal on a socket that is still open, so this is the one
+    // stop that does not come through the close path. A request made
+    // before the welcome is queued rather than sent, and a refusal
+    // means it never will be -- so its waiter is told, rather than
+    // left holding a callback on a wire that is finished.
+    final c = makeConn();
+    await c.conn.start();
+    String? told;
+    c.conn.session.awaitTicket('report', 'download', (r) => told = r);
+
+    c.sockets.single.deliver(serverFrame('hello-refused', 'error'));
+    await pump();
+
+    expect(c.conn.state, GlintyConnectionState.stopped);
+    expect(told, isNotNull, reason: 'nothing is coming; say so');
+    c.conn.dispose();
+  });
+
+  test('a queued input is superseded rather than stacked', () async {
+    // A slider dragged while the socket is down is one value by the
+    // time anyone sees it. Stacked, the intermediate values fill the
+    // queue with numbers nobody will ever read and push out the
+    // presses behind them.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    for (var i = 0; i < 200; i++) {
+      c.conn.session.sendInput('volume', i);
+    }
+    // and a press in the middle of the drag is still a press
+    c.conn.session.sendEvent('apply');
+    c.conn.session.sendEvent('apply');
+
+    expect(c.conn.droppedInteractions, 0,
+        reason: 'nothing had to be thrown away');
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    c.sockets.last.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+
+    final sent = c.sockets.last.sent;
+    final inputs = sent.where((m) => m['type'] == 'input').toList();
+    expect(inputs, hasLength(1), reason: 'the latest value is the value');
+    expect(inputs.single['value'], 199);
+    expect(sent.where((m) => m['type'] == 'event'), hasLength(2),
+        reason: 'two presses are two presses');
+    c.conn.dispose();
+  });
+
+  test('an interaction that had to be dropped is counted, not hidden',
+      () async {
+    // Past the cap the queue has to throw something away, and a user
+    // who is not told just sees an app that ignored them.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    // distinct ids, so nothing coalesces
+    for (var i = 0; i < 64; i++) {
+      c.conn.session.sendInput('field$i', i);
+    }
+    expect(c.conn.droppedInteractions, 0);
+
+    c.conn.session.sendInput('one-too-many', 1);
+    c.conn.session.sendEvent('go');
+    expect(c.conn.droppedInteractions, 2);
+
+    // and the report does not evaporate when the connection returns
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    c.sockets.last.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    expect(c.conn.droppedInteractions, 2,
+        reason: 'the work is still lost, and only the user can redo it');
+
+    c.conn.clearDroppedInteractions();
+    expect(c.conn.droppedInteractions, 0);
+    c.conn.dispose();
+  });
+
+  test('a refused resume counts the work it throws away', () async {
+    // The session those frames belonged to is gone, so replaying them
+    // into a fresh one would apply one user's interactions to
+    // another's state. Not sending them is right. Clearing them
+    // without a word is the same silence the cap counter exists to
+    // end, one branch further along.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    c.conn.session.sendInput('note', 'typed while down');
+    c.conn.session.sendEvent('save');
+    c.conn.session.sendMeasure('plot', 100, 100, dpr: 1);
+    expect(c.conn.droppedInteractions, 0);
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    final welcome = Map<String, dynamic>.from(
+        serverFrame('hello-welcome', 'welcome'))
+      ..['resumed'] = false;
+    c.sockets.last.deliver(welcome);
+    await pump();
+
+    expect(c.conn.droppedInteractions, 2,
+        reason: 'one input and one press; a measure is not the user');
+    expect(c.sockets.last.sent.where((m) => m['type'] == 'input'), isEmpty,
+        reason: 'and none of it reached the new session');
+    c.conn.dispose();
+  });
+
+  test('a terminal refusal counts the work it throws away', () async {
+    // The server has said no and will keep saying no, so the queue is
+    // never going out. That is the case where the work is most
+    // certainly lost and least likely to be mentioned.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+    c.conn.session.sendInput('note', 'typed while down');
+    c.conn.session.sendEvent('save');
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    c.sockets.last.deliver(serverFrame('hello-refused', 'error'));
+    await pump();
+
+    expect(c.conn.state, GlintyConnectionState.stopped);
+    expect(c.conn.droppedInteractions, 2);
+    c.conn.dispose();
+  });
+
+  test('a request past the send queue cap is refused, not dropped',
+      () async {
+    // The queue is capped so a user tapping at a dead app cannot grow
+    // memory without limit, and a frame past the cap is thrown away.
+    // The control that asked heard nothing about it: it sat disabled
+    // waiting for an answer to a question the server was never asked.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    c.sockets.last.drop();
+    await pump();
+
+    // fill it, without letting the retry timer in
+    for (var i = 0; i < 64; i++) {
+      c.conn.session.sendInput('field$i', i);
+    }
+    String? told;
+    c.conn.session.awaitTicket('report', 'download', (r) => told = r);
+
+    expect(told, isNotNull, reason: 'it will never be asked, so say so');
+    c.conn.dispose();
+  });
+
+  test('a dropped transfer request is not replayed after the reconnect',
+      () async {
+    // The ledger is cleared on a drop, so nothing is left to answer
+    // these. Replayed onto the next socket they draw replies that
+    // then get handed to whoever asked *after* the reconnect -- one
+    // control's answer under another's control.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+
+    // The wire goes down, and the user presses Save while it is. Both
+    // frames queue for the next socket.
+    c.sockets.last.drop();
+    await pump();
+    c.conn.session.awaitTicket('report', 'download', (_) {});
+    // typed in the same window, and this one is the user's
+    c.conn.session.sendInput('note', 'kept');
+
+    // The retry connects and drops again before being welcomed, which
+    // is what clears the ledger out from under the queued request.
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(c.sockets, hasLength(2));
+    c.sockets.last.drop();
+    await pump();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(c.sockets, hasLength(3));
+    c.sockets.last.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+
+    final replayed = c.sockets.last.sent.map((m) => m['type']).toList();
+    expect(replayed, isNot(contains('ticket')));
+    expect(replayed, contains('input'),
+        reason: 'an interaction the user made once is still theirs');
+    c.conn.dispose();
+  });
+
+  test('disposing gives back the controls waiting on a transfer', () async {
+    // The app is torn down with a request in flight. Nothing here
+    // will ever answer again, and a waiter left behind holds a
+    // closure over widgets that are on their way out.
+    final c = makeConn();
+    await c.conn.start();
+    c.sockets.single.deliver(serverFrame('hello-welcome', 'welcome'));
+    await pump();
+    String? told;
+    c.conn.session.awaitTicket('report', 'download', (r) => told = r);
+
+    c.conn.dispose();
+    expect(told, isNotNull);
+  });
+
   test('a download grant becomes an http URL for the embedder', () async {
     Uri? got;
     final c = makeConn(onDownload: (u) => got = u);

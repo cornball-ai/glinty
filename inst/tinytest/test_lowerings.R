@@ -209,6 +209,170 @@ plain <- component_to_html(component("button", id = "go", label = "Run"))
 expect_true(grepl('data-g-message="event"', plain, fixed = TRUE))
 expect_false(grepl("data-g-modal-close", plain, fixed = TRUE))
 
+# --- v3.1: how a container takes space in its parent ---
+#
+# grow and width are numbers on the wire and become CSS only here.
+# Without them a fixed sidebar beside a filling centre -- the shape
+# both migrated apps are built on -- could not be said at all.
+grown <- component_to_html(component("column", grow = 1L,
+                                     children = list(component("text",
+                                                               value = "x"))))
+expect_true(grepl("--g-grow:1", grown, fixed = TRUE))
+expect_true(grepl("g-sized", grown, fixed = TRUE))
+
+fixed <- component_to_html(component("panel", width = 280L,
+                                     variant = "sidebar",
+                                     children = list()))
+expect_true(grepl("--g-shrink:0", fixed, fixed = TRUE))
+expect_true(grepl("--g-basis:280px", fixed, fixed = TRUE))
+expect_true(grepl("--g-width:280px", fixed, fixed = TRUE))
+expect_true(grepl("g-sized", fixed, fixed = TRUE))
+
+# a container with neither carries no sizing style at all, rather
+# than a style attribute holding nothing
+plainrow <- component_to_html(component("row",
+                                        children = list(component("text",
+                                                                  value = "x"))))
+expect_false(grepl("--g-", plainrow, fixed = TRUE))
+expect_false(grepl("g-sized", plainrow, fixed = TRUE))
+expect_false(grepl('style=""', plainrow, fixed = TRUE))
+
+# --- sizing never inherits ---
+#
+# Custom properties cascade. An element that set only the properties
+# it needed picked the rest up from a sized ancestor: a fixed-width
+# child inside a grown parent inherited --g-grow and grew, and a grown
+# child inside a fixed parent inherited --g-width and did not. Every
+# sized element states all four, so nothing is inherited.
+fixed_in_grown <- component_to_html(
+    component("row", grow = 1L, children = list(
+            component("panel", width = 280L, children = list())
+        )))
+expect_true(grepl("--g-grow:1;--g-shrink:1;--g-basis:0;--g-width:auto",
+                  fixed_in_grown, fixed = TRUE))
+expect_true(grepl("--g-grow:0;--g-shrink:0;--g-basis:280px;--g-width:280px",
+                  fixed_in_grown, fixed = TRUE))
+
+grown_in_fixed <- component_to_html(
+    component("panel", width = 280L, children = list(
+            component("column", grow = 1L, children = list())
+        )))
+expect_true(grepl("--g-grow:0;--g-shrink:0;--g-basis:280px;--g-width:280px",
+                  grown_in_fixed, fixed = TRUE))
+expect_true(grepl("--g-grow:1;--g-shrink:1;--g-basis:0;--g-width:auto",
+                  grown_in_fixed, fixed = TRUE))
+
+# every sized element names all four, whichever field was set
+for (h in c(fixed_in_grown, grown_in_fixed)) {
+    n_sized <- length(gregexpr("g-sized", h)[[1]])
+    for (v in c("--g-grow", "--g-shrink", "--g-basis", "--g-width")) {
+        expect_equal(length(gregexpr(v, h, fixed = TRUE)[[1]]), n_sized)
+    }
+}
+
+# grow and width are contradictory instructions, and the two lowerings
+# resolve them differently -- the browser lets the later CSS rule win,
+# Flutter lets Expanded win. Refused rather than silently divergent.
+expect_error(component("row", grow = 1L, width = 280L,
+                       children = list()),
+             "not both")
+expect_error(component("column", grow = 1L, width = 280L,
+                       children = list()),
+             "not both")
+expect_error(component("panel", grow = 1L, width = 280L,
+                       children = list()),
+             "not both")
+# grow = 0 is "does not grow", so it does not conflict with a width
+expect_silent(component("row", grow = 0L, width = 280L, children = list()))
+
+# gap and grow compose rather than one clobbering the other
+both <- component_to_html(component("row", gap = 16L, grow = 2L,
+                                    children = list(component("text",
+                                                              value = "x"))))
+expect_true(grepl("gap:16px", both, fixed = TRUE))
+expect_true(grepl("--g-grow:2", both, fixed = TRUE))
+
+# --- v3.1: an image that is part of the UI ---
+img <- component_to_html(component("image", src = "/static/logo.png",
+                                   alt = "cornball.ai", width = 32L))
+expect_true(grepl('<img class="g-image"', img, fixed = TRUE))
+expect_true(grepl('src="/static/logo.png"', img, fixed = TRUE))
+expect_true(grepl('alt="cornball.ai"', img, fixed = TRUE))
+expect_true(grepl('width="32"', img, fixed = TRUE))
+
+# --- v3.1: a link wraps children, or carries text, never both ---
+wrapping <- component_to_html(component("link", href = "https://cornball.ai",
+                                        children = list(component("image",
+                                                                  src = "/l.png"))))
+expect_true(grepl("<a href=", wrapping, fixed = TRUE))
+expect_true(grepl("<img", wrapping, fixed = TRUE))
+
+expect_error(component("link", href = "https://x"), "either value")
+expect_error(component("link", href = "https://x", value = "text",
+                       children = list(component("text", value = "y"))),
+             "not both")
+
+# --- v3.1: a collapsible section ---
+open_one <- component_to_html(component("collapse", title = "Parameters",
+                                        open = TRUE,
+                                        children = list(component("text",
+                                                                  value = "in"))))
+expect_true(grepl("<details", open_one, fixed = TRUE))
+expect_true(grepl('open="open"', open_one, fixed = TRUE))
+expect_true(grepl("<summary", open_one, fixed = TRUE))
+expect_true(grepl(">Parameters<", open_one, fixed = TRUE))
+
+shut <- component_to_html(component("collapse", title = "API",
+                                    children = list(component("text",
+                                                              value = "in"))))
+expect_false(grepl("open=", shut, fixed = TRUE))
+
+# --- v3.1: a button's value rides on its event ---
+#
+# One handler serves a list of rows: the press says which row. Every
+# row needing its own id and its own observer is impossible when the
+# rows are built per render, which is what the history lists in both
+# migrated apps do.
+valued <- component_to_html(component("button", id = "history_view",
+                                      label = "12:04", value = "entry_7"))
+expect_true(grepl('data-g-value="entry_7"', valued, fixed = TRUE))
+expect_true(grepl('data-g-message="event"', valued, fixed = TRUE))
+
+# an ordinary button carries none: the press is the whole message
+expect_false(grepl("data-g-value",
+                   component_to_html(component("button", id = "go",
+                                               label = "Run")),
+                   fixed = TRUE))
+
+# A component id says which handler hears the press, not which element
+# it is -- and the two stop being the same thing exactly when `value`
+# is in play, because that is what lets rows share a handler. Emitting
+# it as a DOM id gave every row in a list the same one.
+expect_false(grepl('id="history_view"', valued, fixed = TRUE))
+expect_true(grepl('data-g-target="history_view"', valued, fixed = TRUE))
+
+rows <- paste(vapply(c("a", "b", "c"), function(v) {
+    component_to_html(component("button", id = "history_view", label = v,
+                                value = v))
+}, character(1L)), collapse = "")
+expect_false(grepl(' id="', rows, fixed = TRUE))
+expect_equal(length(gregexpr('data-g-target="history_view"', rows)[[1]]), 3L)
+expect_equal(length(gregexpr("data-g-value=", rows)[[1]]), 3L)
+
+# an ordinary button gets none either. Nothing makes a button id
+# unique: a form with Save at the top and the bottom shares one
+# without meaning anything by it, so two would collide.
+plain_saves <- paste(rep(component_to_html(component("button", id = "save",
+                                                     label = "Save")), 2L),
+                     collapse = "")
+expect_false(grepl(' id="save"', plain_saves, fixed = TRUE))
+expect_equal(length(gregexpr('data-g-target="save"', plain_saves)[[1]]), 2L)
+
+# an input keeps its id, because that id names one value in one store
+expect_true(grepl('id="name"',
+                  component_to_html(component("text_input", id = "name")),
+                  fixed = TRUE))
+
 # --- what each input reports is what INPUT_META declares ---
 #
 # The declaration used to be documentation nothing checked, which is
@@ -252,6 +416,21 @@ for (nm in names(INPUT_META)) {
 # the select declares both, and each one is what it actually seeds
 expect_equal(INPUT_META$select_input$value_type, "string")
 expect_equal(INPUT_META$select_input$value_type_multiple, "strings")
+
+# a button is the other component whose message type depends on a
+# field: valueless it counts presses, valued it carries the value.
+# The declaration was NULL for both, and the loop above skips a NULL
+# value_type -- so nothing checked the half that was added.
+expect_null(INPUT_META$button$value_type)
+expect_equal(INPUT_META$button$value_type_valued, "string")
+expect_null(INPUT_META$download_button$value_type_valued)
+
+s_ev <- glinty:::new_session("meta_ev")
+glinty:::handle_event(s_ev, "counted")
+expect_equal(r_type(glinty::isolate(s_ev$input$counted())), "number")
+glinty:::handle_event(s_ev, "valued", "entry_7")
+expect_equal(r_type(glinty::isolate(s_ev$input$valued())),
+             INPUT_META$button$value_type_valued)
 expect_equal(r_type(seed_of(component("select_input", id = "m",
                                       choices = c("a", "b"),
                                       selected = c("a", "b"),

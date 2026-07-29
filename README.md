@@ -1,5 +1,11 @@
 # glinty
 
+**Status: alpha.** Pre-0.1: the version is `0.0.x`, `0.1.0` is what
+the plan targets, and nothing here is stable. The API moves, the wire
+protocol moved recently, and there is no deprecation cycle yet. A few
+`0.0.x` releases exist on GitHub; none is on CRAN. Use it if you find
+it interesting; do not build something you need on it yet.
+
 Tiny reactive web application framework for R. A glint is a small
 shine.
 

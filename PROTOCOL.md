@@ -5,13 +5,83 @@ lowerings render it: R to HTML for the server-rendered first paint,
 `inst/www/glinty.js` to DOM, and `dart/glinty_flutter` to Flutter
 widgets. Protocol 2 is gone.
 
-Frozen means the component vocabulary, the message types and their
-field shapes are settled. Clients may still grow — the Flutter one
-refuses `ui_output`, `audio_output` and markup by name, and that is
-implementation work behind a stable wire, not a protocol gap. Adding
-a component or a message type is a v4 conversation; adding a
-*variant* or a *feature* is not, because both were designed to grow
-without breaking a client one release behind.
+Frozen means what already exists does not move. Clients may still
+grow — the Flutter one refuses markup and `date_input` by name,
+and that is implementation work behind a stable wire, not a
+protocol gap.
+
+**The test is not "is it additive". It is: what does a client that
+ignores this do?**
+
+- If it fails *visibly* — a named placeholder, a warning, a layout
+  that is wrong but obviously so — the addition is safe. The
+  honest-failure rule is what buys this.
+- If it fails *silently* — the app looks fine and does the wrong
+  thing — it is a version bump, however optional the field is.
+
+By that test:
+
+| addition | an older client... | safe? |
+|---|---|---|
+| a component | draws a placeholder naming it | yes |
+| a variant | falls back to the first listed, warns | yes |
+| a feature | the server sees it undeclared | yes |
+| `grow`, `width` | lays out wrong — possibly *plausibly* wrong | borderline |
+| `link.children` | draws a link with no content | **no** |
+| `button.value` | reports a press with no value, and the handler reads nothing | **no** |
+
+`grow` and `width` are marked borderline rather than safe on purpose:
+a layout that is merely *wrong* can still look plausible, and "you
+would notice" is a weaker guarantee than a placeholder saying the
+name of what is missing. Treat borderline as needing the bump.
+
+Two earlier drafts of this paragraph were both wrong. The first said
+adding a component was a v4 conversation, which is stricter than the
+design requires. The second said any optional field was safe because
+an older client ignores it — but *ignoring* `button.value` is exactly
+the silent wrong answer this protocol refuses everywhere else. Being
+optional is not the property that matters.
+
+**Why v3.1 did not bump the version anyway.** Protocol 3 has never
+been released: every published glinty (0.0.1 through 0.0.4) speaks
+protocol 2, and 3 exists only on `main`. Both protocol-3 clients ship
+in this repository and both implement v3.1. There is no client
+anywhere that could receive `button.value` and drop it. The additions
+below are safe *because no older protocol-3 client exists*, not
+because optional fields are safe in general.
+
+That justification expires the moment protocol 3 ships. After that,
+any addition that is not clearly in the "fails visibly" column bumps
+the version, or gates itself behind a declared capability. There is
+no third option where it is fine because the field is optional.
+
+### v3.1
+
+Protocol still 3. Additions, driven by porting two real apps onto the
+frozen vocabulary — the third consumer after the browser and Flutter,
+and the first that had to *build* a UI with it rather than render one:
+
+- `grow` and `width` on `row`, `column` and `panel`. A fixed sidebar
+  beside a filling centre could not be said. Not a CSS import: CSS
+  spends it as flex-grow and flex-basis, Flutter as `Expanded(flex:)`
+  and `SizedBox(width:)`, and every layout system has the pair.
+- `image`, a picture that is part of the UI. `image_output` is a slot
+  the server fills; a logo in a header is not that.
+- `collapse`, a section the user can fold. `<details>` in the browser,
+  `ExpansionTile` in Flutter — native to both, so neither has to
+  rebuild it out of a button and a hidden div.
+- `children` on `link`, so a link can wrap a logo. `value` stopped
+  being required and the two are now alternatives; a link carrying
+  neither is refused, because it would be an invisible clickable
+  nothing.
+- `value` on `button`, carried on the event it emits. One server
+  handler then serves a whole list — the press says which row. Every
+  row needing its own id and its own observer is impossible when the
+  rows are built per render, which is what both apps' history lists
+  do.
+- `icon`'s `name` became a closed set. It had been free text, so a
+  name no frontend drew rendered nothing in the browser and a
+  question-mark glyph in Flutter — silent in both at once.
 
 Two checked-in artifacts are the contract, generated from R and read
 by all three test suites: `inst/fixtures/components.json` (every
@@ -65,7 +135,7 @@ is a translation of the other.
 |---|---|---|
 | `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
 | `input` | `id`, `value` | an input changed |
-| `event` | `id` | a button press or other discrete event |
+| `event` | `id`, `value?` | a button press or other discrete event; `value` is present only when the button declared one |
 | `measure` | `id`, `width`, `height`, `dpr?` | a client-sized output's box, in logical pixels |
 | `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
 | `ack` | `seq` | optional flow control, reserved |
@@ -81,11 +151,11 @@ the server sent the tree, so it already knows the defaults.
 | `welcome` | `session`, `protocol`, `theme?`, `ui`, `ui_revision`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
 | `output` | `id`, `kind`, `value` | an output's current value, including `kind: "ui"` |
 | `input_update` | `id`, fields | server-driven input change |
-| `ticket` | `id`, `purpose`, `token`, `expires` | short-lived credential for one transfer |
+| `ticket` | `id`, `purpose`, and either `token` + `expires` or `error` | the answer to a ticket request: a credential, or why not |
 | `modal` | `action`, `title?`, `body?`, `footer?` | dialog |
 | `progress` | `action`, `id`, `message?`, `detail?`, `value?` | progress bar |
 | `custom` | `handler`, `value` | app-defined channel |
-| `error` | `id?`, `message` | render error, scoped to an output |
+| `error` | `id?`, `message` | a renderer failed, scoped to that output; id-less before `welcome` means the connection was refused |
 
 `welcome.ui` is **canonical**. Every client can rely on receiving the
 tree there, and a client that ignores everything else is correct.
@@ -166,7 +236,9 @@ answer for it.
 ## Components
 
 A component is an object with a `component` field. Unknown fields are
-ignored, so adding optional properties is backwards compatible.
+ignored. That makes an addition *renderable* by an older client; it
+does not make it *correct* there — see the compatibility test at the
+top of this document, which is about what ignoring the field does.
 
 ```json
 {
@@ -187,15 +259,15 @@ Layout nests:
 
 ### The set
 
-**Static content**: `text`, `heading`, `link`, `icon`, `divider`,
-`spacer`
+**Static content**: `text`, `heading`, `link`, `icon`, `image`,
+`divider`, `spacer`
 
 These are what `p()`, `span()`, `h1()`–`h4()` and `a()` become. Without
 them the migration is not mechanical, because today's apps are full of
 them.
 
-**Layout**: `page`, `row`, `column`, `panel`, `tabset` / `tab_panel`,
-`conditional_panel`
+**Layout**: `page`, `row`, `column`, `panel`, `collapse`, `tabset` /
+`tab_panel`, `conditional_panel`
 
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
 `number_input`, `select_input`, `checkbox_input`, `radio_buttons`,
@@ -215,26 +287,28 @@ frontends comes from the set above.
 ### Field schemas
 
 Every component has a fixed field set with declared types and
-defaults. Unknown fields are ignored so optional additions stay
-backwards compatible; missing required fields are a client-side error,
-not a silent default.
+defaults. Missing required fields are a client-side error, not a
+silent default. Unknown fields are ignored — which, again, is not the
+same as safe to add.
 
 | component | required | optional |
 |---|---|---|
 | `text` | `value: string` | `variant`, `id` |
 | `heading` | `value: string` | `level: 1..4` (2), `id` |
-| `link` | `value: string`, `href: string` | `external: bool` (false) |
-| `icon` | `name: string` | `size: int` (16) |
+| `link` | `href: string`, and one of `value: string` or `children: []` | `external: bool` (false) |
+| `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload` | `size: int` (16) |
 | `divider` | — | `label: string`, `variant` |
 | `spacer` | — | `size: int` (1, in theme spacing units) |
-| `row` / `column` | `children: []` | `gap: int`, `align`, `id` |
-| `panel` | `children: []` | `variant`, `title: string`, `id` |
+| `row` / `column` | `children: []` | `gap: int`, `align`, `grow: int`, `width: int`, `id` |
+| `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `id` |
+| `image` | `src: string` | `alt` (""), `width: int`, `height: int` |
+| `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
 | `password_input` | `id` | `label`, `placeholder` — **never `value`** |
 | `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
 | `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
-| `button` | `id`, `label` | `variant`, `icon` |
+| `button` | `id`, `label` | `variant`, `icon`, `value: string` |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
 | `tabset` | `id`, `panels: [{title, children}]` | `selected` |
@@ -271,11 +345,11 @@ rather than an intention.
 |---|---|---|
 | `text` | `Text` | variant → `TextStyle` from theme |
 | `heading` | `Text` | level → `textTheme.headlineN` |
-| `link` | `InkWell` + `Text` | `external` → `url_launcher` |
+| `link` | `InkWell` + `Text` or children | `external` → `url_launcher` |
 | `icon` | `Icon` | name → `IconData`; needs a name→icon map |
 | `divider` | `Divider` | `labelled` → `Row` with `Expanded` rules |
 | `spacer` | `SizedBox` | size × theme spacing |
-| `row` / `column` | `Row` / `Column` | `gap` → `spacing` (Flutter 3.27+) or separators |
+| `row` / `column` | `Row` / `Column` | `gap` → separators; `grow` → `Expanded`, `width` → `SizedBox` |
 | `panel` | `Card` / `Container` | variant selects |
 | `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit |
 | `password_input` | `TextField(obscureText: true)` | |
@@ -293,15 +367,24 @@ rather than an intention.
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
 | `plot_output` | `LayoutBuilder` + `Image.memory` | always reports, fixed size included; a declared axis wins, an unbounded height becomes 4:3 |
+| `image` | `Image.memory` / `Image.network` | data:, http(s), or relative resolved against the server address |
+| `collapse` | `ExpansionTile` | `open` becomes `initiallyExpanded` |
 | `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
-| `audio_output`, `ui_output`, `html_output`, `raw_html` | — | **refused by name**; see below |
+| `ui_output` | the same `build()`, on a subtree that arrived as a value | seeds the input store the way `welcome` does, and takes those inputs back when the slot stops carrying them |
+| `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
+| `file_input` | the embedder.s picker and POST, through `onUpload` | glinty owns the ticket in between, and asks for it only once files are in hand |
+| `html_output`, `raw_html` | — | **refused by name**; see below |
 
-Of the three this table flagged before any Dart existed, one is
-closed and two hold. `select_input(multiple = TRUE)` has no single
-Flutter widget, but it does not need one: the value is a list, and a
-`Wrap` of `FilterChip`s carries a list. `date_input` is still a
-dialog rather than an inline control, and `file_input` still needs a
-package outside the SDK, so both are refused by name.
+Of the three this table flagged before any Dart existed, one turned
+out not to be a gap and two hold. `select_input(multiple = TRUE)` has
+no single Flutter widget and does not need one: the value is a list,
+and a `Wrap` of `FilterChip`s carries a list. `date_input` is still a
+dialog rather than an inline control, so it is refused by name.
+
+
+That one, plus the markup pair below, is the whole refusal list.
+`plot_output`, `ui_output`, `audio_output` and `file_input` were all
+on it once and are not now.
 
 `icon` needed a name-to-`IconData` map, which dart/glinty_flutter now
 has.
@@ -309,10 +392,15 @@ has.
 The rest of the refusals are deliberate rather than pending.
 `raw_html` and `html_output` carry markup, which has no Flutter
 equivalent by design -- the first in the tree, the second as a value.
-`audio_output` needs an audio package outside the SDK. `ui_output`
-has its protocol half (the `ui` kind) and not its client half:
-building a component tree that arrived as a value into its slot. That
-is the honest remaining work.
+
+`audio_output` is neither refused nor built in. Playing sound needs a
+platform plugin, and a client with one dependency does not take on an
+audio engine that every app using it would inherit. It renders
+through `audioBuilder`, the same seam `onLink` and `onDownload` use,
+and a client without one leaves `audio_output` out of its `hello`
+rather than claiming a component it can only draw a placeholder for.
+**Declaring what is wired, not what could be, is the rule** -- the
+same reason the `download` feature is conditional.
 
 None are blocking. All are cheaper to know now than after the
 vocabulary is frozen.
@@ -654,6 +742,33 @@ and a leaked ticket is dead within seconds either way.
 The ticket is an opaque token held server-side, not a signed
 payload: a single-process server is the authority on what it issued,
 and a store it can consult beats cryptography it could get wrong.
+
+**A refusal is a ticket frame, not an error.** When the server will
+not grant one — at the live-ticket cap, say — it answers on the
+channel the request was made on, with `error` where a grant carries
+`token`:
+
+```json
+{"type": "ticket", "id": "report", "purpose": "download",
+ "error": "too many pending transfers"}
+```
+
+Answering is not optional. A client waiting on a grant that never
+comes leaves its control disabled forever, which is the silent
+failure this protocol keeps refusing to ship.
+
+It rides the ticket channel rather than an `error` frame for two
+reasons. The client is already holding the request that asked, so it
+knows exactly which control to give back — an `error` scoped to a
+resource id only names a *handler*, and several controls may share
+one, so the client would be guessing. And it keeps `error` meaning one
+thing: a renderer failed, scoped to that output. When refusals came
+through `error`, the two clients quietly disagreed about which — the
+browser marked every control routing to the id, Flutter stored it
+against an output slot and so showed nothing at all.
+
+A refusal is transient state belonging to one attempt. Both clients
+clear it when the control asks again.
 Signing would buy verification by a process that did not mint the
 ticket, which is not this architecture. (An earlier draft said
 "signed"; this is the honest replacement.)

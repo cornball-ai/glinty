@@ -76,3 +76,54 @@ expect_equal(hits6, 1L)
 
 # --- event_fn must be a function ---
 expect_error(observe_event(42, function() NULL))
+
+# --- v3.1: a button's value rides on its event ---
+#
+# One handler serves a list of rows. Without it every row needs its
+# own id and its own observer, which is impossible when the rows are
+# built per render -- exactly what the history lists in earshot and
+# cornfab do.
+new_session <- glinty:::new_session
+handle_event <- glinty:::handle_event
+dispatch <- glinty:::dispatch_client_message
+
+s <- new_session("ev1")
+
+# a valueless button still counts, which is what every existing
+# action button depends on
+handle_event(s, "go")
+expect_equal(isolate(s$input$go()), 1L)
+handle_event(s, "go")
+expect_equal(isolate(s$input$go()), 2L)
+
+# a valued button holds the value instead
+handle_event(s, "history_view", "entry_7")
+expect_equal(isolate(s$input$history_view()), "entry_7")
+
+# and pressing the same row twice still invalidates: this is an
+# event, not an input that ignores repeats
+fires <- 0L
+observe_event(s$input$history_view, function() fires <<- fires + 1L)
+flush_reactions()
+before <- fires
+handle_event(s, "history_view", "entry_7")
+flush_reactions()
+expect_equal(fires, before + 1L)
+
+# --- the wire form, through the dispatcher ---
+s2 <- new_session("ev2")
+j <- function(...) as.character(jsonlite::toJSON(list(...), auto_unbox = TRUE))
+dispatch(s2, j(type = "event", id = "row_click", value = "abc"))
+expect_equal(isolate(s2$input$row_click()), "abc")
+
+# a value that is not a single string is no value, not something
+# written into session state unchecked
+dispatch(s2, j(type = "event", id = "counted", value = list(1, 2)))
+expect_equal(isolate(s2$input$counted()), 1L)
+dispatch(s2, j(type = "event", id = "counted2"))
+expect_equal(isolate(s2$input$counted2()), 1L)
+
+# reserved ids stay refused on the event path too -- an event was the
+# one client-to-server message that never checked
+dispatch(s2, j(type = "event", id = "..modal_close"))
+expect_false(exists("..modal_close", envir = s2$input_env))

@@ -505,6 +505,19 @@ void _round3() {
     ));
     await tester.tap(find.byType(ElevatedButton));
     expect(asked, 1);
+
+    // And it can ask again. onTicket and awaitTicket are separate
+    // arguments, so an embedder may wire the request without wiring
+    // the queue that answers it -- and a button that goes on waiting
+    // for an answer nobody can deliver is disabled from its first
+    // press onwards.
+    await tester.pump();
+    expect(
+        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNotNull,
+        reason: 'nothing is coming, so there is nothing to wait for');
+    await tester.tap(find.byType(ElevatedButton));
+    expect(asked, 2);
   });
 
   test('a disconnect before welcome does not kill the replacement',

@@ -218,6 +218,45 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "ticket-refused",
+              notes = paste("the server will not grant this transfer:",
+                            "a ticket frame carrying `error` where a grant",
+                            "carries `token`. Answered on the channel the",
+                            "request was made on, so the client hands it to",
+                            "the control that asked rather than guessing",
+                            "which element an id meant -- and so `error`",
+                            "keeps meaning one thing, a render failure",
+                            "scoped to an output"),
+              frames = list(
+                            list(dir = "in", message = list(
+                        type = "ticket", id = "report",
+                        purpose = "download"
+                    )),
+                            list(dir = "out", message = list(
+                        type = "ticket", id = "report",
+                        purpose = "download",
+                        error = "too many pending transfers"
+                    ))
+            )
+        ),
+         list(
+              name = "valued-event",
+              notes = paste("a press from a list row. The value rides on",
+                            "the event so one handler serves every row --",
+                            "the press says which. A client that drops it",
+                            "reports a press the server cannot place, which",
+                            "is why the field is on the wire and not in",
+                            "the id"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event",
+                        id = "history_view", value = "entry_7")),
+                            list(dir = "out", message = list(
+                        type = "output", id = "transcription", kind = "text",
+                        value = "the seventh transcription"
+                    ))
+            )
+        ),
+         list(
               name = "measure-then-image",
               notes = paste("a client-sized output reporting its box in",
                             "logical pixels with its device pixel ratio, and",
@@ -234,6 +273,23 @@ wire_transcripts <- function() {
                         type = "output", id = "scatter", kind = "image",
                         value = list(src = "data:image/png;base64,AAAA",
                                      width = 640L, height = 480L)
+                    ))
+            )
+        ),
+         list(
+              name = "audio-output",
+              notes = paste("an audio value carries what it is, not just",
+                            "where it is: a browser sniffs the bytes and",
+                            "needs no media type, which is how the field",
+                            "went missing, but a native client hands the",
+                            "source to a platform player that asks"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event",
+                        id = "generate")),
+                            list(dir = "out", message = list(
+                        type = "output", id = "player", kind = "audio",
+                        value = list(src = "data:audio/wav;base64,UklGRg",
+                                     mime = "audio/wav", duration = 1.5)
                     ))
             )
         ),

@@ -16,7 +16,8 @@
     var SUPPORTED_COMPONENTS = [
         "audio_output", "button", "checkbox_input", "column",
         "conditional_panel", "date_input", "divider", "download_button",
-        "file_input", "heading", "html_output", "icon", "image_output",
+        "collapse", "file_input", "heading", "html_output", "icon",
+        "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "raw_html", "row", "select_input",
         "slider_input", "spacer", "tabset", "text", "text_input",
@@ -257,9 +258,25 @@
     function send(msg) {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
-        } else {
-            pending.push(msg);
+            return;
         }
+        /* An input carries state, not an occurrence: the newest value
+           for an id is the whole truth about it, so an older one
+           still waiting is nothing to keep. A slider dragged while
+           the socket is down would otherwise queue every intermediate
+           value, none of which anyone will ever see. A measure is the
+           same -- one box reported twice is one box.
+
+           An event is not. Two presses are two presses. */
+        if (msg.id && (msg.type === "input" || msg.type === "measure")) {
+            for (var i = 0; i < pending.length; i++) {
+                if (pending[i].type === msg.type && pending[i].id === msg.id) {
+                    pending[i] = msg;
+                    return;
+                }
+            }
+        }
+        pending.push(msg);
     }
 
     function flushPending() {
@@ -308,7 +325,15 @@
                input/change events, not through clicks. */
             if (el.dataset.gMessage === "event") {
                 if (el.dataset.gDownload === undefined) {
-                    send({ type: "event", id: el.dataset.gTarget });
+                    /* A button may carry a value, which rides along so
+                       one handler can serve a list of rows: the press
+                       says which row. Absent on an ordinary button,
+                       where the press is the whole message. */
+                    var frame = { type: "event", id: el.dataset.gTarget };
+                    if (el.dataset.gValue !== undefined) {
+                        frame.value = el.dataset.gValue;
+                    }
+                    send(frame);
                 }
                 return;
             }
@@ -377,21 +402,48 @@
     function deliverTicket(msg) {
         var key = msg.purpose + ":" + msg.id;
         var queue = ticketWaiters[key];
-        if (queue && queue.length) {
-            queue.shift().grant(msg);
+        if (!queue || !queue.length) return;
+        var waiter = queue.shift();
+        /* A refusal answers the request it refuses, so it goes to the
+           one waiter that asked -- not to whichever element on the
+           page happens to carry that id. */
+        if (msg.error !== undefined && msg.error !== null) {
+            if (waiter.refused) waiter.refused(msg.error);
+            return;
         }
+        /* Neither a credential nor a reason is a malformed answer.
+           Treat it as a refusal rather than handing a control an
+           undefined token: the request is over either way, and the
+           control has to come back. */
+        if (!msg.token) {
+            console.warn("glinty: ticket answer with neither token nor "
+                         + "error", msg);
+            if (waiter.refused) waiter.refused("the server did not answer");
+            return;
+        }
+        waiter.grant(msg);
     }
 
     /* The server can refuse a grant (too many pending transfers).
        Waiters have to hear about it: a control disabled while it
        waits for a grant that never comes stays disabled forever. */
-    function refuseTickets(id, message) {
-        ["upload", "download"].forEach(function (purpose) {
-            var queue = ticketWaiters[purpose + ":" + id];
+    function drainTicketWaiters(message) {
+        Object.keys(ticketWaiters).forEach(function (key) {
+            var queue = ticketWaiters[key];
             while (queue && queue.length) {
                 var waiter = queue.shift();
                 if (waiter.refused) waiter.refused(message);
             }
+            delete ticketWaiters[key];
+        });
+        /* And the requests still waiting to go out. Every control has
+           been told the answer is not coming; replayed on the next
+           socket these would be answered with nobody left to answer,
+           and the reply would go to whoever asked after the
+           reconnect. Queued inputs stay -- an interaction the user
+           made once is still theirs. */
+        pending = pending.filter(function (msg) {
+            return msg.type !== "ticket";
         });
     }
 
@@ -404,23 +456,24 @@
             fd.append("file", f, f.name);
         });
         el.disabled = true;
+        clearTransferNotice(el);
         requestTicket(el.dataset.gUpload, "upload", function (ticket) {
             fetch(
                 "/upload?ticket=" + encodeURIComponent(ticket.token),
                 { method: "POST", body: fd }
             ).then(function (resp) {
                 if (!resp.ok) throw new Error("upload failed: " + resp.status);
-                el.classList.remove("g-error");
+                clearTransferNotice(el);
             }).catch(function () {
-                el.classList.add("g-error");
+                showTransferNotice(el, "the upload did not complete");
             }).finally(function () {
                 el.disabled = false;
             });
-        }, function () {
+        }, function (message) {
             /* refused: give the control back rather than leaving it
-               dead while the user wonders what happened */
+               dead, and say why where it can be read */
             el.disabled = false;
-            el.classList.add("g-error");
+            showTransferNotice(el, message);
         });
     }
 
@@ -495,10 +548,23 @@
     }
 
     function bindAttrs(c, message) {
-        var attrs = { id: c.id };
+        /* A button's value rides along on the event, so one handler
+           serves a list of rows. The delegated click handler already
+           reads this attribute for tab buttons. */
+        var valued = message === "event" && c.value !== null &&
+            c.value !== undefined;
+        var attrs = {};
+        /* The component id says which handler hears this, not which
+           element it is, and for an event those are never the same:
+           nothing makes a button id unique. A row list shares one
+           deliberately; a form with Save top and bottom shares one
+           without meaning anything by it. An input's id does name one
+           value in one store, so it keeps the attribute. */
+        if (message !== "event") attrs.id = c.id;
         attrs["data-g-target"] = c.id;
         attrs["data-g-message"] = message;
         if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
+        if (valued) attrs["data-g-value"] = c.value;
         return attrs;
     }
 
@@ -534,6 +600,33 @@
         });
     }
 
+    /* grow and width are numbers on the wire and become CSS only
+       here -- as custom properties, which .g-sized turns into flex.
+       Not as an inline `flex`, because an inline style cannot be
+       overridden by a stylesheet, and an app has every right to
+       ignore the layout at a breakpoint where proportions stop
+       making sense. */
+    function flexStyle(c) {
+        var hasWidth = c.width !== null && c.width !== undefined;
+        var grow = c.grow ? c.grow : 0;
+        if (!grow && !hasWidth) return [];
+        /* All four, always. Custom properties inherit, so an element
+           that set only some of them picked the rest up from a sized
+           ancestor -- a fixed-width child inside a grown parent
+           inherited --g-grow and grew. Setting every one makes each
+           element say its whole size and inherit none of it. */
+        return [
+            "--g-grow:" + grow,
+            "--g-shrink:" + (hasWidth ? 0 : 1),
+            "--g-basis:" + (hasWidth ? c.width + "px" : (grow ? "0" : "auto")),
+            "--g-width:" + (hasWidth ? c.width + "px" : "auto")
+        ];
+    }
+
+    function sizedClass(c) {
+        return flexStyle(c).length ? " g-sized" : "";
+    }
+
     function buildLayout(c, cls) {
         var style = [];
         if (c.gap !== null && c.gap !== undefined) {
@@ -544,8 +637,9 @@
                         end: "flex-end" };
             style.push("align-items:" + map[c.align]);
         }
+        style = style.concat(flexStyle(c));
         var node = el("div", {
-            "class": cls,
+            "class": cls + sizedClass(c),
             id: c.id,
             style: style.length ? style.join(";") : null
         });
@@ -738,7 +832,35 @@
                 target: c.external ? "_blank" : null,
                 rel: c.external ? "noopener noreferrer" : null
             });
-            node.textContent = c.value;
+            /* children or text, never both -- the schema refuses a
+               link carrying neither, which would be an invisible
+               clickable nothing. */
+            if (c.children && c.children.length) {
+                appendChildren(node, c.children);
+            } else {
+                node.textContent = c.value;
+            }
+            return node;
+        case "image":
+            return el("img", {
+                "class": "g-image",
+                src: c.src,
+                alt: c.alt === null || c.alt === undefined ? "" : c.alt,
+                width: c.width,
+                height: c.height
+            });
+        case "collapse":
+            node = el("details", {
+                "class": "g-collapse",
+                id: c.id,
+                open: c.open ? "open" : null
+            });
+            var summary = el("summary", { "class": "g-collapse-title" });
+            summary.textContent = c.title;
+            node.appendChild(summary);
+            var body = el("div", { "class": "g-collapse-body" });
+            appendChildren(body, c.children);
+            node.appendChild(body);
             return node;
         case "icon":
             node = el("span", {
@@ -775,9 +897,12 @@
         case "column":
             return buildLayout(c, "g-layout-col");
         case "panel":
+            var panelStyle = flexStyle(c);
             node = el("div", {
-                "class": "g-panel g-panel-" + checkVariant("panel", c.variant),
-                id: c.id
+                "class": "g-panel g-panel-" +
+                    checkVariant("panel", c.variant) + sizedClass(c),
+                id: c.id,
+                style: panelStyle.length ? panelStyle.join(";") : null
             });
             if (c.title) {
                 var pt = el("div", { "class": "g-panel-title" });
@@ -904,6 +1029,33 @@
 
     /* ---------- incoming ---------- */
 
+    /* The element a server message names.
+       A component id is a routing name, and only some components put
+       it in the DOM as an id -- event buttons deliberately do not,
+       because several may share one. Outputs carry data-g-output and
+       bound controls carry data-g-target, so look there too rather
+       than dropping a message whose element is findable by the name
+       it was actually addressed with. */
+    function elementsFor(id) {
+        if (id === null || id === undefined) return [];
+        var byId = document.getElementById(id);
+        if (byId) return [byId];
+        /* Compared, not interpolated. An id is app-chosen text, and
+           building a selector out of it lets a quote or a bracket
+           throw out of querySelector -- or match something else. The
+           attribute value is read back and compared exactly instead,
+           which needs no escaping and cannot be tricked. */
+        var out = [];
+        document.querySelectorAll("[data-g-output]").forEach(function (el) {
+            if (el.getAttribute("data-g-output") === id) out.push(el);
+        });
+        if (out.length) return out;
+        document.querySelectorAll("[data-g-target]").forEach(function (el) {
+            if (el.getAttribute("data-g-target") === id) out.push(el);
+        });
+        return out;
+    }
+
     function clearError(el) {
         el.classList.remove("g-error");
         el.removeAttribute("title");
@@ -975,7 +1127,7 @@
        the wire; this is the only place that knows text means
        textContent here. */
     function applyOutput(msg) {
-        var el = document.getElementById(msg.id);
+        var el = elementsFor(msg.id)[0];
         if (!el) return;
         clearError(el);
         switch (msg.kind) {
@@ -1003,10 +1155,24 @@
             el.textContent = "";
             var node = buildComponent(msg.value);
             if (node) el.appendChild(node);
-            /* the new subtree may contain conditional panels that
-               have never been evaluated, and plots that have never
-               reported a box (refreshConditionals also schedules a
-               measure pass) */
+            /* The subtree's own controls have to reach the store, or
+               a conditional panel keyed on one reads "unset matches
+               nothing" and hides a section whose control is right
+               there on the page saying otherwise. rebuildRoot() does
+               this for the page and this path did not, so an input
+               that first appeared inside dynamic UI was invisible to
+               every condition.
+
+               Cleared and re-harvested from the whole document, the
+               way rebuildRoot() does it: an element holds what it
+               holds, so reading them all back is exact, and a control
+               the new subtree no longer carries is dropped by not
+               being there to read. */
+            inputValues = {};
+            harvestLocal();
+            /* the new subtree may also contain plots that have never
+               reported a box (refreshConditionals schedules a measure
+               pass) */
             refreshConditionals();
             observeMeasured();
             break;
@@ -1062,7 +1228,7 @@
     }
 
     function applyInputUpdate(msg) {
-        var el = document.getElementById(msg.id);
+        var el = elementsFor(msg.id)[0];
         if (!el) return;
 
         /* A server-driven update is a value change like any other, so
@@ -1132,7 +1298,16 @@
             console.error("glinty:", msg.message);
             return;
         }
-        var el = document.getElementById(msg.id);
+        /* An error is scoped to an output, which is what the spec
+           says and what every client assumes: a renderer failed, and
+           its slot says so instead of sitting there with a stale
+           value. A slot's id is an identity, so there is exactly one.
+
+           Transfer refusals used to come through here too, which made
+           this message mean two unrelated things and forced a guess
+           about which element on the page an id referred to. They
+           answer on the ticket channel now. */
+        var el = elementsFor(msg.id)[0];
         if (!el) return;
         el.classList.add("g-error");
         el.textContent = "Error: " + msg.message;
@@ -1359,9 +1534,6 @@
                           msg.message || "The server refused this connection.");
                 break;
             }
-            /* an error naming a resource someone is waiting on is
-               that wait's answer */
-            if (msg.id) refuseTickets(msg.id, msg.message);
             applyError(msg);
             break;
         default:
@@ -1487,10 +1659,41 @@
        time. A press asks for a ticket and navigates to it. */
     function startDownload(el) {
         if (!sessionId) return;
+        clearTransferNotice(el);
+        el.disabled = true;
         requestTicket(el.dataset.gDownload, "download", function (ticket) {
+            el.disabled = false;
             window.location.href =
                 "/download?ticket=" + encodeURIComponent(ticket.token);
+        }, function (message) {
+            el.disabled = false;
+            showTransferNotice(el, message);
         });
+    }
+
+    /* Why a transfer was refused, beside the control that asked.
+       A title attribute is invisible on a touch screen and sticks
+       until something else happens to clear it; a sibling node can be
+       seen and can be removed on the next attempt. The control's own
+       label is left alone -- overwriting it with an error string
+       loses the control. */
+    function showTransferNotice(el, message) {
+        clearTransferNotice(el);
+        var note = document.createElement("div");
+        note.className = "g-transfer-error";
+        note.setAttribute("data-g-transfer-error", el.dataset.gTarget || "");
+        note.setAttribute("role", "status");
+        note.textContent = message || "the transfer was refused";
+        if (el.parentNode) el.parentNode.insertBefore(note, el.nextSibling);
+        el._gNote = note;
+    }
+
+    function clearTransferNotice(el) {
+        el.classList.remove("g-error");
+        if (el._gNote) {
+            el._gNote.remove();
+            el._gNote = null;
+        }
     }
 
     /* ---------- disconnect overlay ---------- */
@@ -1543,6 +1746,13 @@
     }
 
     function handleClose() {
+        /* The socket that was going to answer these is gone. A waiter
+           left in the queue keeps its control disabled forever, and
+           the next socket's first reply would be handed to it rather
+           than to whoever asked after the reconnect -- one stale
+           entry misroutes every answer behind it. */
+        drainTicketWaiters("the connection dropped before the server "
+                           + "answered");
         if (refused) return; /* a refused session has nothing to resume */
         if (!sessionId) {
             /* never had a session: nothing to resume */

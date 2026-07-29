@@ -10,6 +10,7 @@
 /// is a finding, not a workaround.
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'component.dart';
@@ -25,8 +26,15 @@ const supportedComponents = <String>{
   'select_input', 'checkbox_input', 'radio_buttons', 'slider_input',
   'button', 'download_button',
   'text_output', 'verbatim_output', 'table_output',
-  'plot_output', 'image_output',
-  'tabset', 'conditional_panel',
+  'plot_output', 'image_output', 'image',
+  'tabset', 'conditional_panel', 'collapse', 'ui_output',
+  // Drawn by the embedder's player, through audioBuilder. Declared
+  // supported because the protocol asks what this client can render,
+  // and it can -- given somewhere to send the sound.
+  'audio_output',
+  // Same shape: the app picks the files and posts them, through
+  // onUpload; glinty owns the ticket in between.
+  'file_input',
 };
 
 /// Components the protocol defines that this client cannot render.
@@ -34,12 +42,6 @@ const supportedComponents = <String>{
 /// Named rather than omitted, so the gap is visible in a running app.
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
-  'file_input', // needs the file_picker package, outside the SDK
-  // The protocol side of this exists (the `ui` output kind); this
-  // renderer has not grown the client half -- building a component
-  // tree that arrived as a value into its slot.
-  'ui_output',
-  'audio_output', // needs an audio package, outside the SDK
   // Both carry markup, which has no Flutter equivalent by design.
   // raw_html is markup in the tree; html_output is markup arriving
   // as a value. Same refusal for the same reason.
@@ -58,8 +60,10 @@ const glintyModalCloseId = '..modal_close';
 /// Reports an input change back to the server.
 typedef GlintySink = void Function(String id, dynamic value);
 
-/// Reports a discrete event back to the server.
-typedef GlintyEventSink = void Function(String id);
+/// Reports a discrete event back to the server, carrying the button's
+/// value when it has one -- that is what lets one server handler
+/// serve a list of rows.
+typedef GlintyEventSink = void Function(String id, {String? value});
 
 /// Asks the server for a transfer ticket.
 typedef GlintyTicketSink = void Function(String id, String purpose);
@@ -68,6 +72,109 @@ typedef GlintyTicketSink = void Function(String id, String purpose);
 /// ratio the server should rasterize at.
 typedef GlintyMeasureSink = void Function(
     String id, double width, double height, double dpr);
+
+/// An audio value, ready to hand to a player.
+///
+/// The src is resolved: a data URI stays as it is, a relative path
+/// has been joined to the address serving the app. [mime] is what the
+/// protocol requires an audio value to carry, because a platform
+/// player asks what it is being given.
+class GlintyAudioSource {
+  const GlintyAudioSource({
+    required this.src,
+    required this.mime,
+    this.duration,
+    this.controls = true,
+    this.autoplay = false,
+  });
+
+  final Uri src;
+  final String mime;
+
+  /// Length in seconds, when the server knew it.
+  final double? duration;
+
+  /// What the component asked for. A player that shows no transport
+  /// makes `controls` meaningless, which is the app's call to make,
+  /// not this renderer's.
+  final bool controls;
+  final bool autoplay;
+}
+
+/// The server refused a transfer, or the connection did.
+///
+/// Thrown out of [GlintyUploadRequest.target] so a handler that only
+/// wants the happy path can ignore it: glinty catches it and puts the
+/// reason beside the control that asked.
+class GlintyTransferRefused implements Exception {
+  const GlintyTransferRefused(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// One file_input's request to pick files and send them.
+///
+/// Picking is a platform dialog and posting is an HTTP request;
+/// neither belongs to a package with one dependency. The ticket does
+/// belong here, so [target] is glinty's half: call it once files are
+/// in hand and it asks the server for an upload ticket and resolves
+/// the URL to POST to.
+///
+/// Ordering matters, which is why this is a callback rather than a
+/// URL handed over up front. A ticket is short-lived and a picker
+/// dialog is as long as the user takes; one minted before the dialog
+/// opened would routinely expire in front of them. The browser
+/// client asks in the same order for the same reason.
+class GlintyUploadRequest {
+  const GlintyUploadRequest({
+    required this.id,
+    required this.accept,
+    required this.multiple,
+    required this.target,
+  });
+
+  /// The input this belongs to, which is also what the server will
+  /// deliver the files to.
+  final String id;
+
+  /// Extensions the app asked for, as written: `['.wav', '.mp3']`.
+  /// Empty means it did not narrow.
+  final List<String> accept;
+  final bool multiple;
+
+  /// Asks for an upload ticket and resolves the POST target.
+  ///
+  /// The body is `multipart/form-data` with each file under the field
+  /// name `file`. Throws [GlintyTransferRefused] when the server says
+  /// no or the connection goes away.
+  final Future<Uri> Function() target;
+}
+
+/// Picks files and sends them, for a `file_input`.
+///
+/// Returns when the upload is done. Throwing -- or letting
+/// [GlintyUploadRequest.target]'s refusal through -- puts the message
+/// beside the control. Returning without calling `target` is how a
+/// handler says the user cancelled.
+typedef GlintyUploadHandler = Future<void> Function(
+    BuildContext context, GlintyUploadRequest request);
+
+/// Builds the widget that plays an audio value.
+///
+/// Playing audio needs a platform plugin, which this package does not
+/// take on: it has exactly one dependency and a note explaining why.
+/// Every app that used glinty would inherit an audio engine whether
+/// or not it ever played a sound.
+///
+/// So the same seam as [GlintyRenderer.onLink] and
+/// [GlintyRenderer.onDownload]: glinty says where the player goes and
+/// what to play, the app says how. Without one, the slot draws a
+/// visible placeholder rather than an empty box that looks like
+/// silence.
+typedef GlintyAudioBuilder = Widget Function(
+    BuildContext context, GlintyAudioSource source);
 
 class GlintyRenderer {
   GlintyRenderer(
@@ -78,8 +185,14 @@ class GlintyRenderer {
       this.onTicket,
       this.onModalClose,
       this.onMeasure,
+      this.assetBase,
+      this.audioBuilder,
+      this.onUpload,
+      this.tickets = const {},
+      this.awaitTicket,
       this.values = const {},
       this.kinds = const {},
+      this.uiValues = const {},
       this.errors = const {},
       this.inputs = const {},
       this.pushes = const {},
@@ -114,6 +227,24 @@ class GlintyRenderer {
   /// locally. Null outside a dialog, which makes such a button
   /// visibly disabled rather than quietly inert.
   final VoidCallback? onModalClose;
+
+  /// What a relative src is relative to: the origin serving this
+  /// app. Null in a fixture render, where there is no server, and a
+  /// relative src is then named rather than guessed at.
+  final Uri? assetBase;
+
+  /// Builds the player for an audio_output. Without one the slot
+  /// says so, the way a download button with nowhere to send its
+  /// grant renders disabled.
+  final GlintyAudioBuilder? audioBuilder;
+
+  /// Picks files and sends them for a file_input. Without one the
+  /// control says so rather than opening nothing.
+  final GlintyUploadHandler? onUpload;
+
+  /// Ticket grants by "purpose:id", owned by the session. A file
+  /// input reads its own grant back out to build the POST target.
+  final Map<String, Map<String, dynamic>> tickets;
 
   /// Where a responsive plot reports its box. Null in a fixture
   /// render, where there is no server to tell -- the plot then draws
@@ -184,6 +315,19 @@ class GlintyRenderer {
   /// an image would render as `{src: data:image/png;base64,iVBOR...`.
   final Map<String, String> kinds;
 
+  /// The parsed tree behind each `ui` output, by output id.
+  ///
+  /// Parsed by the session rather than here, because this runs on
+  /// every frame and the tree is the same tree until the next one
+  /// replaces it.
+  final Map<String, GlintyComponent> uiValues;
+
+  /// Registers a control as waiting on the next ticket answer for a
+  /// resource, and returns a canceller. Null in a fixture render,
+  /// where there is no session to ask.
+  final void Function() Function(String, String, void Function(String?))?
+      awaitTicket;
+
   /// Render errors per output id. The server said why the value is
   /// missing, so the slot shows that rather than sitting blank.
   final Map<String, String> errors;
@@ -213,6 +357,27 @@ class GlintyRenderer {
     return draw();
   }
 
+  /// A component tree that arrived as a value, built into its slot.
+  ///
+  /// The same `build()` the page goes through, on a subtree the
+  /// server sent later. Bindings included: a button in here reports
+  /// through the same sinks as one in the page, because it is the
+  /// same lowering and there is nothing about arriving late that
+  /// changes what a button is.
+  ///
+  /// Deliberately unkeyed. Every control that holds state is already
+  /// keyed by its own id, because an input id really is an identity,
+  /// so a field replaced by a different field does not inherit its
+  /// controller. Wrapping the subtree in a key of its own would
+  /// instead throw that state away on every re-render -- and a slot
+  /// like a container-status panel on a five-second poll re-renders
+  /// constantly.
+  Widget _dynamicUi(BuildContext context, GlintyComponent c) {
+    final tree = uiValues[c.str('id')];
+    if (tree == null) return const SizedBox.shrink();
+    return build(context, tree);
+  }
+
   Widget _problem(Color background, String message) => Container(
         width: double.infinity,
         padding: const EdgeInsets.all(8),
@@ -234,13 +399,20 @@ class GlintyRenderer {
         return _divider(c);
       case 'spacer':
         return SizedBox(height: (c.number('size') ?? 1) * spacing);
+      case 'image':
+        return _staticImage(c);
+      case 'collapse':
+        return _collapse(context, c);
+      // page is never a flex child -- it is the root -- so it skips
+      // the sizing wrapper the other three take.
       case 'page':
-      case 'column':
         return _column(context, c);
+      case 'column':
+        return _sized(c, _column(context, c));
       case 'row':
-        return _row(context, c);
+        return _sized(c, _row(context, c));
       case 'panel':
-        return _panel(context, c);
+        return _sized(c, _panel(context, c));
       case 'text_input':
         return _textField(context, c);
       case 'password_input':
@@ -271,6 +443,12 @@ class GlintyRenderer {
         return _slot(context, c, 'image', () => _plot(context, c));
       case 'image_output':
         return _slot(context, c, 'image', () => _image(c));
+      case 'file_input':
+        return _fileInput(context, c);
+      case 'audio_output':
+        return _slot(context, c, 'audio', () => _audio(context, c));
+      case 'ui_output':
+        return _slot(context, c, 'ui', () => _dynamicUi(context, c));
       case 'tabset':
         return _tabset(context, c);
       case 'conditional_panel':
@@ -329,13 +507,22 @@ class GlintyRenderer {
   Widget _link(BuildContext context, GlintyComponent c) {
     final href = c.str('href') ?? '';
     final cb = onLink;
-    final label = Text(
-      c.str('value') ?? '',
-      style: TextStyle(
-        color: Theme.of(context).colorScheme.primary,
-        decoration: TextDecoration.underline,
-      ),
-    );
+    // Children or text, never both -- the schema refuses a link that
+    // carries neither. Wrapped children are not underlined or
+    // recoloured: a logo inside a link is still a logo.
+    final kids = c.children;
+    final Widget label = kids.isNotEmpty
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: kids.map((k) => build(context, k)).toList())
+        : Text(
+            c.str('value') ?? '',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              decoration: TextDecoration.underline,
+            ),
+          );
     // No handler, no tap target: an InkWell with an empty onTap
     // looks tappable and does nothing.
     if (cb == null) return label;
@@ -381,35 +568,73 @@ class GlintyRenderer {
   // `gap` is a number, which is the only reason this can build
   // separators. A CSS length string would have been unusable.
 
-  List<Widget> _spaced(
-      BuildContext context, List<GlintyComponent> kids, double gap, bool row) {
+  /// Children of a Row or Column, with gaps between them.
+  ///
+  /// [canGrow] says whether `Expanded` is legal here, which needs two
+  /// things and not one. Being the direct child of a Flex is
+  /// necessary -- Expanded anywhere else throws ParentDataWidget --
+  /// but the Flex also has to have a *bounded* main axis, or the
+  /// error is "children have non-zero flex but incoming constraints
+  /// are unbounded". A Column inside a scroll view, or inside an
+  /// ExpansionTile, has all the height it asks for and none to share
+  /// out, so there is nothing for a grown child to take.
+  List<Widget> _spaced(BuildContext context, List<GlintyComponent> kids,
+      double gap, bool row,
+      {required bool canGrow}) {
     final out = <Widget>[];
     for (var i = 0; i < kids.length; i++) {
       if (i > 0 && gap > 0) {
         out.add(row ? SizedBox(width: gap) : SizedBox(height: gap));
       }
-      out.add(build(context, kids[i]));
+      final grow = kids[i].integer('grow') ?? 0;
+      final child = build(context, kids[i]);
+      out.add(canGrow && grow > 0 ? Expanded(flex: grow, child: child) : child);
     }
     return out;
   }
 
-  Widget _column(BuildContext context, GlintyComponent c) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children:
-            _spaced(context, c.children, c.number('gap')?.toDouble() ?? 0, false),
-      );
+  /// Builds a Flex, measuring its own main axis first.
+  ///
+  /// The LayoutBuilder is not decoration: whether a grown child is
+  /// legal depends on constraints this widget only learns at layout
+  /// time, and guessing wrong is a crash rather than a wrong pixel.
+  /// When the axis is unbounded a grown child simply does not grow,
+  /// which is what the browser does too -- flex-grow has nothing to
+  /// divide when the container is auto-sized.
+  Widget _flex(BuildContext context, GlintyComponent c, bool row) {
+    final gap = c.number('gap')?.toDouble() ?? 0;
+    final wants = c.children.any((k) => (k.integer('grow') ?? 0) > 0);
+    Widget make(bool canGrow) {
+      final kids = _spaced(context, c.children, gap, row, canGrow: canGrow);
+      return row
+          ? Row(
+              mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
+              crossAxisAlignment: switch (c.str('align')) {
+                'center' => CrossAxisAlignment.center,
+                'end' => CrossAxisAlignment.end,
+                _ => CrossAxisAlignment.start,
+              },
+              children: kids)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
+              children: kids);
+    }
 
-  Widget _row(BuildContext context, GlintyComponent c) => Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: switch (c.str('align')) {
-          'center' => CrossAxisAlignment.center,
-          'end' => CrossAxisAlignment.end,
-          _ => CrossAxisAlignment.start,
-        },
-        children:
-            _spaced(context, c.children, c.number('gap')?.toDouble() ?? 0, true),
-      );
+    // No grown child means no constraint to check, and no reason to
+    // pay for a LayoutBuilder on every container in the tree.
+    if (!wants) return make(false);
+    return LayoutBuilder(builder: (context, box) {
+      final bounded = row ? box.maxWidth.isFinite : box.maxHeight.isFinite;
+      return make(bounded);
+    });
+  }
+
+  Widget _column(BuildContext context, GlintyComponent c) =>
+      _flex(context, c, false);
+
+  Widget _row(BuildContext context, GlintyComponent c) =>
+      _flex(context, c, true);
 
   Widget _panel(BuildContext context, GlintyComponent c) {
     final title = c.str('title');
@@ -692,6 +917,34 @@ class GlintyRenderer {
   }
 
   Widget _button(BuildContext context, GlintyComponent c) {
+    // A download owns the answer to its own request, so it is
+    // stateful. Keying it off the component id would put a refusal
+    // earned by one button under every button sharing that id --
+    // the id is routing, and several controls may share one. Flutter
+    // matches unkeyed siblings positionally, which keeps each
+    // button's State with the button that pressed.
+    if (c.type == 'download_button' && onTicket != null) {
+      return _GlintyDownloadButton(
+        component: c,
+        build: (context, fire, refusal, waiting) =>
+            _buttonBody(context, c, fire, refusal, waiting: waiting),
+        awaitTicket: awaitTicket,
+        request: onTicket!,
+      );
+    }
+    return _buttonBody(context, c, null, null);
+  }
+
+  /// The button itself, and the refusal beneath it when there is one.
+  ///
+  /// [onPress] overrides what a press does, which is how the stateful
+  /// download wrapper registers its own waiter before asking.
+  /// [waiting] disables it: a control with a request in flight has
+  /// nothing to press, because the answer coming back is already
+  /// spoken for.
+  Widget _buttonBody(BuildContext context, GlintyComponent c,
+      VoidCallback? onPress, String? refusal,
+      {bool waiting = false}) {
     final id = c.str('id')!;
     final label = Text(c.str('label') ?? '');
     final icon = c.str('icon');
@@ -713,34 +966,74 @@ class GlintyRenderer {
     // is the embedder's to close (onDownload); until then say so by
     // being unpressable rather than by doing nothing visibly. A close
     // button with nowhere to send the dismissal is dead the same way.
-    final dead = (isDownload && onTicket == null) ||
+    final dead = waiting ||
+        (isDownload && onTicket == null) ||
         (closes && onModalClose == null);
     void fire() {
-      if (closes) {
+      if (onPress != null) {
+        onPress();
+      } else if (closes) {
         onModalClose?.call();
       } else if (isDownload) {
         onTicket?.call(id, 'download');
       } else {
-        onEvent?.call(id);
+        onEvent?.call(id, value: c.str('value'));
       }
     }
 
+    // Never keyed. Routing is not identity.
+    //
+    // A button's `id` says which handler hears the press, and nothing
+    // makes it unique: two buttons may legitimately carry the same
+    // one, with or without a value -- a form with Save at the top and
+    // bottom is the plain case. Duplicate keys among siblings are an
+    // error in Flutter, so deriving one from the id crashed on
+    // exactly the trees the protocol permits.
+    //
+    // Unkeyed is correct rather than a workaround: a button holds no
+    // state a key would preserve, and Flutter matches unkeyed
+    // siblings positionally. Controls that *do* hold state -- text
+    // fields, sliders -- keep their keys, because their ids really
+    // are identities: an input id names one value in one store.
+
     final scheme = Theme.of(context).colorScheme;
-    return switch (_variant(c.type, c.str('variant'))) {
-      'primary' => FilledButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+    final button = switch (_variant(c.type, c.str('variant'))) {
+      'primary' =>
+        FilledButton(onPressed: dead ? null : fire, child: child),
       'secondary' =>
-        OutlinedButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+        OutlinedButton(onPressed: dead ? null : fire, child: child),
       // danger comes from the theme's danger token, which
       // glintyThemeData maps onto the scheme's error slot
       'danger' => FilledButton(
-          key: Key(id),
           onPressed: dead ? null : fire,
           style: FilledButton.styleFrom(
               backgroundColor: scheme.error, foregroundColor: scheme.onError),
           child: child),
-      'ghost' => TextButton(key: Key(id), onPressed: dead ? null : fire, child: child),
-      _ => ElevatedButton(key: Key(id), onPressed: dead ? null : fire, child: child),
+      'ghost' =>
+        TextButton(onPressed: dead ? null : fire, child: child),
+      _ =>
+        ElevatedButton(onPressed: dead ? null : fire, child: child),
     };
+
+    // A refused transfer, beside the control that asked. The label
+    // stays its own -- overwriting it with an error string loses the
+    // control -- and the message goes when the next attempt clears it.
+    if (refusal == null) return button;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        button,
+        Padding(
+          padding: EdgeInsets.only(top: spacing),
+          child: Text(refusal,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: scheme.error)),
+        ),
+      ],
+    );
   }
 
   // --- outputs ---
@@ -812,6 +1105,161 @@ class GlintyRenderer {
       ),
     );
   }
+
+  /// A fixed width, which is legal anywhere.
+  ///
+  /// `grow` is deliberately not handled here: it becomes `Expanded`,
+  /// which is only legal as the direct child of a Flex, so [_spaced]
+  /// owns it. A component that grows outside a row or column simply
+  /// does not grow -- the browser behaves the same way, since
+  /// flex-grow on a child of a non-flex parent does nothing.
+  Widget _sized(GlintyComponent c, Widget child) {
+    final width = c.integer('width');
+    if (width == null) return child;
+    return SizedBox(width: width.toDouble(), child: child);
+  }
+
+  /// A picture that is part of the UI, not an output.
+  ///
+  /// Same decoding as an `image` output value -- data: and http(s),
+  /// anything else named rather than drawn -- because the difference
+  /// between the two is where the src came from, not what it is.
+  Widget _staticImage(GlintyComponent c) {
+    final src = c.str('src');
+    if (src == null || src.isEmpty) return const SizedBox.shrink();
+    final w = c.integer('width')?.toDouble();
+    final h = c.integer('height')?.toDouble();
+    final label = c.str('alt');
+    Widget wrap(Widget img) =>
+        Semantics(label: label, image: true, child: img);
+    // By scheme, not by prefix: a URI scheme is case-insensitive, so
+    // DATA: names the same thing data: does, and matched literally it
+    // read as a relative path to be joined to the server address.
+    final scheme = (Uri.tryParse(src)?.scheme ?? '').toLowerCase();
+    if (scheme == 'data') {
+      try {
+        return wrap(Image.memory(UriData.parse(src).contentAsBytes(),
+            width: w, height: h, fit: BoxFit.contain));
+      } on FormatException {
+        return _problem(const Color(0xFFF8D7DA), '[this image did not decode]');
+      }
+    }
+    if (scheme == 'http' || scheme == 'https') {
+      return wrap(Image.network(src, width: w, height: h,
+          fit: BoxFit.contain));
+    }
+    // A relative src is served by the glinty app itself. The
+    // connection knows that origin because it is holding the address;
+    // a bare renderer (a fixture test) does not, and says so rather
+    // than guessing at a host.
+    final base = assetBase;
+    if (base != null) {
+      return wrap(Image.network(base.resolve(src).toString(),
+          width: w, height: h, fit: BoxFit.contain));
+    }
+    return _problem(const Color(0xFFFFF3CD),
+        '[cannot load "$src": no server address to resolve it against]');
+  }
+
+  /// An audio value, handed to the app's player.
+  ///
+  /// The value carries what it is as well as where it is, which is
+  /// the whole reason `mime` is required: a browser sniffs the bytes
+  /// and a platform player asks. A value missing it is a server
+  /// speaking the protocol wrongly, and saying so beats handing a
+  /// player something it will fail on for reasons nobody can see.
+  Widget _audio(BuildContext context, GlintyComponent c) {
+    final build = audioBuilder;
+    if (build == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no audio player wired: pass audioBuilder to play this]');
+    }
+    final value = values[c.str('id')];
+    if (value is! Map) return const SizedBox.shrink();
+    final src = value['src'];
+    final mime = value['mime'];
+    if (src is! String || src.isEmpty) return const SizedBox.shrink();
+    if (mime is! String || mime.isEmpty) {
+      return _problem(const Color(0xFFF8D7DA),
+          '[this audio arrived without a media type]');
+    }
+
+    // By scheme, not by prefix. A URI scheme is case-insensitive, so
+    // DATA:audio/wav is the same URI as data:audio/wav -- matched
+    // literally it read as a relative path and got joined to the
+    // server address, which is nowhere.
+    final parsed = Uri.tryParse(src);
+    final scheme = parsed?.scheme.toLowerCase() ?? '';
+    final Uri resolved;
+    if (parsed != null &&
+        (scheme == 'data' || scheme == 'http' || scheme == 'https')) {
+      resolved = parsed;
+    } else {
+      // The same rule an image follows: a relative src is served by
+      // the glinty app itself, and only the connection knows that
+      // address. A bare renderer says so rather than guessing a host.
+      final base = assetBase;
+      if (base == null) {
+        return _problem(const Color(0xFFFFF3CD),
+            '[cannot load "$src": no server address to resolve it against]');
+      }
+      resolved = base.resolve(src);
+    }
+
+    return build(
+        context,
+        GlintyAudioSource(
+          src: resolved,
+          mime: mime,
+          duration: value['duration'] is num
+              ? (value['duration'] as num).toDouble()
+              : null,
+          controls: c.boolean('controls'),
+          autoplay: c.boolean('autoplay'),
+        ));
+  }
+
+  /// A control that picks files and sends them.
+  ///
+  /// The button and the state around it are glinty's; the dialog and
+  /// the POST are the app's, through [onUpload]. Without a handler it
+  /// is a disabled control naming the gap -- the same answer a
+  /// download button gives when its grant has nowhere to go.
+  Widget _fileInput(BuildContext context, GlintyComponent c) {
+    final id = c.str('id');
+    final handler = onUpload;
+    if (id == null || handler == null || awaitTicket == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no file picker wired: pass onUpload to send files]');
+    }
+    final base = assetBase;
+    if (base == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no server address to upload to]');
+    }
+    return _GlintyFileInput(
+      key: Key(id),
+      id: id,
+      label: c.str('label') ?? '',
+      accept: c.strings('accept'),
+      multiple: c.boolean('multiple'),
+      handler: handler,
+      awaitTicket: awaitTicket!,
+      ticketFor: (key) => tickets[key],
+      base: base,
+    );
+  }
+
+  /// A section the user can fold away.
+  Widget _collapse(BuildContext context, GlintyComponent c) => ExpansionTile(
+        key: Key(c.str('id') ?? 'g-collapse-${c.str('title')}'),
+        title: Text(c.str('title') ?? ''),
+        initiallyExpanded: c.boolean('open'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.only(bottom: spacing * 2),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: c.children.map((k) => build(context, k)).toList(),
+      );
 
   /// A plot: the client picks the size, the server draws to it.
   ///
@@ -1085,4 +1533,212 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         onChanged: _onChanged,
         onSubmitted: _onSubmitted,
       );
+}
+
+/// A download button that owns the answer to its own request.
+///
+/// Stateful because the answer belongs to the press, not to the id.
+/// A button's id is routing -- several controls may carry the same
+/// one -- so a refusal held against the id would appear under every
+/// button sharing that name. State stays with the widget that pressed,
+/// which is what Flutter's positional matching of unkeyed siblings
+/// gives for free.
+class _GlintyDownloadButton extends StatefulWidget {
+  const _GlintyDownloadButton({
+    required this.component,
+    required this.build,
+    required this.awaitTicket,
+    required this.request,
+  });
+
+  final GlintyComponent component;
+
+  /// Draws the button, given what a press does, the refusal to show
+  /// beneath it, and whether a request of its own is in flight.
+  final Widget Function(BuildContext, VoidCallback, String?, bool) build;
+
+  final void Function() Function(
+      String, String, void Function(String?))? awaitTicket;
+  final GlintyTicketSink request;
+
+  @override
+  State<_GlintyDownloadButton> createState() => _GlintyDownloadButtonState();
+}
+
+class _GlintyDownloadButtonState extends State<_GlintyDownloadButton> {
+  String? _refusal;
+  void Function()? _cancel;
+  bool _waiting = false;
+
+  @override
+  void dispose() {
+    // A control that goes away before its answer arrives cancels,
+    // which leaves a tombstone: the request is still on the wire and
+    // its answer still has to be consumed, or the next control in
+    // line is handed it.
+    _cancel?.call();
+    super.dispose();
+  }
+
+  void _press() {
+    final id = widget.component.str('id')!;
+    final ask = widget.awaitTicket;
+    if (ask == null) {
+      // Nothing to wait in. An embedder can wire onTicket without
+      // awaitTicket -- GlintyRenderer takes them separately -- and
+      // then no answer ever reaches this button. Waiting for one it
+      // cannot hear would disable it after a single press, for good.
+      widget.request(id, 'download');
+      return;
+    }
+    setState(() {
+      // Asking again clears the last answer: a refusal belongs to the
+      // attempt that earned it.
+      _refusal = null;
+      _waiting = true;
+    });
+    // Asks and registers in one step. Asking separately would put the
+    // request on the wire in one order and in the ledger in another,
+    // and the answers would cross.
+    _cancel = ask(id, 'download', (refusal) {
+      _cancel = null;
+      if (!mounted) return;
+      setState(() {
+        _refusal = refusal;
+        _waiting = false;
+      });
+    });
+  }
+
+  // Unpressable while it waits. Two presses are two requests, and the
+  // second cancels the first's waiter to take its place -- so answer
+  // one lands on press two. There is one of this control, and it can
+  // only be waiting for one thing.
+  @override
+  Widget build(BuildContext context) =>
+      widget.build(context, _press, _refusal, _waiting);
+}
+
+/// The file_input control: a button, what it is doing, and why it
+/// stopped if it did.
+///
+/// Stateful for the same reason the download button is: the answer to
+/// its own request belongs to it, and holding it against the input id
+/// would put one control's refusal under another sharing the name.
+class _GlintyFileInput extends StatefulWidget {
+  const _GlintyFileInput({
+    super.key,
+    required this.id,
+    required this.label,
+    required this.accept,
+    required this.multiple,
+    required this.handler,
+    required this.awaitTicket,
+    required this.ticketFor,
+    required this.base,
+  });
+
+  final String id;
+  final String label;
+  final List<String> accept;
+  final bool multiple;
+  final GlintyUploadHandler handler;
+  final void Function() Function(String, String, void Function(String?))
+      awaitTicket;
+  final Map<String, dynamic>? Function(String key) ticketFor;
+  final Uri base;
+
+  @override
+  State<_GlintyFileInput> createState() => _GlintyFileInputState();
+}
+
+class _GlintyFileInputState extends State<_GlintyFileInput> {
+  bool _busy = false;
+  String? _problem;
+  void Function()? _cancel;
+
+  @override
+  void dispose() {
+    // The request is on the wire and its answer still has to be
+    // consumed, or the next control in line is handed it.
+    _cancel?.call();
+    super.dispose();
+  }
+
+  /// Asks for a ticket and turns the grant into a POST target.
+  Future<Uri> _target() {
+    final answer = Completer<Uri>();
+    _cancel = widget.awaitTicket(widget.id, 'upload', (refusal) {
+      _cancel = null;
+      if (answer.isCompleted) return;
+      if (refusal != null) {
+        answer.completeError(GlintyTransferRefused(refusal));
+        return;
+      }
+      final token = widget.ticketFor('upload:${widget.id}')?['token'];
+      if (token is! String || token.isEmpty) {
+        answer.completeError(
+            const GlintyTransferRefused('the server answered without a '
+                'ticket'));
+        return;
+      }
+      answer.complete(widget.base.replace(
+          path: '/upload', queryParameters: {'ticket': token}));
+    });
+    return answer.future;
+  }
+
+  Future<void> _press() async {
+    setState(() {
+      _problem = null;
+      _busy = true;
+    });
+    String? failure;
+    try {
+      await widget.handler(
+          context,
+          GlintyUploadRequest(
+            id: widget.id,
+            accept: widget.accept,
+            multiple: widget.multiple,
+            target: _target,
+          ));
+    } on GlintyTransferRefused catch (e) {
+      failure = e.message;
+    } catch (e) {
+      failure = 'the upload did not complete';
+    }
+    if (!mounted) return;
+    setState(() {
+      _problem = failure;
+      _busy = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.label.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(widget.label),
+          ),
+        OutlinedButton.icon(
+          // Unpressable while it works, like every other control that
+          // has a request in flight.
+          onPressed: _busy ? null : _press,
+          icon: const Icon(Icons.attach_file, size: 18),
+          label: Text(_busy ? 'Sending…' : 'Choose file'),
+        ),
+        if (_problem != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(_problem!, style: TextStyle(color: scheme.error)),
+          ),
+      ],
+    );
+  }
 }

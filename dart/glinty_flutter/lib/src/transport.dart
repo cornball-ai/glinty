@@ -14,10 +14,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:web_socket/web_socket.dart';
 
+import 'render.dart' show GlintyAudioBuilder, GlintyUploadHandler;
 import 'session.dart';
 
 /// Opens a socket to [url]. Injectable so tests drive the client
@@ -57,14 +59,28 @@ class GlintyConnection extends ChangeNotifier {
     GlintySocketOpener? open,
     this.onDownload,
     this.onLink,
-  }) : _open = open ?? _defaultOpener {
+    this.audioBuilder,
+    this.onUpload,
+  })  : assert(retryBase <= retryCap,
+            'retryBase is where the backoff starts and retryCap is where it stops; '
+            'a start past the stop is a configuration nobody meant'),
+        _open = open ?? _defaultOpener {
     session = GlintySession(
       client: client,
       token: token,
       onSend: _send,
       // Declared only when wired: a feature named in hello that the
       // embedder never supplied is a claim the server would believe.
-      features: [if (onDownload != null) 'download'],
+      features: [
+        if (onDownload != null) 'download',
+        if (onUpload != null) 'upload',
+      ],
+      // And only the components it can really draw. audio_output
+      // renders through the embedder's player; without one it is a
+      // placeholder naming the gap -- honest on screen, but a claim
+      // the server would believe if hello still listed it.
+      components: componentsFor(
+          audio: audioBuilder != null, files: onUpload != null),
       // A local edit changes what the controls draw; without this
       // the store updates and the UI never hears until some later
       // server frame happens to arrive.
@@ -103,6 +119,15 @@ class GlintyConnection extends ChangeNotifier {
   /// plugin, so the embedder decides; without one, links render as
   /// styled text and are not tappable.
   void Function(String href, {bool external})? onLink;
+
+  /// Builds the player for an audio_output. Held here rather than
+  /// only at the view, because what this client can draw is part of
+  /// what it tells the server in hello.
+  GlintyAudioBuilder? audioBuilder;
+
+  /// Picks files and sends them for a file_input. Held here for the
+  /// same reason: it decides what hello declares.
+  GlintyUploadHandler? onUpload;
 
   late final GlintySession session;
 
@@ -185,37 +210,117 @@ class GlintyConnection extends ChangeNotifier {
   final List<GlintyOutgoing> _pending = [];
   static const _pendingCap = 64;
 
-  void _send(GlintyOutgoing frame) {
+  /// Returns whether this connection took the frame on: sent now, or
+  /// queued for the next socket. False means it was dropped, which
+  /// the session has to know -- a request recorded against a frame
+  /// nobody sent waits forever on an answer the server was never
+  /// asked for.
+  bool _send(GlintyOutgoing frame) {
     final socket = _socket;
     // hello is the exception: it belongs to the socket being opened,
     // never to the queue, or a reconnect would replay the previous
     // hello ahead of its own.
     if (frame.type == 'hello') {
-      if (socket == null) return;
+      if (socket == null) return false;
       try {
         socket.sendText(jsonEncode(frame.body));
       } on WebSocketConnectionClosed {
         // the drop arrives as a close event; the retry path owns it
       }
-      return;
+      return true;
     }
     // Everything else queues until this socket is live. An open
     // socket that has not been welcomed yet is mid-handshake:
     // writing past it would let a new frame overtake the ones
     // already waiting from the last disconnect.
     if (socket == null || _state != GlintyConnectionState.live) {
-      _queue(frame);
-      return;
+      return _queue(frame);
     }
     try {
       socket.sendText(jsonEncode(frame.body));
     } on WebSocketConnectionClosed {
-      _queue(frame);
+      return _queue(frame);
     }
+    return true;
   }
 
-  void _queue(GlintyOutgoing frame) {
-    if (_pending.length < _pendingCap) _pending.add(frame);
+  bool _queue(GlintyOutgoing frame) {
+    // An input carries state, not an occurrence: the newest value for
+    // an id is the whole truth about it, so an older one still
+    // waiting is nothing to keep. A slider dragged through a
+    // reconnect would otherwise fill this queue with values nobody
+    // will ever see, and push out the presses behind them. A measure
+    // is the same -- one box reported twice is one box.
+    //
+    // An event is not. Two presses are two presses, and coalescing
+    // them would lose one.
+    final id = frame.body['id'];
+    if (id != null && (frame.type == 'input' || frame.type == 'measure')) {
+      final at = _pending.indexWhere(
+          (f) => f.type == frame.type && f.body['id'] == id);
+      if (at >= 0) {
+        _pending[at] = frame;
+        return true;
+      }
+    }
+    if (_pending.length >= _pendingCap) {
+      // An input or an event is something the user did. Throwing one
+      // away is the failure this queue exists to prevent, so when it
+      // has to happen anyway it is counted and said out loud rather
+      // than disappearing.
+      if (frame.type == 'input' || frame.type == 'event') {
+        _dropped += 1;
+        if (!_disposed) notifyListeners();
+      }
+      return false;
+    }
+    _pending.add(frame);
+    return true;
+  }
+
+  /// How many of the user's interactions this connection threw away.
+  ///
+  /// Frames made while the socket was down, after the queue was
+  /// already full. Sticky on purpose: a report of lost work must not
+  /// vanish the moment the connection returns, because that is
+  /// exactly when the user can read it and redo what was lost.
+  int get droppedInteractions => _dropped;
+  int _dropped = 0;
+
+  /// Acknowledge the report, once it has been shown.
+  void clearDroppedInteractions() {
+    if (_dropped == 0) return;
+    _dropped = 0;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Forget the transfer requests still waiting to go out.
+  ///
+  /// Called wherever the session's ledger is cleared, and for the
+  /// same reason: replayed on the next socket these would be answered
+  /// with nothing left to answer, and each reply would then be handed
+  /// to whoever asked *after* the reconnect. Inputs stay queued --
+  /// an interaction the user made once is still theirs -- but a
+  /// transfer request whose control has already been told the
+  /// connection dropped is not one anybody is still waiting for.
+  void _dropQueuedTickets() {
+    _pending.removeWhere((frame) => frame.type == 'ticket');
+  }
+
+  /// Throw the queue away, counting what the user loses with it.
+  ///
+  /// A queued input or press is work someone did. Whether it goes
+  /// because the queue was full or because the session it belonged to
+  /// no longer exists, the loss is the same and so is what has to be
+  /// said about it. Cleared quietly, these were the same silence the
+  /// cap counter was added to end -- one branch further along.
+  void _discardPending() {
+    final lost =
+        _pending.where((f) => f.type == 'input' || f.type == 'event').length;
+    _pending.clear();
+    if (lost == 0) return;
+    _dropped += lost;
+    if (!_disposed) notifyListeners();
   }
 
   void _flushPending() {
@@ -248,8 +353,9 @@ class GlintyConnection extends ChangeNotifier {
             // The session those frames belonged to is gone. Replaying
             // them into a fresh session would apply one user's
             // interactions to another's state -- the same reason the
-            // session clears its values here.
-            _pending.clear();
+            // session clears its values here. Not sending them is
+            // right; not saying so is not.
+            _discardPending();
           }
           // The app is usable now, not when the socket opened. A
           // welcome is also proof this endpoint works, so the retry
@@ -260,7 +366,7 @@ class GlintyConnection extends ChangeNotifier {
           _flushPending();
         }
         if (msg['type'] == 'ticket' && msg['purpose'] == 'download') {
-          _deliverDownload(msg);
+          _deliverDownload();
         }
         if (session.refused) {
           _stop(session.refusalMessage ?? session.error?.message);
@@ -274,9 +380,36 @@ class GlintyConnection extends ChangeNotifier {
     }
   }
 
-  void _deliverDownload(Map<String, dynamic> msg) {
-    final token = msg['token'];
-    if (token is! String) return;
+  /// Where this app's own assets live: the socket URL as http(s),
+  /// with no path.
+  ///
+  /// A component tree carries relative srcs -- `/static/logo.png` is
+  /// served by the same glinty app -- and a renderer has no idea what
+  /// they are relative to. The connection does, because it is the
+  /// thing holding the address.
+  Uri get assetBase => url.replace(
+        scheme: url.scheme == 'wss' ? 'https' : 'http',
+        path: '',
+        query: null,
+        fragment: null,
+      );
+
+  void _deliverDownload() {
+    // The session classified the frame; this reads the verdict rather
+    // than the frame. Reading it again here is how a malformed answer
+    // carrying both an error and a token became a refusal under the
+    // button and a download at the same time.
+    //
+    // Null covers all three ways of not being a grant to act on: a
+    // refusal, an answer with no usable credential, and a grant
+    // claimed by nobody -- either a control that has gone away or no
+    // request at all.
+    final token = session.lastTicketGrant;
+    if (token == null) {
+      debugPrint('glinty: a download ticket arrived that no control is '
+          'waiting for - ignoring it');
+      return;
+    }
     final target = url.replace(
       scheme: url.scheme == 'wss' ? 'https' : 'http',
       path: '/download',
@@ -306,6 +439,12 @@ class GlintyConnection extends ChangeNotifier {
     _events?.cancel();
     _events = null;
     _socket = null;
+    // Every transfer request this socket carried died with it. A
+    // control still waiting would wait forever, disabled, with no
+    // sign of why -- so it is told, and can be pressed again once
+    // the retry lands.
+    session.failPendingTickets('the connection dropped');
+    _dropQueuedTickets();
     if (_disposed || _state == GlintyConnectionState.stopped) return;
     if (session.refused) {
       // The server said no. It will say no again; retrying would
@@ -317,10 +456,15 @@ class GlintyConnection extends ChangeNotifier {
       _stop('lost connection to the server');
       return;
     }
+    // min(), not clamp(): the backoff starts at base and doubles up
+    // to the cap, and a cap below the base is still a cap. clamp()
+    // reads its bounds as low-then-high and threw an ArgumentError
+    // when they crossed -- at the first disconnect, from inside the
+    // retry path, on a connection that was configured wrong an hour
+    // earlier.
     final delay = Duration(
-        milliseconds:
-            (retryBase.inMilliseconds * (1 << _retries)).clamp(
-                retryBase.inMilliseconds, retryCap.inMilliseconds));
+        milliseconds: math.min(retryBase.inMilliseconds * (1 << _retries),
+            retryCap.inMilliseconds));
     _retries += 1;
     _setState(GlintyConnectionState.reconnecting);
     _retryTimer?.cancel();
@@ -346,7 +490,12 @@ class GlintyConnection extends ChangeNotifier {
     _events = null;
     unawaited(_socket?.close().catchError((_) {}));
     _socket = null;
-    _pending.clear();
+    _discardPending();
+    // A refusal arrives on a socket that is still open, so this is
+    // not always reached through _onClosed. Terminal means no answer
+    // is coming, for transfers as much as for anything else.
+    session.failPendingTickets(reason ?? 'the connection ended');
+    _dropQueuedTickets();
     _stoppedReason = reason;
     _setState(GlintyConnectionState.stopped);
   }
@@ -360,6 +509,11 @@ class GlintyConnection extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // Nothing here will ever answer again. A control that outlives
+    // this connection -- one being torn down in some other order --
+    // gets told rather than left waiting on a dead wire.
+    session.failPendingTickets('the connection ended');
+    _dropQueuedTickets();
     _retryTimer?.cancel();
     _welcomeTimer?.cancel();
     _events?.cancel();

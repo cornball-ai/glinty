@@ -5,6 +5,22 @@
 # its own primitives: the browser to DOM, dart/glinty_flutter to
 # Flutter widgets. Nothing here knows about either.
 
+#' The icon set every frontend must draw
+#'
+#' Closed on purpose. An icon name is a token each frontend supplies
+#' artwork for, so the set has to be small enough that every frontend
+#' can actually carry all of it -- and enumerated here so a name no
+#' frontend draws fails where it was written rather than rendering
+#' nothing at all.
+#'
+#' Adding one means adding artwork to `inst/www/glinty.css` and a case
+#' to `_iconFor` in dart/glinty_flutter, and the fixtures make that
+#' obligation fail loudly if either is skipped.
+#'
+#' @keywords internal
+ICON_NAMES <- c("play", "stop", "rotate", "trash", "microphone",
+                "bookmark", "download", "upload")
+
 #' Declare one component field
 #'
 #' @param type character one of "string", "number", "int", "bool",
@@ -44,12 +60,23 @@ COMPONENT_SCHEMA <- list(
                                         id = field("string")
     ),
                          link = list(
-                                     value = field("string", required = TRUE),
+                                     # `value` is the usual case: a link is text. It stops
+                                     # being required when `children` are given, because a
+                                     # logo inside an <a> has no text to carry -- and a
+                                     # link that can only be text is one both migrated apps
+                                     # had to drop to raw markup for.
+                                     value = field("string"),
                                      href = field("string", required = TRUE),
+                                     children = field("children"),
                                      external = field("bool", default = FALSE)
     ),
                          icon = list(
-                                     name = field("string", required = TRUE),
+                                     # A closed set, not free text. Every frontend has to
+                                     # supply artwork per name, so a name no frontend
+                                     # draws is a component that renders nothing --
+                                     # which is what `field("string")` allowed, silently,
+                                     # in both lowerings at once.
+                                     name = field("enum", required = TRUE, values = ICON_NAMES),
                                      size = field("int", default = 16L, min = 8, max = 128)
     ),
                          divider = list(
@@ -65,15 +92,27 @@ COMPONENT_SCHEMA <- list(
                                      title = field("string", default = "glinty app"),
                                      id = field("string")
     ),
+                         # `grow` and `width` say how a container takes space
+                         # inside its parent. Not a CSS concept borrowed: every
+                         # layout system has the same pair -- flex-grow and
+                         # flex-basis, Flutter's Expanded(flex:) and
+                         # SizedBox(width:), and so on. Without them a
+                         # fixed-width sidebar beside a filling centre column,
+                         # which is the shape of both migrated apps, cannot be
+                         # said at all.
                          row = list(
                                     children = field("children", required = TRUE),
                                     gap = field("int", min = 0, max = 128),
                                     align = field("enum", values = c("start", "center", "end")),
+                                    grow = field("int", min = 0, max = 32),
+                                    width = field("int", min = 0, max = 4096),
                                     id = field("string")
     ),
                          column = list(
                                        children = field("children", required = TRUE),
                                        gap = field("int", min = 0, max = 128),
+                                       grow = field("int", min = 0, max = 32),
+                                       width = field("int", min = 0, max = 4096),
                                        id = field("string")
     ),
                          panel = list(
@@ -81,7 +120,29 @@ COMPONENT_SCHEMA <- list(
                                       variant = field("enum", default = "plain",
             values = c("plain", "card", "sidebar")),
                                       title = field("string"),
+                                      grow = field("int", min = 0, max = 32),
+                                      width = field("int", min = 0, max = 4096),
                                       id = field("string")
+    ),
+                         # A picture that is part of the UI rather than an
+                         # output a renderer produced. image_output is a slot
+                         # the server fills; this is a logo in a header, and
+                         # there was no way to say it.
+                         image = list(
+                                      src = field("string", required = TRUE),
+                                      alt = field("string", default = ""),
+                                      width = field("int", min = 1, max = 4096),
+                                      height = field("int", min = 1, max = 4096)
+    ),
+                         # A section the user can fold away. <details> in the
+                         # browser, ExpansionTile in Flutter -- the interaction
+                         # is native to both, which is what makes it a
+                         # component rather than app markup.
+                         collapse = list(
+        children = field("children", required = TRUE),
+        title = field("string", required = TRUE),
+        open = field("bool", default = FALSE),
+        id = field("string")
     ),
 
                          # inputs
@@ -176,6 +237,12 @@ COMPONENT_SCHEMA <- list(
 
                          # events, not inputs: they carry no value the server keeps
                          button = list(
+                                       # `value` rides along on the event, so one server
+                                       # handler serves a list of rows: the row says which
+                                       # entry it is. Without it every row needs its own id
+                                       # and its own observer, which is impossible when the
+                                       # rows are built per render.
+                                       value = field("string"),
                                        id = field("string", required = TRUE),
                                        label = field("string", required = TRUE),
                                        variant = field("enum", default = "default",
@@ -278,7 +345,13 @@ INPUT_META <- list(
                    slider_input = list(message = "input", value_type = "number"),
                    date_input = list(message = "input", value_type = "string"),
                    file_input = list(message = "input", value_type = "files"),
-                   button = list(message = "event", value_type = NULL),
+                   # A button's event carries a value when the component
+                   # declared one, and carries none otherwise: the press
+                   # is then the whole message. Two entries rather than
+                   # one, because which it is depends on the component,
+                   # exactly as with a select and `multiple`.
+                   button = list(message = "event", value_type = NULL,
+                                 value_type_valued = "string"),
                    download_button = list(message = "event", value_type = NULL)
 )
 
@@ -510,6 +583,33 @@ check_field <- function(value, spec, type, nm) {
 #' @return the field list, adjusted
 #' @keywords internal
 check_component <- function(type, out) {
+    if (type %in% c("row", "column", "panel")) {
+        # Contradictory instructions, and the two lowerings resolve
+        # them differently: the browser lets the later CSS rule win
+        # (width), Flutter lets Expanded win (grow). Rather than pick
+        # one and have the other quietly disagree, refuse -- the app
+        # meant one of them.
+        if (!is.null(out$grow) && out$grow > 0L && !is.null(out$width)) {
+            stop(type, "() takes grow= or width=, not both: a container ",
+                 "cannot both fill the spare space and be a fixed size",
+                 call. = FALSE)
+        }
+    }
+    if (identical(type, "link")) {
+        # One or the other, and at least one. `value` alone is a text
+        # link, `children` alone wraps them. Neither is a link with
+        # nothing in it, which renders as an invisible clickable
+        # nothing; both at once has no defined order.
+        has_value <- !is.null(out$value)
+        has_children <- length(out$children) > 0L
+        if (!has_value && !has_children) {
+            stop("link() needs either value= (text) or children=",
+                 call. = FALSE)
+        }
+        if (has_value && has_children) {
+            stop("link() takes value= or children=, not both", call. = FALSE)
+        }
+    }
     if (identical(type, "select_input")) {
         selected <- out$selected
         if (isTRUE(out$multiple)) {

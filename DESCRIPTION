@@ -1,7 +1,7 @@
 Package: glinty
 Type: Package
 Title: Tiny Reactive Web Application Framework
-Version: 0.0.5
+Version: 0.0.5.26
 Authors@R: c(
     person("Troy", "Hernandez", email = "troy@cornball.ai",
            role = c("aut", "cre"),
@@ -14,7 +14,8 @@ Description: Build interactive web applications in R with a pure base R
     expressions. The wire carries components rather than markup, so a
     frontend that is not a browser can render the same application:
     a small hand-written JavaScript client ships here, and a Flutter
-    client reads the same trees. No build tools.
+    client reads the same trees. No build tools. Alpha: the API and
+    the wire protocol are not yet stable.
 License: MIT + file LICENSE
 URL: https://github.com/cornball-ai/glinty
 BugReports: https://github.com/cornball-ai/glinty/issues

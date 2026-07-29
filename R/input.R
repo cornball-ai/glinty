@@ -60,11 +60,26 @@ handle_input <- function(session, id, value) {
 #' NULL (treated as 0) and each event increments it, so every press
 #' invalidates dependents even though the "value" is monotonic.
 #'
+#' A button carrying a `value` sets that instead of counting, so one
+#' handler can serve a list of rows and read which row was pressed.
+#' Pressing the same row twice still invalidates -- reactive_val()
+#' writes unconditionally -- so this keeps event semantics rather
+#' than quietly becoming an input that ignores repeats.
+#'
 #' @param session a glinty_session
 #' @param id character input ID
+#' @param value the button's value, or NULL for a counting button
 #' @keywords internal
-handle_event <- function(session, id) {
+handle_event <- function(session, id, value = NULL) {
     env <- session$input_env
+    if (!is.null(value)) {
+        if (!exists(id, envir = env)) {
+            env[[id]] <- reactive_val(value)
+        } else {
+            env[[id]](value)
+        }
+        return(invisible(NULL))
+    }
     if (!exists(id, envir = env)) {
         env[[id]] <- reactive_val(1L)
     } else {

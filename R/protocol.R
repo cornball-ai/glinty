@@ -108,6 +108,31 @@ ticket_msg <- function(id, purpose, token, expires) {
         ))
 }
 
+#' Create a ticket refusal message
+#'
+#' The answer to a request the server will not grant: a `ticket` frame
+#' carrying `error` where a grant carries `token`.
+#'
+#' A refusal used to travel as an `error` frame scoped to the resource
+#' id, which made `error` mean two unrelated things -- "this output
+#' failed to render" and "your transfer was refused" -- and left the
+#' two clients disagreeing about which. Answering the request on the
+#' channel it was made on is both simpler and more precise: the client
+#' is already holding the control that asked, so it knows exactly
+#' which one to give back.
+#'
+#' @param id character resource id the request named
+#' @param purpose "upload" or "download"
+#' @param message character why
+#' @return character JSON string
+#' @keywords internal
+ticket_refusal_msg <- function(id, purpose, message) {
+    as.character(jsonlite::toJSON(
+                                  list(type = "ticket", id = id, purpose = purpose, error = message),
+                                  auto_unbox = TRUE
+        ))
+}
+
 #' Create an error message
 #'
 #' @param id character output ID, or NULL for session-level errors
@@ -187,8 +212,16 @@ dispatch_client_message <- function(session, txt) {
             handle_input(session, msg$id, normalize_value(msg$value))
         }
     } else if (identical(msg$type, "event")) {
-        if (is.character(msg$id)) {
-            handle_event(session, msg$id)
+        if (is.character(msg$id) && !startsWith(msg$id, "..")) {
+            # A value is optional and, when present, must be a single
+            # string: it is a row id the app chose, not a payload.
+            # Anything else counts as no value rather than being
+            # written into session state unchecked.
+            v <- msg$value
+            if (!(is.character(v) && length(v) == 1L && !is.na(v))) {
+                v <- NULL
+            }
+            handle_event(session, msg$id, v)
         }
     } else if (identical(msg$type, "measure")) {
         handle_measure(session, msg)
@@ -198,13 +231,17 @@ dispatch_client_message <- function(session, txt) {
             msg$purpose %in% c("upload", "download")) {
             t <- issue_ticket(session, msg$id, msg$purpose)
             if (is.null(t)) {
-                # At the live-ticket cap. Answer, rather than drop:
-                # a client waiting on a grant that never comes leaves
-                # its upload control disabled forever, which is the
-                # silent failure this protocol keeps refusing to
-                # ship. The error is scoped to the resource so the
-                # client can re-enable exactly that control.
-                session$send(error_msg(msg$id, "too many pending transfers"))
+                # At the live-ticket cap. Answer, rather than drop: a
+                # client waiting on a grant that never comes leaves
+                # its control disabled forever, which is the silent
+                # failure this protocol keeps refusing to ship.
+                #
+                # Answered on the ticket channel rather than as an
+                # `error`, so the client can hand it to the request
+                # that is waiting instead of guessing which control on
+                # the page the id meant.
+                session$send(ticket_refusal_msg(msg$id, msg$purpose,
+                        "too many pending transfers"))
             } else {
                 session$send(ticket_msg(msg$id, msg$purpose, t$token,
                                         t$expires))

@@ -85,7 +85,13 @@ expect_equal(m$type, "error")
 expect_equal(m$id, "boom")
 expect_true(grepl("kapow", m$message))
 
-# --- render_audio: kind audio, value {src} ---
+# --- render_audio: kind audio, value {src, mime, duration?} ---
+#
+# mime is not optional. A browser sniffs the bytes and never asks,
+# which is how the field went missing; a native client hands the
+# source to a platform player that does. So the src alone is enough
+# to call it -- the type is read out of the extension or out of the
+# data URI, both of which state it -- but it always goes on the wire.
 with_session(s, {
     s$output$snd <- render_audio(function() "/static/chime.wav")
 })
@@ -93,6 +99,116 @@ flush_reactions()
 m <- last_msg(s)
 expect_equal(m$kind, "audio")
 expect_equal(m$value$src, "/static/chime.wav")
+expect_equal(m$value$mime, "audio/wav")
+expect_null(m$value$duration)
+
+# a data URI declares its own type, so that is what is used
+with_session(s, {
+    s$output$snd2 <- render_audio(function() "data:audio/mpeg;base64,SUQz")
+})
+flush_reactions()
+expect_equal(last_msg(s)$value$mime, "audio/mpeg")
+
+# and an app that knows says so, duration included
+with_session(s, {
+    s$output$snd3 <- render_audio(function() {
+        list(src = "/gen/out.bin", mime = "audio/flac", duration = 12.5)
+    })
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$value$mime, "audio/flac")
+expect_equal(m$value$duration, 12.5)
+
+# a source whose type cannot be read is an error naming the fix, not
+# a media type invented to fill a required field
+expect_error(glinty:::audio_mime("/gen/out.bin"), "list(src = , mime = )",
+             fixed = TRUE)
+expect_error(glinty:::audio_mime("data:;base64,AAAA"), "declares no media type")
+# query strings and fragments are not part of the extension
+expect_equal(glinty:::audio_mime("/static/a.ogg?v=2"), "audio/ogg")
+expect_equal(glinty:::audio_mime("/static/A.MP3"), "audio/mpeg")
+
+# NULL is still "nothing to play", not a value with no source
+with_session(s, {
+    s$output$snd4 <- render_audio(function() NULL)
+})
+flush_reactions()
+expect_null(last_msg(s)$value)
+
+# --- an audio value is scalars, and says so where the mistake is ---
+#
+# Every field on this wire is one value. as.character() on a
+# two-element vector is a JSON array against a contract that promised
+# a string, and the client that meets it can only report that
+# something is wrong with the audio -- the app is where it can be
+# named.
+av <- glinty:::audio_value
+
+expect_error(av(list(src = c("a.wav", "b.wav"))), "one non-empty src")
+expect_error(av(list(src = character(0))), "one non-empty src")
+expect_error(av(list(src = NA_character_)), "one non-empty src")
+expect_error(av(list(src = "")), "one non-empty src")
+expect_error(av(list(mime = "audio/wav")), "one non-empty src")
+expect_error(av(list(src = 42)), "one non-empty src")
+
+expect_error(av(list(src = "a.wav", mime = c("audio/wav", "audio/mpeg"))),
+             "one media type")
+expect_error(av(list(src = "a.wav", mime = NA_character_)), "one media type")
+expect_error(av(list(src = "a.wav", mime = "text/plain")),
+             "not an audio media type")
+# a source that is not audio at all is caught on the derived path too
+expect_error(av(list(src = "data:image/png;base64,iVBOR")),
+             "not an audio media type")
+
+expect_error(av(list(src = "a.wav", duration = c(1, 2))), "one finite")
+expect_error(av(list(src = "a.wav", duration = NA_real_)), "one finite")
+expect_error(av(list(src = "a.wav", duration = Inf)), "one finite")
+expect_error(av(list(src = "a.wav", duration = -1)), "one finite")
+expect_error(av(list(src = "a.wav", duration = "12")), "one finite")
+# zero is a real length, not a missing one
+expect_equal(av(list(src = "a.wav", duration = 0))$duration, 0)
+
+# A data URI states its own type. Two answers to one question is not
+# something to pick a winner from: whichever won, the other half of
+# the value would be a lie.
+expect_error(av(list(src = "data:audio/wav;base64,UklGRg",
+                     mime = "audio/mpeg")),
+             "declares audio/wav and mime = says audio/mpeg", fixed = TRUE)
+# agreeing is fine, and case is not disagreement
+expect_equal(av(list(src = "data:audio/wav;base64,UklGRg",
+                     mime = "AUDIO/WAV"))$mime, "audio/wav")
+
+# A URI scheme is case-insensitive, so DATA: is the same URI. Matched
+# literally it was not a data URI at all -- it was a filename with no
+# extension, and the type it declares had nothing to be compared
+# against.
+expect_equal(glinty:::data_uri_mime("DATA:audio/wav;base64,UklGRg"),
+             "audio/wav")
+expect_equal(av(list(src = "Data:AUDIO/Wav;base64,UklGRg"))$mime,
+             "audio/wav")
+expect_error(av(list(src = "DATA:audio/wav;base64,UklGRg",
+                     mime = "audio/mpeg")),
+             "declares audio/wav and mime = says audio/mpeg", fixed = TRUE)
+expect_error(av(list(src = "DATA:;base64,UklGRg")),
+             "declares no media type")
+# and a path carries no declaration to contradict
+expect_equal(av(list(src = "/gen/out.bin", mime = "audio/flac"))$mime,
+             "audio/flac")
+
+# The refusal reaches the slot that asked, as an error frame scoped to
+# it. A malformed value is an app bug, and an app bug in one output is
+# not a reason to take the session down.
+with_session(s, {
+    s$output$bad_snd <- render_audio(function() {
+        list(src = "data:audio/wav;base64,UklGRg", duration = -3)
+    })
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_equal(m$id, "bad_snd")
+expect_true(grepl("finite, non-negative", m$message))
 
 # --- render_plot: kind image, value {src, width, height} ---
 if (capabilities("png")) {

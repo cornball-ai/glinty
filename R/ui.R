@@ -74,12 +74,19 @@ heading <- function(value, level = 2L, id = NULL) {
 #' @param href character target URL
 #' @param external logical open outside the app; a native client hands
 #'   this to the system browser
+#' @param children list of components, for a link around something
+#'   that is not text (a logo, say). Give `value` or `children`, never
+#'   both. A list rather than `...` because `value` comes first
+#'   positionally: an unnamed child would bind to it instead
 #' @return A UI component
 #' @examples
 #' link("cornball.ai", "https://cornball.ai", external = TRUE)
+#' link(href = "https://cornball.ai",
+#'      children = list(image("/static/logo.png")))
 #' @export
-link <- function(value, href, external = FALSE) {
-    component("link", value = value, href = href, external = external)
+link <- function(value = NULL, href, external = FALSE, children = NULL) {
+    component("link", value = value, href = href, external = external,
+              children = children)
 }
 
 #' Create an icon
@@ -134,26 +141,36 @@ spacer <- function(size = 1L) {
 #' @param ... child components
 #' @param gap integer space between children, in pixels
 #' @param align character "start", "center" or "end"
+#' @param grow integer share of the parent's spare space; 0 or NULL
+#'   takes none. A row of one grown child and one fixed-width child is
+#'   the sidebar-plus-content shape
+#' @param width integer fixed width in pixels
 #' @param id character element ID
 #' @return A UI component
 #' @examples
 #' row(button("a", "A"), button("b", "B"), gap = 12L)
 #' @export
-row <- function(..., gap = NULL, align = NULL, id = NULL) {
-    component("row", children = list(...), gap = gap, align = align, id = id)
+row <- function(..., gap = NULL, align = NULL, grow = NULL, width = NULL,
+                id = NULL) {
+    component("row", children = list(...), gap = gap, align = align,
+              grow = grow, width = width, id = id)
 }
 
 #' Arrange children in a vertical column
 #'
 #' @param ... child components
 #' @param gap integer space between children, in pixels
+#' @param grow integer share of the parent's spare space; 0 or NULL
+#'   takes none
+#' @param width integer fixed width in pixels
 #' @param id character element ID
 #' @return A UI component
 #' @examples
 #' column(heading("Stack"), text_output("a"), text_output("b"))
 #' @export
-column <- function(..., gap = NULL, id = NULL) {
-    component("column", children = list(...), gap = gap, id = id)
+column <- function(..., gap = NULL, grow = NULL, width = NULL, id = NULL) {
+    component("column", children = list(...), gap = gap, grow = grow,
+              width = width, id = id)
 }
 
 #' Group children in a container
@@ -161,12 +178,52 @@ column <- function(..., gap = NULL, id = NULL) {
 #' @param ... child components
 #' @param variant character "plain", "card" or "sidebar"
 #' @param title character heading shown above the contents
+#' @param grow integer share of the parent's spare space; 0 or NULL
+#'   takes none
+#' @param width integer fixed width in pixels
 #' @param id character element ID
 #' @return A UI component
 #' @examples
 #' panel(txt("body"), variant = "card", title = "Results")
 #' @export
-panel <- function(..., variant = "plain", title = NULL, id = NULL) {
+panel <- function(..., variant = "plain", title = NULL, grow = NULL,
+                  width = NULL, id = NULL) {
     component("panel", children = list(...), variant = variant,
-              title = title, id = id)
+              title = title, grow = grow, width = width, id = id)
+}
+
+#' A picture that is part of the UI
+#'
+#' For a logo or a static illustration. An image the *server* produces
+#' is `image_output()` plus `render_plot()` or `render_image()`; this
+#' is the one that is simply there.
+#'
+#' @param src character URL or data URI
+#' @param alt character alternative text
+#' @param width,height integer pixel size
+#' @return A UI component
+#' @examples
+#' image("/static/logo.png", alt = "cornball.ai", width = 32L)
+#' @export
+image <- function(src, alt = "", width = NULL, height = NULL) {
+    component("image", src = src, alt = alt, width = width, height = height)
+}
+
+#' A section the user can fold away
+#'
+#' `<details>` in the browser, an `ExpansionTile` in Flutter: the
+#' interaction is native to both, so nothing has to be rebuilt out of
+#' a button and a hidden div.
+#'
+#' @param ... child components
+#' @param title character the always-visible summary line
+#' @param open logical start unfolded
+#' @param id character element ID
+#' @return A UI component
+#' @examples
+#' collapse(slider_input("speed", "Speed", 0.5, 2), title = "Parameters")
+#' @export
+collapse <- function(..., title, open = FALSE, id = NULL) {
+    component("collapse", children = list(...), title = title, open = open,
+              id = id)
 }

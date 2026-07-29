@@ -16,6 +16,7 @@
 ///  4. a protocol mismatch refuses visibly
 library;
 
+import 'dart:async';
 import 'component.dart';
 import 'inputs.dart';
 import 'render.dart' show supportedComponents;
@@ -68,9 +69,10 @@ class GlintySession {
     this.client = 'glinty_flutter/0.0.1',
     this.token,
     this.features = const <String>[],
+    this.components,
     GlintyComponent? cachedUi,
     String? cachedRevision,
-    void Function(GlintyOutgoing)? onSend,
+    bool Function(GlintyOutgoing)? onSend,
     void Function()? onChanged,
   })  : _ui = cachedUi,
         _cachedRevision = cachedRevision,
@@ -85,12 +87,23 @@ class GlintySession {
   /// server would believe.
   final List<String> features;
 
+  /// The components this client will actually draw, for `hello`.
+  /// Null means all of them; a connection narrows it when a seam the
+  /// embedder did not wire would leave one as a placeholder.
+  final List<String>? components;
+
   /// Opaque auth token for hello, or null. glinty never parses it:
   /// the server's run_app(auth = ) verifier does, and a refused token
   /// gets one error frame and a closed socket.
   final String? token;
 
-  final void Function(GlintyOutgoing)? _onSend;
+  /// Hands a frame to the wire. Returns whether the transport took
+  /// responsibility for it -- sent now, or queued to send on the next
+  /// connection. False means it was dropped and will never go out,
+  /// which a request that recorded itself before emitting has to hear
+  /// about: an entry in the ledger for a frame nobody sent waits on an
+  /// answer the server was never asked for.
+  final bool Function(GlintyOutgoing)? _onSend;
 
   /// Fires whenever session state changes, including from a local
   /// edit. Without it a checkbox updates the store and the UI never
@@ -184,6 +197,202 @@ class GlintySession {
   final Map<String, Map<String, dynamic>> tickets =
       <String, Map<String, dynamic>>{};
 
+  /// The parsed tree behind each `ui` output, by output id.
+  ///
+  /// Parsed once here rather than in the renderer, which runs on
+  /// every frame: a component tree is the same tree until the next
+  /// frame replaces it.
+  final Map<String, GlintyComponent> uiValues = <String, GlintyComponent>{};
+
+  /// Which input ids each dynamic slot put into the store.
+  ///
+  /// A slot that re-renders without an input it used to carry has
+  /// taken that control off the screen, and a value left behind
+  /// would go on answering conditional panels on behalf of a widget
+  /// nobody can see.
+  final Map<String, Set<String>> _slotInputs = <String, Set<String>>{};
+
+  /// Input ids the page tree itself declares.
+  ///
+  /// A dynamic slot never takes one of these back, however its own
+  /// subtree changes: the static control is still on screen, and the
+  /// value is not the slot's to remove.
+  Set<String> _staticInputs = <String>{};
+
+  /// Take on a component tree that arrived as an output value.
+  ///
+  /// The same two jobs `welcome` does for the page, at the scale of
+  /// one slot: hold the tree, and seed the store so the controls in
+  /// it have values to draw and any conditional panel keyed on them
+  /// can be evaluated. And nothing is emitted, for the same reason --
+  /// the server built this subtree, so it already knows every default
+  /// it put there.
+  ///
+  /// Server-side those inputs stay NULL until the user touches one,
+  /// which is what `render_ui()` documents. That is the server's
+  /// half. The client still has to draw something, and drawing a
+  /// control whose value it refuses to hold is how a select renders
+  /// empty next to a tree that plainly says which choice is selected.
+  void _adoptDynamicUi(String id, dynamic value) {
+    final tree = value == null ? null : GlintyComponent.fromJson(value);
+    if (tree == null) {
+      uiValues.remove(id);
+    } else {
+      uiValues[id] = tree;
+    }
+
+    final seeds = seedInputs(tree);
+    // Everything this slot had a hand in, whether the new subtree
+    // still carries it or not. The region has been replaced, so
+    // nothing left over from the last one survives it: an
+    // update_select_input() that changed a picker's choices applied
+    // to a control the server has since rebuilt, and the browser
+    // loses those by construction when it throws the old DOM away.
+    // The push counter goes with them, or a control would go on
+    // treating the answered push as the latest thing it was told.
+    for (final key in {...?_slotInputs[id], ...seeds.keys}) {
+      if (_staticInputs.contains(key)) continue;
+      overrides.remove(key);
+      pushes.remove(key);
+      if (!seeds.containsKey(key)) inputs.remove(key);
+    }
+    _slotInputs[id] = seeds.keys.toSet();
+    // Assigned, not filled in. A re-rendered slot is the server
+    // replacing that region, and the controls in it hold what the
+    // new tree says they hold -- which is what the browser does by
+    // construction, because it throws the old subtree's DOM away and
+    // builds fresh elements carrying those values. A client that
+    // instead kept the user's last edit would leave the two
+    // frontends disagreeing about what is on screen.
+    //
+    // Except an id the page itself declares, which is not this
+    // slot's to set: that control is still there, showing its own
+    // value, and would visibly contradict the change.
+    seeds.forEach((key, seed) {
+      if (_staticInputs.contains(key)) return;
+      inputs[key] = seed;
+    });
+  }
+
+  /// Requests sent and not yet answered, in the order they went out,
+  /// per "purpose:id".
+  ///
+  /// One ledger, not a queue of waiters beside a count of requests.
+  /// Two orderings cannot be kept in step: a direct [requestTicket]
+  /// followed by a button's would put the direct one first on the
+  /// wire and the button first in the queue, so the button was handed
+  /// an answer to a question it never asked. Every way of asking
+  /// appends here, and the front of the list is whose answer this is.
+  ///
+  /// A list rather than one slot per id, because several controls may
+  /// carry the same id -- that is the whole reason a button's id is
+  /// routing rather than identity. Keyed against the *request*, not
+  /// the id, or a refusal earned by one download button would appear
+  /// under every button sharing its name.
+  final Map<String, List<_TicketRequest>> _ticketRequests =
+      <String, List<_TicketRequest>>{};
+
+  /// True when the last ticket frame answered nobody.
+  ///
+  /// A grant belonging to a button that no longer exists, or to no
+  /// request at all, is not a grant for anybody: the transport reads
+  /// this so it does not hand an embedder a download URL that arrives
+  /// out of nowhere with nothing on screen to explain it.
+  bool lastTicketUnclaimed = false;
+
+  /// The credential from the last ticket frame, when that frame was a
+  /// grant and a live request claimed it. Null for anything else.
+  ///
+  /// The frame is classified once, here, and the transport reads the
+  /// verdict rather than looking at the frame again. Two readings of
+  /// one frame can disagree: a malformed answer carrying both an
+  /// error and a token was a refusal to the control that asked and a
+  /// download to the transport, so one press did both.
+  String? lastTicketGrant;
+
+  /// Ask for a ticket and register a control's interest in the
+  /// answer. Returns a function that cancels it, for a control that
+  /// goes away before the answer arrives.
+  ///
+  /// Asking and registering are one step on purpose. Split apart they
+  /// are two orderings that have to be kept in step, and a caller who
+  /// did one without the other put the ledger out of line with the
+  /// wire.
+  ///
+  /// Cancelling leaves a tombstone rather than removing the entry.
+  /// The ledger's positions correspond to requests already on the
+  /// wire, and the server will answer every one of them; dropping an
+  /// entry shortens the ledger but not the stream, so the next control
+  /// in line would be handed the departed one's answer. A tombstone
+  /// consumes its own reply and throws it away.
+  void Function() awaitTicket(
+      String id, String purpose, void Function(String? refusal) answer) {
+    final request = _askForTicket(id, purpose, answer);
+    return () => request.answer = null;
+  }
+
+  _TicketRequest _askForTicket(
+      String id, String purpose, void Function(String? refusal) answer) {
+    final key = '$purpose:$id';
+    final request = _TicketRequest(answer);
+    final queue = _ticketRequests[key] ??= <_TicketRequest>[];
+    queue.add(request);
+    // Recorded first, because a frame the transport sends now can be
+    // answered before this returns. If the wire would not take it,
+    // the entry comes straight back out -- nothing is behind it yet,
+    // so removing it shifts nobody, and a request that never went out
+    // will never be answered.
+    if (!_emit(GlintyOutgoing(
+        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}))) {
+      queue.remove(request);
+      final tell = request.answer;
+      request.answer = null;
+      tell?.call('the app is too far behind to ask for that right now');
+    }
+    return request;
+  }
+
+  void _answerTicket(String purpose, String id, String? refusal) {
+    final queue = _ticketRequests['$purpose:$id'];
+    if (queue == null || queue.isEmpty) {
+      // Nothing asked for this. The server is volunteering a transfer
+      // nobody requested, which is nobody's to act on -- and which
+      // the browser drops on the floor for the same reason.
+      lastTicketUnclaimed = true;
+      return;
+    }
+    // Popped whether or not anyone is still listening: this answer
+    // belongs to that request, and leaving it would shift every
+    // later answer onto the wrong control.
+    final answer = queue.removeAt(0).answer;
+    lastTicketUnclaimed = answer == null;
+    answer?.call(refusal);
+  }
+
+  /// Hand every waiting control a refusal.
+  ///
+  /// The socket that was going to answer is gone. A request left in
+  /// the ledger keeps its control disabled forever, and the next
+  /// socket's first reply would go to it rather than to whoever asked
+  /// after the reconnect.
+  void failPendingTickets(String reason) {
+    final queues = _ticketRequests.values.toList();
+    _ticketRequests.clear();
+    var told = false;
+    for (final q in queues) {
+      for (final request in List.of(q)) {
+        // A tombstone has nobody to tell: its control is gone, and
+        // the request it stood for is gone with the socket.
+        final answer = request.answer;
+        if (answer == null) continue;
+        request.answer = null;
+        told = true;
+        answer(reason);
+      }
+    }
+    if (told) _changed();
+  }
+
   /// The open dialog's frame, or null. One at a time, because
   /// show_modal() replaces rather than stacks.
   Map<String, dynamic>? modal;
@@ -222,7 +431,7 @@ class GlintySession {
       'type': 'hello',
       'protocol': glintyProtocolVersion,
       'client': client,
-      'components': supportedComponentsList,
+      'components': components ?? supportedComponentsList,
       // The output kinds this client can draw. `audio`, `ui` and
       // `html` are absent because the components that carry them are,
       // and a kind declared without a slot to put it in is a lie.
@@ -256,6 +465,7 @@ class GlintySession {
       case 'output':
         final id = msg['id'];
         if (id is String) {
+          if (msg['kind'] == 'ui') _adoptDynamicUi(id, msg['value']);
           values[id] = msg['value'];
           // The kind says what the value IS. Dropping it left a slot
           // stringifying whatever arrived: an image value rendered
@@ -272,8 +482,37 @@ class GlintySession {
       case 'ticket':
         final id = msg['id'];
         final purpose = msg['purpose'];
+        // Cleared for every ticket frame, including one too malformed
+        // to route: a verdict left over from the last frame would let
+        // an unroutable one open the previous grant all over again.
+        lastTicketGrant = null;
+        lastTicketUnclaimed = true;
         if (id is String && purpose is String) {
-          tickets['$purpose:$id'] = msg;
+          // A refusal answers the request that asked, so it goes to
+          // the waiter that asked. Sent as an `error` frame it was
+          // invisible here entirely: this client stores those against
+          // output ids, and a download_button is not an output.
+          //
+          // An answer with neither a credential nor a reason is
+          // malformed, and is a refusal rather than a grant: the
+          // request is over either way and the control has to come
+          // back. Passed on as a grant it reached the transport,
+          // which found no token and dropped it silently.
+          final refusal = msg['error'];
+          final token = msg['token'];
+          if (refusal != null || token is! String || token.isEmpty) {
+            tickets.remove('$purpose:$id');
+            _answerTicket(
+                purpose,
+                id,
+                refusal?.toString() ??
+                    'the server answered without a ticket');
+          } else {
+            tickets['$purpose:$id'] = msg;
+            _answerTicket(purpose, id, null);
+            // A grant, but only the claimed one is anybody's to use.
+            if (!lastTicketUnclaimed) lastTicketGrant = token;
+          }
         }
       case 'input_update':
         // A server-driven change is a value change like any other,
@@ -385,9 +624,12 @@ class GlintySession {
       kinds.clear();
       errors.clear();
       pushes.clear();
+      uiValues.clear();
+      _slotInputs.clear();
       modal = null;
       progress.clear();
       unhandledCustom.clear();
+      failPendingTickets("that session is gone");
       // The new session has never been told a box. Keeping the old
       // dedup keys would leave every plot unmeasured until something
       // happened to resize it.
@@ -414,7 +656,9 @@ class GlintySession {
       // hidden -- the one case where adoption would disagree with
       // the server about what is on screen. Only fills what is
       // missing: an edit already made is not undone by adopting.
-      seedInputs(_ui).forEach((id, v) => inputs.putIfAbsent(id, () => v));
+      final seeds = seedInputs(_ui);
+      _staticInputs = seeds.keys.toSet();
+      seeds.forEach((id, v) => inputs.putIfAbsent(id, () => v));
     } else {
       // Invariant 3, the mismatching half: whatever we cached
       // describes a different tree. Replace it. Patching a stale tree
@@ -427,9 +671,16 @@ class GlintySession {
       // its own from the same tree (R/seed.R). Without this a
       // control reads its value out of the component every rebuild
       // and can never change.
+      final seeds = seedInputs(_ui);
+      _staticInputs = seeds.keys.toSet();
       inputs
         ..clear()
-        ..addAll(seedInputs(_ui));
+        ..addAll(seeds);
+      // The slots that held these trees are gone with the page. A
+      // record of what they used to seed would have the next slot of
+      // the same name take back values it never put there.
+      uiValues.clear();
+      _slotInputs.clear();
     }
     // Invariant 2: nothing is emitted here. Adoption is not user
     // interaction, and the server built this tree, so it already knows
@@ -465,15 +716,37 @@ class GlintySession {
   }
 
   /// Report a discrete event, such as a button press.
-  void sendEvent(String id) {
-    _emit(GlintyOutgoing('event', {'type': 'event', 'id': id}));
+  void sendEvent(String id, {String? value}) {
+    _emit(GlintyOutgoing('event', {
+      'type': 'event',
+      'id': id,
+      // Omitted rather than sent as null when absent: an ordinary
+      // button's press is the whole message, and a null value field
+      // would have the server decide what null means.
+      'value': ?value,
+    }));
   }
 
   /// Ask for a transfer ticket. The grant arrives as a `ticket`
-  /// frame and lands in [tickets] under "purpose:id".
-  void requestTicket(String id, String purpose) {
-    _emit(GlintyOutgoing(
-        'ticket', {'type': 'ticket', 'id': id, 'purpose': purpose}));
+  /// frame and lands in [tickets] under "purpose:id"; a refusal
+  /// arrives on the same frame carrying `error` instead.
+  /// Ask for a ticket with no control behind it.
+  ///
+  /// Recorded in the same ledger as [awaitTicket]'s, in wire order.
+  /// Its grant belongs to whoever asked, which is what separates it
+  /// from a frame the server volunteered.
+  ///
+  /// The future completes with null when the ticket was granted (read
+  /// the credential from [tickets], or let the transport turn it into
+  /// a URL), and with the reason when it was refused, dropped, or
+  /// lost with the connection. It never completes with an error, so
+  /// ignoring it is safe -- but a refusal a caller cannot see is a
+  /// failure that looks like nothing happening, which is the whole
+  /// thing this queue exists to stop.
+  Future<String?> requestTicket(String id, String purpose) {
+    final answer = Completer<String?>();
+    _askForTicket(id, purpose, answer.complete);
+    return answer.future;
   }
 
   /// Report an output's box so the server can render at that size.
@@ -522,9 +795,12 @@ class GlintySession {
     sendMeasure(id, w, h, dpr: dpr);
   }
 
-  void _emit(GlintyOutgoing frame) {
+  /// Returns whether the wire took the frame. With no transport
+  /// wired -- a session driven straight, as the fixture and protocol
+  /// tests do -- there is nothing to drop it, so it counts as taken.
+  bool _emit(GlintyOutgoing frame) {
     sent.add(frame);
-    _onSend?.call(frame);
+    return _onSend?.call(frame) ?? true;
   }
 }
 
@@ -534,3 +810,33 @@ class GlintySession {
 /// is not something to make a wire format depend on.
 final List<String> supportedComponentsList =
     (supportedComponents.toList()..sort());
+
+/// The components this client draws *in a given configuration*.
+///
+/// Some need a seam the embedder supplies. `audio_output` renders
+/// through [GlintyAudioBuilder], and without one the slot draws a
+/// placeholder naming the gap -- honest on screen, but a claim the
+/// server would believe if `hello` still listed it. The same rule the
+/// `download` feature already follows: declare what is wired, not
+/// what could be.
+List<String> componentsFor({bool audio = true, bool files = true}) =>
+    supportedComponentsList
+        .where((c) => audio || c != 'audio_output')
+        .where((c) => files || c != 'file_input')
+        .toList();
+
+/// One request's place in the ledger for a resource's ticket answers.
+///
+/// A position, not just a callback. Cancelling clears [answer] and
+/// leaves the entry: the ledger's positions correspond to requests
+/// already on the wire, so an entry that disappears takes the next
+/// control's answer with it.
+class _TicketRequest {
+  _TicketRequest(this.answer);
+
+  /// Whoever is owed this answer: a control's callback, or the
+  /// completer behind a direct [GlintySession.requestTicket]. Every
+  /// request has one when it is made, so null means exactly one
+  /// thing -- the asker has gone, and the answer is nobody's.
+  void Function(String? refusal)? answer;
+}

@@ -30,6 +30,8 @@ component_to_html <- function(x) {
            heading = html_heading(x),
            link = html_link(x),
            icon = html_icon(x),
+           image = html_image(x),
+           collapse = html_collapse(x),
            divider = html_divider(x),
            spacer = html_spacer(x),
            page = html_container(x, "div", "g-page"),
@@ -136,7 +138,78 @@ html_link <- function(x) {
         attrs$target <- "_blank"
         attrs$rel <- "noopener noreferrer"
     }
-    html_el("a", attrs, html_escape(x$value))
+    inner <- if (length(x$children) > 0L) {
+        children_to_html(x$children)
+    } else {
+        html_escape(x$value)
+    }
+    html_el("a", attrs, inner)
+}
+
+#' Inline style for a container's share of its parent
+#'
+#' `grow` and `width` are numbers on both sides of the wire; this is
+#' the only place they become CSS. flex-grow with a zero basis is what
+#' makes "fill the rest" behave the same whatever the content is,
+#' which is the whole reason the field exists.
+#'
+#' @param x the component
+#' @return character style fragment, or NULL
+#' @keywords internal
+html_flex_style <- function(x) {
+    if (!html_is_sized(x)) {
+        return(NULL)
+    }
+    # All four, always. Custom properties inherit, so a sized element
+    # that set only some of them picked the rest up from a sized
+    # ancestor: a fixed-width child inside a grown parent inherited
+    # --g-grow and grew, and a grown child inside a fixed parent
+    # inherited --g-width and did not. Setting every one makes each
+    # element say its whole size and inherit none of it.
+    if (!is.null(x$grow) && x$grow > 0L) {
+        grow <- x$grow
+    } else {
+        grow <- 0L
+    }
+    if (!is.null(x$width)) {
+        basis <- paste0(x$width, "px")
+        width <- basis
+        shrink <- 0L
+    } else {
+        if (grow > 0L) {
+            basis <- "0"
+        } else {
+            basis <- "auto"
+        }
+        width <- "auto"
+        shrink <- 1L
+    }
+    paste0("--g-grow:", grow, ";--g-shrink:", shrink, ";--g-basis:",
+           basis, ";--g-width:", width)
+}
+
+#' Does this component carry sizing?
+#'
+#' @param x the component
+#' @return logical
+#' @keywords internal
+html_is_sized <- function(x) {
+    (!is.null(x$grow) && x$grow > 0L) || !is.null(x$width)
+}
+
+html_image <- function(x) {
+    html_el("img", list(class = "g-image", src = x$src, alt = x$alt,
+                        width = x$width, height = x$height), void = TRUE)
+}
+
+html_collapse <- function(x) {
+    summary <- html_el("summary", list(class = "g-collapse-title"),
+                       html_escape(x$title))
+    html_el("details",
+            list(class = "g-collapse", id = x$id,
+                 open = if (isTRUE(x$open)) "open" else NULL),
+            paste0(summary, html_el("div", list(class = "g-collapse-body"),
+                                    children_to_html(x$children))))
 }
 
 html_icon <- function(x) {
@@ -181,7 +254,11 @@ html_layout <- function(x, cls) {
                         end = "flex-end")
         style <- paste(c(style, paste0("align-items:", align)), collapse = ";")
     }
-    html_el("div", list(class = cls, id = x$id, style = style),
+    style <- paste(c(style, html_flex_style(x)), collapse = ";")
+    html_el("div", list(class = paste(c(cls, if (html_is_sized(x)) "g-sized"),
+                                      collapse = " "),
+                        id = x$id,
+                        style = if (nzchar(style)) style else NULL),
             children_to_html(x$children))
 }
 
@@ -191,8 +268,10 @@ html_panel <- function(x) {
         inner <- paste0(html_el("div", list(class = "g-panel-title"),
                                 html_escape(x$title)), inner)
     }
-    html_el("div", list(class = paste0("g-panel g-panel-", x$variant),
-                        id = x$id), inner)
+    html_el("div", list(class = paste(c(paste0("g-panel g-panel-", x$variant),
+                    if (html_is_sized(x)) "g-sized"),
+                                      collapse = " "),
+                        id = x$id, style = html_flex_style(x)), inner)
 }
 
 # --- inputs ---
@@ -235,11 +314,34 @@ html_field_group <- function(x, control) {
 #' @keywords internal
 html_bind <- function(x) {
     meta <- INPUT_META[[x$component]]
-    out <- list(id = x$id)
+    # A component's `id` is which server handler hears it, not which
+    # element it is, and for an event those are never the same thing:
+    # nothing makes a button id unique. A list of rows shares one
+    # deliberately -- that is what `value` is for -- and a form with
+    # Save at the top and the bottom shares one without meaning
+    # anything by it. Either way, emitting it as a DOM id duplicates
+    # it.
+    #
+    # An input is different: its id names one value in one store, so
+    # it is an identity and keeps the attribute. data-g-target carries
+    # the routing name in both cases, which is what the click
+    # delegation reads and what elementFor() falls back to.
+    if (identical(meta$message, "event")) {
+        out <- list()
+    } else {
+        out <- list(id = x$id)
+    }
     out[["data-g-target"]] <- x$id
     out[["data-g-message"]] <- meta$message
     if (!is.null(x$emit)) {
         out[["data-g-event"]] <- emit_event(x$emit)
+    }
+    # A button's value rides along on the event it emits, which is
+    # what lets one handler serve a list of rows. The tabset lowering
+    # has always used this attribute for the same purpose; a button
+    # can now say it too.
+    if (!is.null(x$value) && identical(meta$message, "event")) {
+        out[["data-g-value"]] <- x$value
     }
     out
 }

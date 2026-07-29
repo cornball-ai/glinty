@@ -27,6 +27,11 @@ const TRANSCRIPTS = JSON.parse(fs.readFileSync(
     path.join(__dirname, "..", "inst", "fixtures", "transcripts.json"),
     "utf8"));
 const CLIENT_SRC = fs.readFileSync(CLIENT_PATH, "utf8");
+/* The stylesheet is part of the browser lowering: an icon component
+   builds a span and the glyph comes from here, so a name with no rule
+   renders nothing at all. */
+const CSS_SRC = fs.readFileSync(
+    path.join(path.dirname(CLIENT_PATH), "glinty.css"), "utf8");
 
 let failures = 0;
 let current = "";
@@ -43,7 +48,13 @@ function check(name, cond) {
     }
 }
 
+/* Which transcripts this run actually replayed. The file is a
+   shared artifact, and a transcript nobody replays pins nothing --
+   the same hole the fixture list had when it claimed coverage it
+   did not have. */
+const replayed = new Set();
 function transcript(name) {
+    replayed.add(name);
     const hit = TRANSCRIPTS.transcripts.find((t) => t.name === name);
     if (!hit) throw new Error("no transcript named " + name);
     return hit;
@@ -217,6 +228,16 @@ function makeEl(doc, tag) {
 
         get value() {
             if (this._value !== undefined) return this._value;
+            /* A select has no value of its own: a real one reports
+               its selected option, and a harness that reported ""
+               instead made a built select look valueless to anything
+               that reads it back -- harvestLocal(), for one. */
+            if (this.tagName === "SELECT") {
+                const chosen = this.selectedOptions;
+                if (chosen.length > 0) return chosen[0].value;
+                const all = this.options;
+                return all.length > 0 ? all[0].value : "";
+            }
             return "value" in this.attrs ? this.attrs.value : "";
         },
         set value(v) { this._value = v; },
@@ -1053,6 +1074,324 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
+    /* ---------------------------------------------------------- */
+    section("the remaining transcripts, replayed");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+
+        /* input -> output: the shape both directions take for the
+           ordinary case. */
+        const io = transcript("input-then-output");
+        const inFrame = frames(io, "in")[0];
+        const outFrame = frames(io, "out")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+        const nameEl = page.document.getElementById(inFrame.id);
+        nameEl.value = inFrame.value;
+        page.fire("input", nameEl);
+        await sleep(300);
+        const sentInput = page.frames("input").pop();
+        check("an input reports in the transcript's shape",
+              sentInput.id === inFrame.id && sentInput.value === inFrame.value);
+
+        page.ws().deliver(outFrame);
+        check("and the answering output lands in its slot",
+              page.document.getElementById(outFrame.id).textContent ===
+                  outFrame.value);
+
+        /* event -> ui: a press that answers with a subtree. */
+        const eu = transcript("event-then-ui");
+        page.ws().deliver(frames(eu, "out")[0]);
+        check("a ui-kind output builds its subtree",
+              page.document.getElementById("extra") !== null);
+
+        /* An input_update the client applies without echoing back. */
+        const iu = transcript("input-update");
+        const upd = frames(iu, "out")[0];
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "text_input", id: upd.id, label: "T:",
+                     value: "", emit: "live" }
+        });
+        const before = page.sent.length;
+        page.ws().deliver(upd);
+        check("an input_update applies to the control",
+              page.document.getElementById(upd.id).value === upd.value);
+        check("and is not echoed back -- the server already knows",
+              page.sent.length === before);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a valued event, replayed from the shared transcript");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const shape = frames(transcript("valued-event"), "in")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "button", id: shape.id, label: "12:04",
+                     value: shape.value, variant: "default" }
+        });
+        /* By target, not by id: a valued button deliberately has no
+           DOM id, because a list of rows shares the handler name. */
+        page.fire("click", page.document.querySelector(
+            '[data-g-target="' + shape.id + '"]'));
+        const sent = page.frames("event").pop();
+        check("the frame this client sends matches the transcript",
+              sent.type === shape.type && sent.id === shape.id &&
+              sent.value === shape.value);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("v3.1: sizing, images, collapse, valued buttons");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+        const host = page.document.getElementById("panel");
+        const put = (v) => page.ws().deliver({
+            type: "output", id: "panel", kind: "ui", value: v });
+
+        /* A fixed sidebar beside a filling centre: the shape both
+           migrated apps are built on, and the one thing row/column
+           could not say before. */
+        put({ component: "row", gap: 16, children: [
+            { component: "panel", variant: "sidebar", width: 280,
+              children: [] },
+            { component: "column", grow: 1, children: [] }
+        ] });
+        const side = host.children[0].children[0];
+        const centre = host.children[0].children[1];
+        check("a width becomes a fixed flex basis",
+              side.getAttribute("style").includes("--g-shrink:0") &&
+              side.getAttribute("style").includes("--g-width:280px") &&
+              side.classList.contains("g-sized"));
+        check("a grow becomes flex-grow with a zero basis",
+              centre.getAttribute("style").includes("--g-grow:1") &&
+              centre.classList.contains("g-sized"));
+        check("gap survives beside them",
+              host.children[0].getAttribute("style").includes("gap:16px"));
+
+        /* Neither set means no sizing at all, rather than a style
+           attribute holding nothing. */
+        put({ component: "row", children: [] });
+        const bare = host.children[0].getAttribute("style");
+        check("a container with neither carries no sizing",
+              (bare === null || !bare.includes("--g-")) &&
+              !host.children[0].classList.contains("g-sized"));
+
+        /* The sizing is custom properties consumed by .g-sized rather
+           than an inline `flex`, because an inline style cannot be
+           overridden by a stylesheet -- and an app has every right to
+           ignore the layout at a breakpoint. */
+        check("sizing never lands as an inline flex or width",
+              !CSS_SRC.includes("flex:0 0 ") &&
+              /\.g-sized\s*\{[^}]*flex:\s*var\(--g-grow/.test(CSS_SRC));
+
+        /* Custom properties inherit, so an element that set only what
+           it needed picked the rest up from a sized ancestor: a fixed
+           child inside a grown parent inherited --g-grow and grew.
+           Every sized element states all four. */
+        const allFour = (el) => ["--g-grow", "--g-shrink", "--g-basis",
+                                 "--g-width"]
+            .every((v) => (el.getAttribute("style") || "").includes(v));
+
+        put({ component: "row", grow: 1, children: [
+            { component: "panel", width: 280, children: [] }
+        ] });
+        const outerGrown = host.children[0];
+        const innerFixed = outerGrown.children[0];
+        check("a fixed child inside a grown parent states its own size",
+              allFour(outerGrown) && allFour(innerFixed) &&
+              innerFixed.getAttribute("style").includes("--g-grow:0") &&
+              innerFixed.getAttribute("style").includes("--g-width:280px"));
+
+        put({ component: "panel", width: 280, children: [
+            { component: "column", grow: 1, children: [] }
+        ] });
+        const outerFixed = host.children[0];
+        const innerGrown = outerFixed.children[0];
+        check("a grown child inside a fixed parent states its own size",
+              allFour(outerFixed) && allFour(innerGrown) &&
+              innerGrown.getAttribute("style").includes("--g-grow:1") &&
+              innerGrown.getAttribute("style").includes("--g-width:auto"));
+
+        put({ component: "image", src: "/static/logo.png",
+              alt: "cornball.ai", width: 32 });
+        const img = host.children[0];
+        check("an image is an img with its src, alt and size",
+              img.tagName === "IMG" &&
+              img.getAttribute("src") === "/static/logo.png" &&
+              img.getAttribute("alt") === "cornball.ai" &&
+              String(img.getAttribute("width")) === "32");
+
+        put({ component: "collapse", title: "Parameters", open: true,
+              children: [{ component: "text", value: "inside",
+                           variant: "normal" }] });
+        const det = host.children[0];
+        check("a collapse is details/summary, open when told",
+              det.tagName === "DETAILS" &&
+              det.getAttribute("open") !== null &&
+              det.querySelector("summary").textContent === "Parameters" &&
+              det.textContent.includes("inside"));
+
+        put({ component: "collapse", title: "API", children: [] });
+        check("and folded when not",
+              host.children[0].getAttribute("open") === null);
+
+        /* value= and children= are alternatives; the schema refuses a
+           link with neither, so the client never has to guess. */
+        put({ component: "link", href: "https://cornball.ai",
+              external: true,
+              children: [{ component: "image", src: "/l.png", alt: "" }] });
+        const a = host.children[0];
+        check("a link wraps children instead of its own text",
+              a.tagName === "A" &&
+              a.querySelector("img") !== null &&
+              a.getAttribute("target") === "_blank");
+
+        /* One handler serves a list of rows: the press says which
+           row. Every row needing its own observer is impossible when
+           the rows are built per render. */
+        put({ component: "row", children: [
+            { component: "button", id: "history_view", label: "12:04",
+              value: "entry_7", variant: "default" },
+            { component: "button", id: "go", label: "Run",
+              variant: "primary" }
+        ] });
+        const before = page.frames("event").length;
+        page.fire("click", page.document.querySelector(
+            '[data-g-target="history_view"]'));
+        const valued = page.frames("event").slice(before);
+        check("a valued button sends its value with the event",
+              valued.length === 1 && valued[0].id === "history_view" &&
+              valued[0].value === "entry_7");
+
+        page.fire("click", page.document.querySelector('[data-g-target="go"]'));
+        const plain = page.frames("event").pop();
+        check("an ordinary button sends no value at all",
+              plain.id === "go" && !("value" in plain));
+
+        /* A button's value is not input state: harvesting it would
+           make a row id look like a form field. */
+        check("a button value never lands in the input store",
+              !page.frames("input").some((m) => m.value === "entry_7"));
+
+        /* A list of rows shares one handler -- that is what value is
+           for -- so emitting the component id as a DOM id gave every
+           row the same one. The id says which handler hears the press,
+           not which element it is. */
+        put({ component: "column", children: ["a", "b", "c"].map((v) => ({
+            component: "button", id: "history_view", label: v, value: v,
+            variant: "ghost"
+        })) });
+        const rowBtns = host.querySelectorAll("[data-g-target]");
+        check("a list of valued buttons shares a target",
+              rowBtns.length === 3 &&
+              rowBtns.every((b) => b.getAttribute("data-g-target") ===
+                  "history_view"));
+        check("and none of them claims a DOM id",
+              rowBtns.every((b) => b.getAttribute("id") === null));
+
+        const rowBefore = page.frames("event").length;
+        page.fire("click", rowBtns[1]);
+        const which = page.frames("event").slice(rowBefore);
+        check("clicking one reports which row it was",
+              which.length === 1 && which[0].value === "b");
+
+        /* Two ordinary buttons sharing an id -- Save at the top and
+           the bottom of a form. Nothing makes a button id unique, so
+           the plain case duplicates just as readily as the valued
+           one, and neither may claim a DOM id. */
+        put({ component: "column", children: [
+            { component: "button", id: "save", label: "Save top",
+              variant: "ghost" },
+            { component: "button", id: "save", label: "Save bottom",
+              variant: "primary" }
+        ] });
+        const saves = host.querySelectorAll('[data-g-target="save"]');
+        check("two plain buttons may share a handler",
+              saves.length === 2 &&
+              saves.every((b) => b.getAttribute("id") === null));
+
+        const saveBefore = page.frames("event").length;
+        page.fire("click", saves[1]);
+        const fired = page.frames("event").slice(saveBefore);
+        check("and either one reports the same handler",
+              fired.length === 1 && fired[0].id === "save" &&
+              !("value" in fired[0]));
+
+        /* A scoped error still finds a button. Buttons carry no DOM
+           id now, so a message addressed by routing name would be
+           dropped on the floor if the lookup were getElementById --
+           which is exactly how a refused download ticket goes
+           unreported. */
+        /* An id is app-chosen text. Building a selector out of it lets
+           a quote or a bracket throw out of querySelector, or match
+           something else entirely; the attribute is compared instead. */
+        const hostile = 'a"][data-g-target="b';
+        put({ component: "text_output", id: hostile });
+        let threw = null;
+        try {
+            page.ws().deliver({ type: "output", id: hostile, kind: "text",
+                                value: "survived" });
+        } catch (e) { threw = e; }
+        check("an id full of selector syntax does not throw",
+              threw === null);
+        const odd = host.querySelectorAll("[data-g-output]")
+            .filter((el) => el.getAttribute("data-g-output") === hostile);
+        check("and the message still lands on it",
+              odd.length === 1 && odd[0].textContent === "survived");
+    }
+
+    /* ---------------------------------------------------------- */
+    section("every icon in the set has artwork");
+    {
+        /* An icon lowers to an empty span and the glyph comes from
+           the stylesheet, so "it rendered" is satisfied by a span
+           that draws nothing -- which is exactly what every icon did
+           until now: glinty.css had one .g-icon rule and no artwork
+           for any name. The fixtures could not catch it because an
+           empty span is a successful render. */
+        const names = FIXTURES.fixtures
+            .filter((f) => f.component.component === "icon")
+            .map((f) => f.component.name);
+        const unique = [...new Set(names)];
+        check("the fixtures cover more than one icon name",
+              unique.length > 1);
+        const missing = unique.filter(
+            (n) => !CSS_SRC.includes(".g-icon-" + n + " {"));
+        check("every fixture icon name has a rule in glinty.css",
+              missing.length === 0);
+
+        /* And the rule has to be a mask, not just a selector: the
+           glyph is what makes it an icon, and a rule that sets only
+           colour or size draws the same nothing. */
+        const noGlyph = unique.filter((n) => {
+            const at = CSS_SRC.indexOf(".g-icon-" + n + " {");
+            if (at === -1) return true;
+            const body = CSS_SRC.slice(at, CSS_SRC.indexOf("}", at));
+            return !body.includes("mask-image");
+        });
+        check("and that rule carries a glyph", noGlyph.length === 0);
+
+        /* The colour rule lives on .g-icon and is what makes a masked
+           glyph visible at all -- without it the mask has nothing to
+           reveal. */
+        check("icons take the colour of their container",
+              /\.g-icon\s*\{[^}]*background-color:\s*currentColor/.test(
+                  CSS_SRC));
+    }
+
+    /* ---------------------------------------------------------- */
     section("every fixture renders through the runtime ui path");
     {
         const hyd = transcript("hello-welcome-hydrated");
@@ -1208,9 +1547,115 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("its input is bound",
               page.document.getElementById("extra")
                   .getAttribute("data-g-target") === "extra");
-        page.fire("click", page.document.getElementById("go2"));
+        page.fire("click", page.document.querySelector('[data-g-target="go2"]'));
         check("its button reports through root delegation",
               page.frames("event").some((m) => m.id === "go2"));
+
+        /* An input that first appears inside dynamic UI has to reach
+           the store, or a conditional panel keyed on it reads "unset
+           matches nothing" and hides a section whose control is right
+           there on the page saying otherwise. rebuildRoot() harvested
+           for the page and this path did not. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: {
+                component: "column",
+                children: [
+                    { component: "select_input", id: "mode", label: "Mode:",
+                      emit: "settle", selected: "b",
+                      choices: [{ value: "a", label: "A" },
+                                { value: "b", label: "B" }] },
+                    { component: "conditional_panel",
+                      condition: { op: "is", id: "mode", values: ["b"] },
+                      children: [{ component: "text", value: "mode is b",
+                                   variant: "normal" }] }
+                ]
+            }
+        });
+        const cond = page.document.querySelector("[data-g-cond]");
+        check("a condition keyed on a control that arrived with it holds",
+              cond !== null && !cond.classList.contains("g-hidden"));
+
+        /* and a control the next subtree does not carry is gone from
+           the store rather than answering conditions on behalf of a
+           widget nobody can see: the same panel, now with no select
+           to key on, reads unset and hides. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: {
+                component: "conditional_panel",
+                condition: { op: "is", id: "mode", values: ["b"] },
+                children: [{ component: "text", value: "mode is b",
+                             variant: "normal" }]
+            }
+        });
+        const orphan = page.document.querySelector("[data-g-cond]");
+        check("a control the slot stopped carrying stops answering",
+              orphan !== null && orphan.classList.contains("g-hidden"));
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a queued input is superseded, an event is not");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+        page.ws().close();
+
+        /* A field typed into while the socket is down. Stacked, the
+           queue fills with values nobody will ever read. */
+        const G = page.G;
+        for (let i = 0; i < 200; i += 1) {
+            G.setInputValue("volume", "draft " + i);
+        }
+        const btn = page.document.getElementById("go");
+        page.fire("click", btn);
+        page.fire("click", btn);
+
+        const before = page.sent.length;
+        page.ws().open();
+        page.ws().deliver(Object.assign({}, frames(hyd, "out")[0],
+                                        { resumed: true }));
+        const flushed = page.sent.slice(before);
+        const inputs = flushed.filter((m) => m.type === "input");
+        check("the latest value is the value",
+              inputs.length === 1 && inputs[0].value === "draft 199" &&
+              inputs[0].id === "volume");
+        check("and two presses are still two presses",
+              flushed.filter((m) => m.type === "event").length === 2);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("an audio value says what it is, not only where");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const grant = frames(transcript("audio-output"), "out")[0];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        /* The slot arrives through render_ui here, which is how both
+           apps build theirs. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "audio_output", id: "player",
+                     controls: true, autoplay: false }
+        });
+        const player = page.document.getElementById("player");
+        check("the audio slot is an audio element",
+              player !== null && player.tagName === "AUDIO");
+
+        page.ws().deliver(grant);
+        check("the source lands", player.src === grant.value.src);
+        /* The browser sniffs the bytes, so mime is not something it
+           has to act on -- but it is carried for the clients that do,
+           and a client that silently required it would have found
+           nothing here. */
+        check("and the value carried its media type",
+              grant.value.mime === "audio/wav");
     }
 
     /* ---------------------------------------------------------- */
@@ -1298,7 +1743,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               modal !== null && modal.closest("#glinty-root") !== null);
         check("its body rendered as components",
               modal.textContent.includes("Proceed?"));
-        page.fire("click", page.document.getElementById("confirm"));
+        page.fire("click", page.document.querySelector('[data-g-target="confirm"]'));
         check("its button reaches the server as an event",
               page.frames("event").some((m) => m.id === "confirm"));
 
@@ -1353,9 +1798,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             value: { component: "download_button", id: "report",
                      label: "Save" }
         });
-        const dl = page.document.getElementById("report");
+        /* By the download mark, not by a DOM id: a download_button is
+           an event button and carries none. */
+        const dl = page.document.querySelector('[data-g-download="report"]');
         check("download buttons carry their download id",
-              dl.getAttribute("data-g-download") === "report");
+              dl !== null && dl.getAttribute("id") === null &&
+              dl.getAttribute("data-g-target") === "report");
         const eventsBefore = page.frames("event").length;
         page.fire("click", dl);
         const reqs = page.frames("ticket");
@@ -1397,8 +1845,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     /* ---------------------------------------------------------- */
     section("authentication: token out, refusal visible");
     {
+        /* The token and the shape of an authenticated hello come
+           from the shared transcript, so this checks the artifact
+           rather than a string retyped beside it. */
+        const authShape = frames(transcript("hello-authenticated"),
+                                 "in")[0];
         const withToken = freshPage({ setup: prerenderDemo });
-        withToken.sandbox.GLINTY_AUTH = "eyJhb.example.token";
+        withToken.sandbox.GLINTY_AUTH = authShape.token;
         /* GLINTY_AUTH is read at connect; boot again via a manual
            reconnect path: close before any session, then... simplest
            honest check is a fresh page whose sandbox carries the
@@ -1407,7 +1860,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
            built at open time, after the token existed. */
         withToken.ws().open();
         check("hello carries the app-provided token",
-              withToken.sent[0].token === "eyJhb.example.token");
+              withToken.sent[0].token === authShape.token &&
+              withToken.sent[0].type === authShape.type);
 
         const bare = freshPage({ setup: prerenderDemo });
         bare.ws().open();
@@ -1477,11 +1931,117 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.fire("change", up);
         check("the control is disabled while it waits", up.disabled === true);
 
-        /* the server is at its live-ticket cap and says so */
-        page.ws().deliver({ type: "error", id: "dataset",
-                            message: "too many pending transfers" });
+        /* The server is at its live-ticket cap and says so, on the
+           channel the request was made on. As an `error` frame this
+           meant two unrelated things at once and the client had to
+           guess which element the id named. */
+        const refusal = frames(transcript("ticket-refused"), "out")[0];
+        page.ws().deliver({ type: "ticket", id: "dataset",
+                            purpose: "upload", error: refusal.error });
         check("a refused grant re-enables the control rather than "
               + "leaving it dead", up.disabled === false);
+
+        /* And says why, where it can be read. A title attribute is
+           invisible on a touch screen and sticks around; a sibling
+           node can be seen and can be removed on the next attempt. */
+        const noteFor = (id) => page.document.querySelector(
+            '[data-g-transfer-error="' + id + '"]');
+        check("and says why, visibly beside the control",
+              noteFor("dataset") !== null &&
+              noteFor("dataset").textContent === refusal.error);
+        check("without overwriting anything the control owns",
+              up.getAttribute("type") === "file");
+
+        /* Asking again clears the last answer: a refusal belongs to
+           the attempt that earned it. */
+        up.files = [{ name: "b.bin" }];
+        page.fire("change", up);
+        check("a retry clears the refusal", noteFor("dataset") === null);
+
+        /* A download button takes the same path. Sent as an `error`
+           it marked the button red and replaced its label. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "download_button", id: "report",
+                     label: "Save", variant: "primary" }
+        });
+        const dl = page.document.querySelector('[data-g-download="report"]');
+        page.fire("click", dl);
+        check("a download disables its button while it waits",
+              dl.disabled === true);
+
+        page.ws().deliver({ type: "ticket", id: "report",
+                            purpose: "download", error: "at the cap" });
+        check("a refused download gives the button back and says why",
+              dl.disabled === false &&
+              dl.textContent === "Save" &&
+              noteFor("report") !== null &&
+              noteFor("report").textContent === "at the cap");
+
+        page.fire("click", dl);
+        check("and pressing again clears it", noteFor("report") === null);
+
+        /* A waiter must not outlive the socket that owed it an
+           answer. Left in the queue it keeps its control disabled
+           forever, and the next socket's first reply goes to it
+           rather than to whoever asked after the reconnect -- one
+           stale entry misroutes everything behind it. */
+        /* Rebuild the control: the panel has been replaced since,
+           and a detached element is listening to nothing. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "file_input", id: "dataset", label: "CSV:" }
+        });
+        const up2 = page.document.getElementById("dataset");
+        up2.files = [{ name: "c.bin" }];
+        page.fire("change", up2);
+        check("the control waits again", up2.disabled === true);
+
+        page.ws().close();
+        check("a dropped socket gives every waiting control back",
+              up2.disabled === false && noteFor("dataset") !== null);
+
+        /* and the queue is empty, so the next socket's answer is not
+           swallowed by the request the last one never answered */
+        up2.files = [{ name: "d.bin" }];
+        page.fire("change", up2);
+        page.ws().deliver({ type: "ticket", id: "dataset",
+                            purpose: "upload", error: "still at the cap" });
+        check("and the next request gets its own answer",
+              noteFor("dataset") !== null &&
+              noteFor("dataset").textContent === "still at the cap");
+
+        /* A request queued while the socket was down dies with the
+           drain that gave its control back. Left in `pending` it is
+           replayed onto the next socket, and the reply it draws is
+           handed to whoever asked after the reconnect -- one press
+           refused by an answer to somebody else's request. */
+        up2.files = [{ name: "e.bin" }];
+        page.fire("change", up2);
+        page.ws().close();
+        await sleep(650);
+        check("a socket reconnected after the queued request",
+              page.sockets.length >= 2);
+        const before = page.sent.length;
+        page.ws().open();
+        page.ws().deliver(
+            Object.assign({}, frames(hyd, "out")[0], { resumed: true }));
+        const replayed = page.sent.slice(before);
+        check("a dead transfer request is not replayed",
+              replayed.every((m) => m.type !== "ticket"));
+
+        /* An `error` frame is now only ever a render failure, which
+           is what the spec says and what every client assumes. */
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "text_output", id: "slot" }
+        });
+        page.ws().deliver({ type: "error", id: "slot",
+                            message: "object not found" });
+        const slot = page.document.getElementById("slot");
+        check("an error still fills its output slot",
+              slot.classList.contains("g-error") &&
+              slot.textContent === "Error: object not found");
     }
 
     /* ---------------------------------------------------------- */
@@ -1524,6 +2084,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         G.setInputValue("evt", "x", { priority: "event" });
         check("opts argument is accepted and ignored",
               page.sent.filter((m) => m.id === "evt").length === 1);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("every transcript in the file was replayed");
+    {
+        /* transcripts.json is a shared artifact: adding one is meant
+           to oblige every consumer to answer for it. Nothing enforced
+           that, so a new transcript could sit in the file pinning
+           nothing -- exactly the hole the fixture list had when it
+           claimed "every component, once" and was missing thirteen. */
+        const all = TRANSCRIPTS.transcripts.map((t) => t.name);
+        const missed = all.filter((n) => !replayed.has(n));
+        check("no transcript is checked in and never exercised: " +
+              (missed.length ? missed.join(", ") : "none"),
+              missed.length === 0);
     }
 
     console.log("");

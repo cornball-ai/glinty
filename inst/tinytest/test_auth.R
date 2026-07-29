@@ -218,11 +218,18 @@ glinty:::dispatch_client_message(scap,
     '{"type":"ticket","id":"dataset","purpose":"upload"}')
 expect_equal(length(scap$outgoing), 1L)
 capmsg <- jsonlite::fromJSON(scap$outgoing[[1L]])
-expect_equal(capmsg$type, "error")
-# scoped to the resource, so a client can re-enable exactly that
-# control rather than leaving it disabled forever
+# A refusal answers on the channel the request was made on, carrying
+# `error` where a grant carries `token`. It was an `error` frame
+# once, which made that message mean two unrelated things -- a
+# renderer failed, and your transfer was refused -- and left the two
+# clients disagreeing about which element an id referred to.
+expect_equal(capmsg$type, "ticket")
 expect_equal(capmsg$id, "dataset")
-expect_true(grepl("pending transfers", capmsg$message))
+expect_equal(capmsg$purpose, "upload")
+expect_true(grepl("pending transfers", capmsg$error))
+# and it is a refusal, not a grant: no credential comes with it
+expect_null(capmsg$token)
+expect_null(capmsg$expires)
 glinty:::session_end(scap)
 
 # --- ticket tokens come from a CSPRNG and never repeat ---

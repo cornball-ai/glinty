@@ -100,6 +100,32 @@ void main() {
     });
   }
 
+  testWidgets('every icon in the set has a glyph, not the fallback',
+      (tester) async {
+    // _iconFor falls back to Icons.help_outline for a name it does
+    // not know, and a fallback renders perfectly well -- so the
+    // fixture loop above passes whether or not this client can
+    // actually draw the icon. The browser had the same hole from the
+    // other side: an empty span is a successful render too.
+    final iconNames = fixtures
+        .where((f) => f['component']['component'] == 'icon')
+        .map((f) => f['component']['name'] as String)
+        .toSet();
+    expect(iconNames.length, greaterThan(1),
+        reason: 'one icon fixture cannot cover a set');
+
+    final unmapped = <String>[];
+    for (final n in iconNames) {
+      await pumpComponent(
+          tester, GlintyComponent.fromJson({'component': 'icon', 'name': n}));
+      final drawn = tester.widget<Icon>(find.byType(Icon)).icon;
+      if (drawn == Icons.help_outline) unmapped.add(n);
+    }
+    expect(unmapped, isEmpty,
+        reason: 'glinty names icons this client draws as a question mark: '
+            '$unmapped');
+  });
+
   testWidgets('an unsupported component is visible, not silent',
       (tester) async {
     final c = GlintyComponent.fromJson(
@@ -147,7 +173,7 @@ void main() {
 
   testWidgets('button emits an event, carrying no value', (tester) async {
     String? fired;
-    final r = GlintyRenderer(onEvent: (id) => fired = id);
+    final r = GlintyRenderer(onEvent: (id, {value}) => fired = id);
     final c = GlintyComponent.fromJson({
       'component': 'button',
       'id': 'go',
@@ -155,7 +181,9 @@ void main() {
       'variant': 'primary',
     });
     await pumpComponent(tester, c, renderer: r);
-    await tester.tap(find.byKey(const Key('go')));
+    // By label, not by key: buttons are unkeyed, because an id is
+    // routing and two buttons may share one.
+    await tester.tap(find.text('Run'));
     expect(fired, 'go');
   });
 

@@ -35,6 +35,8 @@ class GlintyApp extends StatefulWidget {
     this.token,
     this.onDownload,
     this.onLink,
+    this.audioBuilder,
+    this.onUpload,
     this.customHandlers,
     this.open,
   });
@@ -52,6 +54,16 @@ class GlintyApp extends StatefulWidget {
 
   /// Where a link tap goes; without it links are not tappable.
   final void Function(String href, {bool external})? onLink;
+
+  /// Builds the player for an audio_output. Playing audio needs a
+  /// platform plugin, which this package does not take on; without
+  /// one the slot says so rather than sitting there silent.
+  final GlintyAudioBuilder? audioBuilder;
+
+  /// Picks files and sends them for a `file_input`. The dialog and
+  /// the POST are platform work; glinty owns the ticket in between.
+  /// Without one the control says so rather than opening nothing.
+  final GlintyUploadHandler? onUpload;
 
   /// Handlers for `custom` frames, by name -- the Flutter half of
   /// `send_custom_message()`. glinty has no idea what an app's
@@ -82,6 +94,8 @@ class _GlintyAppState extends State<GlintyApp> {
       token: widget.token,
       onDownload: widget.onDownload,
       onLink: widget.onLink,
+      audioBuilder: widget.audioBuilder,
+      onUpload: widget.onUpload,
       open: widget.open,
     );
     _wireHandlers(conn);
@@ -101,14 +115,16 @@ class _GlintyAppState extends State<GlintyApp> {
     // that logs a user out and back in, or points at another server,
     // must not keep talking on the old connection.
     //
-    // Wiring or unwiring onDownload changes what hello declares, so
-    // it needs a new connection too. Compared by nullness rather
-    // than identity: a closure rebuilt each frame is the same
-    // capability, and reconnecting on every build would be worse
-    // than the bug.
+    // Wiring or unwiring onDownload, audioBuilder or onUpload
+    // changes what hello declares -- a feature or a component -- so
+    // any of them needs a new connection. Compared by nullness rather
+    // identity: a closure rebuilt each frame is the same capability,
+    // and reconnecting on every build would be worse than the bug.
     if (old.url != widget.url ||
         old.token != widget.token ||
-        (old.onDownload == null) != (widget.onDownload == null)) {
+        (old.onDownload == null) != (widget.onDownload == null) ||
+        (old.audioBuilder == null) != (widget.audioBuilder == null) ||
+        (old.onUpload == null) != (widget.onUpload == null)) {
       _conn.dispose();
       _conn = _connect();
       return;
@@ -121,6 +137,8 @@ class _GlintyAppState extends State<GlintyApp> {
     // reach the closure the app is holding now.
     _conn.onDownload = widget.onDownload;
     _conn.onLink = widget.onLink;
+    _conn.audioBuilder = widget.audioBuilder;
+    _conn.onUpload = widget.onUpload;
     _wireHandlers(_conn);
   }
 
@@ -130,6 +148,10 @@ class _GlintyAppState extends State<GlintyApp> {
     super.dispose();
   }
 
+  // The connection carries the builder, not this. It has to hold it
+  // anyway -- what the client can draw is part of what hello says --
+  // and one copy cannot go stale against the other. didUpdateWidget
+  // is what keeps it current.
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: _conn,
@@ -144,13 +166,21 @@ class _GlintyAppState extends State<GlintyApp> {
 /// client that draws a stale tree over a refusal is exactly the
 /// silent failure this protocol keeps refusing to ship.
 class GlintyView extends StatelessWidget {
-  const GlintyView({super.key, this.session, this.connection, this.renderer})
+  const GlintyView(
+      {super.key,
+      this.session,
+      this.connection,
+      this.renderer,
+      this.audioBuilder})
       : assert(session != null || connection != null,
             'GlintyView needs a session or a connection');
 
   final GlintySession? session;
   final GlintyConnection? connection;
   final GlintyRenderer? renderer;
+
+  /// Builds the player for an audio_output; see [GlintyApp].
+  final GlintyAudioBuilder? audioBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -162,13 +192,16 @@ class GlintyView extends StatelessWidget {
     final refusal = s.refusalMessage;
     if (refusal != null) {
       return GlintyRefusalView(
-          title: 'Connection refused', message: refusal);
+          title: 'Connection refused',
+          message: refusal,
+          lost: conn?.droppedInteractions ?? 0);
     }
     if (conn != null && conn.state == GlintyConnectionState.stopped) {
       return GlintyRefusalView(
           title: 'Disconnected',
           message: conn.stoppedReason ??
-              'The connection to the server ended.');
+              'The connection to the server ended.',
+          lost: conn.droppedInteractions);
     }
 
     final ui = s.ui;
@@ -198,6 +231,15 @@ class GlintyView extends StatelessWidget {
           // plot that then arrives back, relayouts, and measures
           // again.
           onMeasure: s.measure,
+          // A relative image src is served by the same app; only the
+          // connection knows what address that is.
+          assetBase: conn?.assetBase,
+          audioBuilder: audioBuilder ?? conn?.audioBuilder,
+          onUpload: conn?.onUpload,
+          tickets: s.tickets,
+          // A download registers itself as the waiter for its own
+          // request, so a refusal reaches the control that asked.
+          awaitTicket: s.awaitTicket,
           // Only when the connection can actually deliver one. A
           // download button wired to a ticket request whose grant
           // has nowhere to go is the same lie as an InkWell with an
@@ -208,6 +250,7 @@ class GlintyView extends StatelessWidget {
           onLink: conn?.onLink,
           values: s.values,
           kinds: s.kinds,
+          uiValues: s.uiValues,
           errors: s.errors,
           inputs: s.inputs,
           pushes: s.pushes,
@@ -228,7 +271,23 @@ class GlintyView extends StatelessWidget {
     // not parts of it, and both arrive as frames rather than tree
     // nodes. Building them here is what stops show_modal() and
     // with_progress() from being no-ops against this client.
-    final layers = <Widget>[
+    //
+    // Always a Stack, even with nothing above the tree. An overlay
+    // that comes and goes must not change the shape of the tree
+    // *underneath* it: wrapping the app in a Stack only when a layer
+    // appears reparents every widget in it, and Flutter answers a
+    // reparent by throwing the old elements away. So opening a dialog
+    // cleared half-typed fields, and the reconnect banner wiped the
+    // very transfer refusal it appeared alongside. The app stays at
+    // index 0, and layers land after it.
+    //
+    // passthrough, not the default loose: the app was a direct child
+    // of whatever holds this view, and a Stack that loosens the
+    // constraints changes what "fill the space" means one level down.
+    // A page that filled its parent would start sizing to its content
+    // instead, and every plot_output under it would measure and
+    // report a different box.
+    final stacked = Stack(fit: StackFit.passthrough, children: [
       built,
       if (s.progress.isNotEmpty) _ProgressStack(reports: s.progress),
       if (s.unhandledCustom.isNotEmpty)
@@ -240,20 +299,45 @@ class GlintyView extends StatelessWidget {
           generation: s.generation,
           onDismiss: dismiss,
         ),
-    ];
-    final stacked =
-        layers.length == 1 ? built : Stack(children: layers);
+      // What the connection has to say, in one strip at the top.
+      //
+      // Not Positioned, which is the part that is easy to get wrong:
+      // a positioned child does not count towards the Stack's size,
+      // and the Stack here is only as tall as the app inside it. A
+      // page that sizes to its content is shorter than this strip,
+      // so a positioned strip drew past the bottom edge and was
+      // clipped out of hit testing -- visible, and untouchable, which
+      // for a notice with a dismiss button is worse than not drawing
+      // at all. Aligned and unpositioned, it participates in sizing,
+      // and the Stack grows to hold whichever is taller.
+      if (conn != null &&
+          (conn.state == GlintyConnectionState.reconnecting ||
+              conn.droppedInteractions > 0))
+        Align(
+          alignment: Alignment.topCenter,
+          heightFactor: 1,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // A reconnect in progress is honest, not hidden: the app
+            // stays usable and says what is happening.
+            if (conn.state == GlintyConnectionState.reconnecting)
+              const _ReconnectBanner(),
+            // And so is work the app could not send. The user is the
+            // only one who can redo it, and only if they are told.
+            if (conn.droppedInteractions > 0)
+              _DroppedNotice(
+                count: conn.droppedInteractions,
+                onDismiss: conn.clearDroppedInteractions,
+              ),
+          ]),
+        ),
+    ]);
 
+    // Not conditional in the same way: the theme arrives with the
+    // welcome, and the tree does not render before one.
     final tokens = s.theme;
-    final themed = tokens == null
+    return tokens == null
         ? stacked
         : Theme(data: glintyThemeData(tokens), child: stacked);
-    // A reconnect in progress is honest, not hidden: the app stays
-    // usable and says what is happening.
-    if (conn != null && conn.state == GlintyConnectionState.reconnecting) {
-      return Stack(children: [themed, const _ReconnectBanner()]);
-    }
-    return themed;
   }
 }
 
@@ -431,20 +515,62 @@ class _UnhandledCustomNotice extends StatelessWidget {
       );
 }
 
+/// What the app had to throw away, and how much of it.
+///
+/// The send queue is capped so a user tapping at a dead app cannot
+/// grow memory without limit, which means that past the cap an
+/// interaction is lost. Lost quietly, it looks to the user like the
+/// app simply ignored them -- so it says so, and stays until
+/// dismissed. Not a toast: this is a report of work that has to be
+/// redone, and it should still be there when they look up.
+class _DroppedNotice extends StatelessWidget {
+  const _DroppedNotice({required this.count, required this.onDismiss});
+
+  final int count;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+        child: Row(children: [
+          Expanded(
+            child: Text(
+              count == 1
+                  ? '1 thing you did could not be sent, and has been '
+                      'lost. Please check and try it again.'
+                  : '$count things you did could not be sent, and have '
+                      'been lost. Please check and try them again.',
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+          ),
+          IconButton(
+            onPressed: onDismiss,
+            icon: const Icon(Icons.close),
+            color: scheme.onErrorContainer,
+            tooltip: 'Dismiss',
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 class _ReconnectBanner extends StatelessWidget {
   const _ReconnectBanner();
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Material(
-        color: scheme.primary,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+    return Material(
+      color: scheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: SizedBox(
+          width: double.infinity,
           child: Text('Reconnecting…',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onPrimary)),
@@ -475,10 +601,19 @@ class GlintyProtocolErrorView extends StatelessWidget {
 /// be trusted to show.
 class GlintyRefusalView extends StatelessWidget {
   const GlintyRefusalView(
-      {super.key, required this.title, required this.message});
+      {super.key, required this.title, required this.message, this.lost = 0});
 
   final String title;
   final String message;
+
+  /// How many of the user's interactions went unsent when the
+  /// connection ended.
+  ///
+  /// Reported here rather than in the notice the running app draws,
+  /// because this screen *replaces* that app: a terminal refusal is
+  /// exactly the case where the work is most certainly lost and least
+  /// likely to be mentioned.
+  final int lost;
 
   @override
   Widget build(BuildContext context) {
@@ -501,6 +636,15 @@ class GlintyRefusalView extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(message, style: TextStyle(color: scheme.onErrorContainer)),
+          if (lost > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              lost == 1
+                  ? '1 thing you did was never sent.'
+                  : '$lost things you did were never sent.',
+              style: TextStyle(color: scheme.onErrorContainer),
+            ),
+          ],
         ],
       ),
     );

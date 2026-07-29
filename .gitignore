@@ -5,3 +5,6 @@
 CLAUDE.md
 .positai
 *.Rproj
+
+# Working notes, not package content.
+tasks/
