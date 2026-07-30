@@ -123,3 +123,59 @@ unlink(tmp)
 # variant also sets is still a smell worth knowing about.
 own <- system.file("www", "glinty.css", package = "glinty")
 expect_true(nzchar(own))
+
+# --- the CSS subset this reader supports, as fixtures ---
+#
+# Declarations are found by splitting on ; and :, and both hide inside
+# values that are none of this reader's business. glinty's own
+# stylesheet is full of the worst case: every icon is a mask-image data
+# URI, semicolon and all. Split naively they produced declarations that
+# were not ones -- `utf8,<svg/>")` read as a property name.
+props_of <- function(css) css_rules(css)[[1]]$properties
+
+expect_equal(props_of('.a { background: url("data:image/svg+xml;utf8,<svg/>"); color: red }'),
+             c("background", "color"))
+expect_equal(props_of('.b::after { content: ";"; padding: 1px }'),
+             c("content", "padding"))
+expect_equal(props_of('.c { background: url(data:image/png;base64,AAA=) no-repeat; margin: 0 }'),
+             c("background", "margin"))
+expect_equal(props_of('.d { font-family: "a;b", serif }'), "font-family")
+expect_equal(props_of(".e { content: ':' ; color: red }"), c("content", "color"))
+# a colon in a value, which is the ordinary case for a data URI
+expect_equal(props_of('.f { background: url(http://x/y.png) }'), "background")
+
+# and glinty's own stylesheet, which is the real fixture: every
+# property it reads out should look like a CSS property name, not like
+# the inside of a data URI
+own <- readLines(system.file("www", "glinty.css", package = "glinty"),
+                 warn = FALSE)
+all_props <- unique(unlist(lapply(css_rules(own), function(r) r$properties)))
+expect_true(length(all_props) > 20L)
+expect_equal(all_props[!grepl("^-?-?[a-z][a-z0-9-]*$", all_props)], character(0))
+
+# --- the documented scope: bare base classes only ---
+#
+# Narrow on purpose. A compound selector is an app beating a variant
+# deliberately, and flagging it would make the guard cry wolf. The cost
+# is that a base-class *hover* rule really does overrule a variant's
+# hover and this will not say so, which is what the headless
+# computed-style check is for.
+tmp2 <- tempfile(fileext = ".css")
+writeLines(".g-btn:hover { background: red }", tmp2)
+expect_equal(glinty::css_variant_conflicts(tmp2), character(0),
+             info = "a pseudo-class is out of scope, and documented as such")
+writeLines(".g-btn, .other { background: red }", tmp2)
+expect_equal(length(glinty::css_variant_conflicts(tmp2)), 1L,
+             info = "but a bare base class in a comma list is still bare")
+unlink(tmp2)
+
+# A multi-line comment is still a comment. `.` does not match a newline
+# in perl mode, so without (?s) these were not stripped at all -- and
+# glinty.css is full of them. The whole comment came back glued to the
+# property after it, which lost that property rather than merely adding
+# a phantom beside it: a false negative, not just noise. Found by
+# asserting that every property read out of glinty.css looks like a
+# property name.
+expect_equal(props_of("/* one\n   two\n   three */ .a { color: red }"), "color")
+expect_equal(props_of(".a { /* mid\n rule */ color: red; padding: 0 }"),
+             c("color", "padding"))

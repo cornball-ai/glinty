@@ -19,6 +19,44 @@
 # that the statement matches COMPONENT_SCHEMA and the stylesheet, so
 # the three cannot drift apart quietly.
 
+#' Empty out anything a semicolon or colon can hide inside
+#'
+#' Declarations are found by splitting on `;` and `:`, and both appear
+#' inside values that are none of this reader's business:
+#'
+#' \preformatted{
+#' background: url("data:image/svg+xml;utf8,<svg/>");
+#' content: ";";
+#' }
+#'
+#' glinty's own stylesheet is full of the first: every icon is a
+#' `mask-image` data URI. Split naively, those produce declarations that
+#' are not ones -- `utf8,<svg/>")` read as a property name.
+#'
+#' Only those two characters are replaced, each with one space, so the
+#' string keeps its length and the block walker's character counting is
+#' undisturbed. Quoted strings go first, because a url() often holds one.
+#'
+#' @param css character one string of CSS
+#' @return the same string with string and url() contents blanked
+#'
+#' @keywords internal
+css_blank_literals <- function(css) {
+    for (pattern in c('"[^"\n]*"', "'[^'\n]*'", "url\\([^)\n]*\\)")) {
+        hits <- gregexpr(pattern, css, perl = TRUE)
+        found <- regmatches(css, hits)[[1]]
+        if (length(found) == 0L) {
+            next
+        }
+        # Only the two characters that mean anything to this reader are
+        # replaced, and each with one space. Everything else stays, so
+        # the string is the same length and brace depth is unchanged --
+        # which matters, because the block walker counts characters.
+        regmatches(css, hits) <- list(gsub("[;:]", " ", found))
+    }
+    css
+}
+
 #' Read declarations out of a stylesheet, by selector
 #'
 #' A deliberately small CSS reader, not a CSS parser: comments are
@@ -32,7 +70,12 @@
 #' @keywords internal
 css_rules <- function(text) {
     css <- paste(text, collapse = "\n")
-    css <- gsub("/\\*.*?\\*/", "", css, perl = TRUE)
+    # (?s) so . matches a newline. Without it a multi-line comment was
+    # not stripped at all, and glinty.css is full of them: the whole
+    # comment came back glued to the property after it, so that real
+    # property was lost rather than merely joined by a phantom.
+    css <- gsub("(?s)/\\*.*?\\*/", "", css, perl = TRUE)
+    css <- css_blank_literals(css)
 
     out <- list()
     parse_block <- function(s) {
@@ -182,14 +225,36 @@ css_variant_properties <- function(css = NULL) {
     out
 }
 
-#' App stylesheet rules that overrule a glinty variant
+#' A bare-base-class preflight check, not a cascade validator
 #'
 #' glinty emits `g-btn g-btn-<variant>`, and an app stylesheet loads
 #' after glinty's. A rule on the *base* class therefore cancels every
-#' variant at equal specificity, silently: nothing fails, and the page
+#' variant at equal specificity, silently: nothing fails, and the app
 #' just has one kind of button.
 #'
-#' Call this from an app's tests. An empty result is the passing case.
+#' **What it looks at is exactly one shape**: a selector that is a bare
+#' base class, `.g-btn`. Deliberately narrow, because narrow is what
+#' makes it free of false positives -- an app writing `#header .g-btn`
+#' or `.g-btn.g-btn-ghost` is beating a variant on specificity on
+#' purpose, and saying so.
+#'
+#' What it therefore does **not** see:
+#'
+#' - `.g-btn:hover`, `.g-btn:focus` and any other compound or
+#'   pseudo-class selector. A hover rule on the base class really does
+#'   overrule a variant's hover, and this will not tell you.
+#' - a conflict in the other direction, where glinty's own stylesheet
+#'   overrules something the app set. `.g-image { height: auto }`
+#'   beating `image(height = 32)` was that, and this would not have
+#'   caught it.
+#' - anything that is not a variant family: layout, spacing, a theme
+#'   token overridden to something unreadable.
+#'
+#' For those, read the cascade result rather than the source: load the
+#' page in a headless browser and assert `getComputedStyle()`. That
+#' catches every shape and needs a browser; this catches the one shape
+#' that has actually shipped twice and needs nothing.
+#'
 #'
 #' @param path character path to the app's stylesheet
 #' @param glinty_css character glinty.css contents, for testing this
