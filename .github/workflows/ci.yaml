@@ -104,11 +104,15 @@ jobs:
       # needs root either way.
       - uses: ./.github/actions/r2u
 
+      # The Imports list is read out of DESCRIPTION rather than
+      # written here twice. Hardcoded, it drifts: adding callr turned
+      # this job red for a reason that had nothing to do with Flutter.
       - name: glinty and its dependencies
         working-directory: .
         run: |
-          sudo apt-get install -y --no-install-recommends \
-            r-cran-digest r-cran-jsonlite r-cran-openssl
+          deps=$(Rscript --vanilla -e 'imports <- read.dcf("DESCRIPTION")[1, "Imports"]; pkgs <- trimws(gsub("\\(.*?\\)", "", strsplit(imports, ",")[[1]])); pkgs <- setdiff(pkgs, rownames(installed.packages(priority = "base"))); cat(paste0("r-cran-", tolower(pkgs)), sep = " ")')
+          echo "installing: $deps"
+          sudo apt-get install -y --no-install-recommends $deps
           sudo R CMD INSTALL .
 
       - run: flutter pub get
