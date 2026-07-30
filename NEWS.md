@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**`render_image()`.** The renderer the docs for `image_output()` had
+promised all along. Sends kind `image` (`{src, width?, height?}`): a
+`data:` URI, `/static/` path, or URL passes through, and a source
+naming an existing file on the server is embedded as a data URI with
+the media type read off the extension -- an unknown extension is an
+error naming the fix, exactly as in `render_audio()`. No protocol
+change: both clients already display the `image` kind; this fills the
+server-side gap where the only way to put an existing PNG in an
+`image_output()` was to redraw it through `render_plot()`.
+
 **Background jobs.** `run_job()` hands a function to a fresh R process
 and returns a handle; `job_status()`, `job_result()` and `job_error()`
 are reactive reads, so an output that calls one re-renders when the job

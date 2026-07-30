@@ -274,6 +274,110 @@ audio_value <- function(v) {
 
 # Media types glinty can name without being told. Every format a
 # browser plays, which is the set an app can reasonably hand over.
+#' Render an image source
+#'
+#' Sends an `image` output: `{src, width?, height?}`, dimensions in
+#' logical pixels when given. `fn` may return the source string alone
+#' or a list to add dimensions.
+#'
+#' A source naming an existing file on the server is embedded as a
+#' data URI -- a client cannot fetch server paths -- with the media
+#' type read off the extension (an extension this does not know is an
+#' error naming the fix, exactly as in [render_audio()]). Anything
+#' else (`data:` URI, `/static/` path, http URL) already means
+#' something to the client and passes through untouched.
+#'
+#' [render_plot()] draws base graphics into a fresh raster;
+#' this renders images that already exist (thumbnails, exported
+#' frames, generated stills).
+#'
+#' @param fn zero-arg function returning the source string, or a list
+#'   with `src` and optionally `width` and `height` (logical pixels)
+#' @return a glinty_renderer for assignment to output$id
+#' @examples
+#' \dontrun{
+#' output$logo <- render_image(function() "/static/logo.png")
+#' output$frame <- render_image(function() {
+#'     list(src = exported_frame_path(), width = 320, height = 180)
+#' })
+#' }
+#' @export
+render_image <- function(fn) {
+    new_renderer(function() {
+        v <- fn()
+        if (is.null(v)) {
+            return(NULL)
+        }
+        if (!is.list(v)) {
+            v <- list(src = v)
+        }
+        image_value(v)
+    }, "image")
+}
+
+#' Check an image value into the shape the protocol states
+#'
+#' Same discipline as audio_value(): every field is one value of the
+#' kind the field means, and a server file becomes a data URI here,
+#' where the bytes are reachable.
+#'
+#' @param v list with `src` and optionally `width` and `height`
+#' @return list(src, width?, height?)
+#' @keywords internal
+image_value <- function(v) {
+    src <- v$src
+    if (!is.character(src) || length(src) != 1L || is.na(src) || !nzchar(src)) {
+        stop("render_image() needs one non-empty src string", call. = FALSE)
+    }
+    if (!startsWith(src, "data:") && file.exists(src)) {
+        mime <- image_mime(src)
+        bytes <- readBin(src, "raw", file.info(src)$size)
+        uri <- paste0("data:", mime, ";base64,", jsonlite::base64_enc(bytes))
+        src <- gsub("[\r\n]", "", uri)
+    }
+    out <- list(src = src)
+    for (f in c("width", "height")) {
+        d <- v[[f]]
+        if (is.null(d)) {
+            next
+        }
+        if (!is.numeric(d) || length(d) != 1L || is.na(d) || !is.finite(d) ||
+            d <= 0) {
+            stop("render_image() ", f, " must be one positive number of ",
+                 "logical pixels", call. = FALSE)
+        }
+        out[[f]] <- as.numeric(d)
+    }
+    out
+}
+
+# Image types glinty can name without being told; the set every
+# frontend displays.
+IMAGE_MIME <- c(png = "image/png", jpg = "image/jpeg", jpeg = "image/jpeg",
+                gif = "image/gif", webp = "image/webp",
+                svg = "image/svg+xml")
+
+#' The media type of an image file
+#'
+#' Read off the extension, which is stated, not guessed. An unknown
+#' extension is an error naming the fix rather than a type invented to
+#' fill the data URI.
+#'
+#' @param src character file path
+#' @return character media type
+#' @keywords internal
+image_mime <- function(src) {
+    path <- sub("[?#].*$", "", src)
+    base <- basename(path)
+    ext <- tolower(sub("^.*\\.", "", base))
+    if (identical(ext, base) || !ext %in% names(IMAGE_MIME)) {
+        stop("cannot read a media type off '", src, "'; render_image() ",
+             "embeds ", paste0(".", names(IMAGE_MIME), collapse = " "),
+             " files", call. = FALSE)
+    }
+    unname(IMAGE_MIME[[ext]])
+}
+
 AUDIO_MIME <- c(wav = "audio/wav", wave = "audio/wav", mp3 = "audio/mpeg",
                 ogg = "audio/ogg", oga = "audio/ogg", opus = "audio/ogg",
                 m4a = "audio/mp4", mp4 = "audio/mp4", aac = "audio/aac",
