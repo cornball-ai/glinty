@@ -135,8 +135,15 @@ resume_session <- function(session) {
 
 #' End a session
 #'
-#' Destroys every observer created under the session, fires on_ended
-#' callbacks, and removes the session from the registry. Idempotent.
+#' Destroys every observer created under the session, kills the
+#' background jobs it started, fires on_ended callbacks, and removes
+#' the session from the registry. Idempotent.
+#'
+#' This is the one place session-scoped jobs are killed, which is what
+#' gives them their stated lifetime: a dropped connection detaches a
+#' session rather than ending it, so a job survives a reconnect and
+#' dies only when the resume grace expires with nobody having come
+#' back.
 #'
 #' @param session a glinty_session
 #' @return invisible(NULL)
@@ -149,6 +156,7 @@ session_end <- function(session) {
     for (obs in session$observers) {
         obs$destroy()
     }
+    kill_session_jobs(session$id)
     for (cb in session$on_ended_cbs) {
         tryCatch(cb(), error = function(e) NULL)
     }

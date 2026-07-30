@@ -1,5 +1,39 @@
 # glinty (development version)
 
+**Background jobs.** `run_job()` hands a function to a fresh R process
+and returns a handle; `job_status()`, `job_result()` and `job_error()`
+are reactive reads, so an output that calls one re-renders when the job
+settles. The handle is polled from the event loop's own timer heap, so
+there is no second wakeup mechanism and no busy loop, and nothing
+crosses the wire -- a client cannot tell a job from a slow observer
+except that the page stayed alive while it ran.
+
+- The function runs in a session that has never seen the caller's, so
+  it sees its arguments and nothing else. `k <- 5; run_job(function()
+  k + 1)` fails in the child; pass `k` in.
+- A session-scoped job (the default) survives a dropped connection and
+  a resume, and dies when the resume grace expires with nobody having
+  come back. `scope = "app"` outlives every session.
+- `run_app(job_lanes =)` sizes named lanes, each
+  `list(concurrency =, queue =)`, merging over the built-in
+  `default = list(concurrency = 2, queue = 8)`. A job picks its lane;
+  the app sizes it. Under the queue depth a job waits; past it the
+  handle comes back with status `"refused"` and a reason, following
+  the ticket cap -- a refusal is a value the caller can see, never a
+  silent drop.
+- Lanes bound this app's concurrency, not the device. Two glinty apps
+  each holding themselves to one GPU job still send two requests at
+  the same card.
+- Lane settings are not coerced and not ignored: `2.5`, `"2"` and an
+  unknown setting name all stop the app starting, rather than letting
+  it run at numbers nobody wrote.
+- New dependency: `callr`, which brings `otel`, `processx`, `ps` and
+  `R6`. Not the "same cost as processx" the issue estimated; taken
+  anyway because the serialization plumbing processx would leave us to
+  write is the half that has to be right.
+- `run_example("jobs")` is the demo: start a few, watch the clock keep
+  ticking, open a second tab.
+
 **Protocol v3 is frozen.** The component vocabulary, the message
 types and their field shapes are settled, and three lowerings render
 them: R to HTML, `glinty.js` to DOM, `dart/glinty_flutter` to Flutter

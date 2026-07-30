@@ -12,7 +12,16 @@ session_end(session)
 invisible(NULL)
 }
 \description{
-Destroys every observer created under the session, fires on_ended
-callbacks, and removes the session from the registry. Idempotent.
+Destroys every observer created under the session, kills the
+background jobs it started, fires on_ended callbacks, and removes
+the session from the registry. Idempotent.
+}
+\details{
+This is the one place session-scoped jobs are killed, which is what
+gives them their stated lifetime: a dropped connection detaches a
+session rather than ending it, so a job survives a reconnect and
+dies only when the resume grace expires with nobody having come
+back.
+
 }
 \keyword{internal}

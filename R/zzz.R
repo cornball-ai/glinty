@@ -14,5 +14,10 @@
     .globals$welcome_revision <- NULL
     .globals$welcome_theme <- NULL
     .globals$tickets <- new.env(parent = emptyenv())
+    .globals$jobs <- new.env(parent = emptyenv())
+    .globals$job_queues <- list()
+    .globals$job_lanes <- JOB_DEFAULT_LANES
+    .globals$job_timer <- NULL
+    .globals$job_id_counter <- 0L
     reg_reset()
 }
