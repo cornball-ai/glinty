@@ -24,6 +24,9 @@ except that the page stayed alive while it ran.
 - Lanes bound this app's concurrency, not the device. Two glinty apps
   each holding themselves to one GPU job still send two requests at
   the same card.
+- Lane settings are not coerced and not ignored: `2.5`, `"2"` and an
+  unknown setting name all stop the app starting, rather than letting
+  it run at numbers nobody wrote.
 - New dependency: `callr`, which brings `otel`, `processx`, `ps` and
   `R6`. Not the "same cost as processx" the issue estimated; taken
   anyway because the serialization plumbing processx would leave us to
