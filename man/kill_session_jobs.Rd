@@ -17,4 +17,11 @@ jobs the lifetime the docs claim: a dropped connection only detaches
 a session, so a job outlives a reconnect and dies when the resume
 grace expires with nobody having come back.
 }
+\details{
+Every one of them is stopped before anything is started, so a
+session that had one job running and one waiting never spawns the
+waiting one. The slots freed here do go to other sessions' queued
+work, which is what the single pump at the end is for.
+
+}
 \keyword{internal}

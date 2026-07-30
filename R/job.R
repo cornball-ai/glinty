@@ -61,6 +61,20 @@ resolve_job_lanes <- function(job_lanes = NULL) {
             stop("job lane '", nm, "' must be a list(concurrency =, queue =)",
                  call. = FALSE)
         }
+        # A setting glinty does not read is a setting the author
+        # believes is in force. Refuse it where it is written rather
+        # than ignore it and run at numbers nobody chose.
+        fields <- names(cfg)
+        if (length(cfg) > 0L && (is.null(fields) || any(!nzchar(fields)))) {
+            stop("job lane '", nm, "': every setting needs a name ",
+                 "(concurrency =, queue =)", call. = FALSE)
+        }
+        unknown <- setdiff(fields, c("concurrency", "queue"))
+        if (length(unknown) > 0L) {
+            stop("job lane '", nm, "': unknown setting ",
+                 paste0("'", unknown, "'", collapse = ", "),
+                 "; a lane takes concurrency and queue", call. = FALSE)
+        }
         lanes[[nm]] <- list(
                             concurrency = lane_count(cfg$concurrency, nm, "concurrency", 1L),
                             queue = lane_count(cfg$queue, nm, "queue", 0L)
@@ -71,6 +85,11 @@ resolve_job_lanes <- function(job_lanes = NULL) {
 
 #' One lane setting, as a whole number
 #'
+#' Nothing is coerced. `as.integer()` would take `2.5` as 2 and `"2"`
+#' as 2, and a lane running at a number its author did not write is
+#' worse than one that refused to start: the app comes up, behaves
+#' unlike the settings on the screen, and nothing says so.
+#'
 #' @param x the supplied value
 #' @param lane character lane name, for the message
 #' @param field character field name, for the message
@@ -78,12 +97,21 @@ resolve_job_lanes <- function(job_lanes = NULL) {
 #' @return integer
 #' @keywords internal
 lane_count <- function(x, lane, field, min) {
-    n <- suppressWarnings(as.integer(x))
-    if (length(n) != 1L || is.na(n) || n < min) {
-        stop("job lane '", lane, "': ", field,
-             " must be a single integer >= ", min, call. = FALSE)
+    ok <- is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x)
+    if (ok) {
+        ok <- x == round(x) && x >= min
     }
-    n
+    if (!ok) {
+        shown <- if (length(x) == 0L) {
+            "nothing"
+        } else {
+            paste(format(x), collapse = ", ")
+        }
+        stop("job lane '", lane, "': ", field,
+             " must be a single whole number >= ", min, " (given: ", shown,
+             ")", call. = FALSE)
+    }
+    as.integer(x)
 }
 
 #' Run a function in a background R process
@@ -151,6 +179,15 @@ run_job <- function(fn, args = list(), lane = "default",
     session <- NULL
     if (identical(scope, "session")) {
         session <- .globals$current_session
+        if (!is.null(session) && isTRUE(session$ended)) {
+            # session_end() has already swept this session's jobs, so
+            # one started now would never be killed by anything. The
+            # way in is an on_ended callback, which runs a few lines
+            # after that sweep.
+            stop("run_job(scope = \"session\"): this session has ended, and ",
+                 "its jobs have already been stopped; use scope = \"app\" for ",
+                 "work that should outlive it", call. = FALSE)
+        }
         if (is.null(session)) {
             stop("run_job(scope = \"session\") needs a session: call it from ",
                  "server code, or pass scope = \"app\" for work meant to ",
@@ -386,9 +423,30 @@ job_arm <- function() {
 #' @export
 job_cancel <- function(job) {
     check_job(job)
+    stopped <- job_stop(job)
+    if (stopped) {
+        job_pump()
+    }
+    invisible(stopped)
+}
+
+#' Stop one job without filling the slot it frees
+#'
+#' The pump is separated out because cancelling *several* jobs must
+#' not start work in between. Killing a session's running job frees a
+#' slot; pumping there would start that same session's queued job --
+#' spawning an R process, and its startup side effects, for a session
+#' that has already ended, only to kill it a moment later. A batch
+#' cancels first and pumps once, or not at all when the app is going
+#' down.
+#'
+#' @param job a glinty_job
+#' @return TRUE if this call stopped it, FALSE if it was already over
+#' @keywords internal
+job_stop <- function(job) {
     status <- isolate(job$state())$status
     if (!status %in% c("queued", "running")) {
-        return(invisible(FALSE))
+        return(FALSE)
     }
     if (identical(status, "queued")) {
         queue <- .globals$job_queues[[job$lane]]
@@ -397,8 +455,7 @@ job_cancel <- function(job) {
         tryCatch(job$proc$kill(), error = function(e) NULL)
     }
     job_settle(job, "cancelled")
-    job_pump()
-    invisible(TRUE)
+    TRUE
 }
 
 #' Kill every job a session started
@@ -408,15 +465,25 @@ job_cancel <- function(job) {
 #' a session, so a job outlives a reconnect and dies when the resume
 #' grace expires with nobody having come back.
 #'
+#' Every one of them is stopped before anything is started, so a
+#' session that had one job running and one waiting never spawns the
+#' waiting one. The slots freed here do go to other sessions' queued
+#' work, which is what the single pump at the end is for.
+#'
 #' @param session_id character session id
 #' @return invisible(NULL)
 #' @keywords internal
 kill_session_jobs <- function(session_id) {
+    stopped <- FALSE
     for (id in ls(.globals$jobs, all.names = TRUE)) {
         job <- .globals$jobs[[id]]
         if (!is.null(job) && identical(job$session_id, session_id)) {
-            job_cancel(job)
+            stopped <- job_stop(job) || stopped
         }
+    }
+    # The server carries on, so whoever else was waiting gets the room.
+    if (stopped) {
+        job_pump()
     }
     invisible(NULL)
 }
@@ -428,13 +495,17 @@ kill_session_jobs <- function(session_id) {
 #' choose, and leaves the registry clean for the next run_app() in the
 #' same session.
 #'
+#' Nothing is pumped: the loop is going away, and starting a queued
+#' job here would spawn an R process for work that is about to be
+#' killed.
+#'
 #' @return invisible(NULL)
 #' @keywords internal
 kill_all_jobs <- function() {
     for (id in ls(.globals$jobs, all.names = TRUE)) {
         job <- .globals$jobs[[id]]
         if (!is.null(job)) {
-            job_cancel(job)
+            job_stop(job)
         }
     }
     if (!is.null(.globals$job_timer)) {

@@ -18,6 +18,9 @@ lane_count(x, lane, field, min)
 integer
 }
 \description{
-One lane setting, as a whole number
+Nothing is coerced. `as.integer()` would take `2.5` as 2 and `"2"`
+as 2, and a lane running at a number its author did not write is
+worse than one that refused to start: the app comes up, behaves
+unlike the settings on the screen, and nothing says so.
 }
 \keyword{internal}

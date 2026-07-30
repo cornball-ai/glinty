@@ -52,10 +52,25 @@ expect_error(resolve_job_lanes(list(gpu = list(concurrency = 1))))
 expect_error(resolve_job_lanes(list(gpu = list(queue = 1))))
 expect_error(resolve_job_lanes(list(gpu = list(concurrency = 0, queue = 1))))
 expect_error(resolve_job_lanes(list(gpu = list(concurrency = 1, queue = -1))))
-expect_error(resolve_job_lanes(list(gpu = list(concurrency = "two",
-                                               queue = 1))))
 expect_error(resolve_job_lanes(list(list(concurrency = 1, queue = 1))))
 expect_error(resolve_job_lanes(list(gpu = 1)))
+
+# Nothing is coerced. as.integer() would read 2.5 as 2 and "2" as 2,
+# and a lane running at a number its author did not write is worse
+# than one that refused to start: the app comes up, behaves unlike the
+# settings on the screen, and nothing says so.
+for (bad in list(2.5, "2", "two", TRUE, Inf, NA, NULL, c(1, 2), list(1))) {
+    expect_error(resolve_job_lanes(list(gpu = list(concurrency = bad,
+                                                   queue = 1))),
+                 pattern = "whole number")
+}
+# and a setting glinty does not read is refused where it is written,
+# rather than ignored while the author believes it is in force
+expect_error(resolve_job_lanes(list(gpu = list(concurrency = 1, queue = 1,
+                                               priority = "high"))),
+             pattern = "unknown setting 'priority'")
+expect_error(resolve_job_lanes(list(gpu = list(1, 2))),
+             pattern = "every setting needs a name")
 # a queue of 0 is a lane that refuses rather than waits, which is
 # legitimate
 expect_equal(resolve_job_lanes(list(gpu = list(concurrency = 1,
@@ -268,9 +283,9 @@ tiny_app <- app(ui = page(text_output("x")),
                 server = function(input, output) NULL)
 expect_error(run_app(tiny_app, job_lanes = list(gpu = list(concurrency = 0,
                                                            queue = 1))),
-             pattern = "concurrency must be a single integer")
+             pattern = "concurrency must be a single whole number")
 expect_error(run_app(tiny_app, job_lanes = list(gpu = list(concurrency = 1))),
-             pattern = "queue must be a single integer")
+             pattern = "queue must be a single whole number")
 expect_error(run_app(tiny_app, job_lanes = "two at a time"),
              pattern = "named list of lane settings")
 
@@ -324,6 +339,13 @@ expect_equal(job_status(aj), "running")
 expect_false(spawned[[2]]$killed)
 
 # a queued session job is dropped too, not left in the lane forever
+# -- and never started on the way out.
+#
+# Killing the running job frees a slot. Pumping there would start this
+# same session's queued job: a real R process, with whatever its
+# startup does, for a session that has already ended, killed again a
+# moment later. Ending as "cancelled" is true either way, so the
+# status alone cannot see it. The spawn count can.
 reset_jobs(list(default = list(concurrency = 1L, queue = 4L)))
 s2 <- new_session("job-session-2")
 with_session(s2, {
@@ -331,9 +353,34 @@ with_session(s2, {
     q2 <- run_job(function() 2)
 })
 expect_equal(job_status(q2), "queued")
+expect_equal(length(spawned), 1L)
 session_end(s2)
 expect_equal(job_status(q2), "cancelled")
 expect_equal(length(.g$job_queues[["default"]]), 0L)
+expect_equal(length(spawned), 1L)
+
+# and nothing new attaches to a session that is already over: the
+# sweep has been and gone, so a job started now would never be killed
+# by anything.
+s2a <- new_session("job-session-2a")
+session_end(s2a)
+orphan <- with_session(s2a, tryCatch(run_job(function() 1),
+                                     error = function(e) e))
+expect_true(inherits(orphan, "error"))
+expect_true(grepl("session has ended", conditionMessage(orphan), fixed = TRUE))
+expect_equal(length(ls(.g$jobs)), 0L)
+
+# but the room does go to somebody else who was waiting: the server
+# carries on, and one pump follows the batch
+reset_jobs(list(default = list(concurrency = 1L, queue = 4L)))
+s2b <- new_session("job-session-2b")
+with_session(s2b, mine <- run_job(function() 1))
+theirs <- run_job(function() 2, scope = "app")
+expect_equal(job_status(theirs), "queued")
+session_end(s2b)
+expect_equal(job_status(mine), "cancelled")
+expect_equal(job_status(theirs), "running")
+expect_equal(length(spawned), 2L)
 
 # --- a dropped socket is not a dead job ---
 #
@@ -361,14 +408,20 @@ run_due_timers(now = as.numeric(Sys.time()) + 600)
 expect_equal(job_status(gj), "cancelled")
 expect_true(spawned[[1]]$killed)
 
-# --- shutdown kills everything ---
+# --- shutdown kills everything, and starts nothing ---
+#
+# The loop is going away. A queued job started here would be an R
+# process spawned for work that is about to be killed, which is the
+# same mistake as above with nobody left to notice it.
 reset_jobs(list(default = list(concurrency = 1L, queue = 4L)))
 k1 <- run_job(function() 1, scope = "app")
 k2 <- run_job(function() 2, scope = "app")
+expect_equal(job_status(k2), "queued")
 kill_all_jobs()
 expect_equal(job_status(k1), "cancelled")
 expect_equal(job_status(k2), "cancelled")
 expect_true(spawned[[1]]$killed)
+expect_equal(length(spawned), 1L)
 expect_equal(length(ls(.g$jobs)), 0L)
 expect_null(.g$job_timer)
 

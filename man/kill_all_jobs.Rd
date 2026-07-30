@@ -14,4 +14,10 @@ this process exits anyway; this makes it happen at a moment we
 choose, and leaves the registry clean for the next run_app() in the
 same session.
 }
+\details{
+Nothing is pumped: the loop is going away, and starting a queued
+job here would spawn an R process for work that is about to be
+killed.
+
+}
 \keyword{internal}
