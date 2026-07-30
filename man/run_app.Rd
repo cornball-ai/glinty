@@ -4,7 +4,8 @@
 \title{Run a glinty application}
 \usage{
 run_app(app_obj, port = NULL, auth = NULL, static_dir = "www",
-        max_upload = 10485760L, check_secrets = TRUE, quiet = FALSE)
+        job_lanes = NULL, max_upload = 10485760L, check_secrets = TRUE,
+        quiet = FALSE)
 }
 \arguments{
 \item{app_obj}{a glinty_app object}
@@ -21,6 +22,14 @@ the JWT case.}
 
 \item{static_dir}{character directory served under /static/
 (default "www" in the working directory; skipped if absent)}
+
+\item{job_lanes}{named list sizing the background-job lanes this
+app offers, each list(concurrency =, queue =). A job picks its
+lane; the app sizes it, for the same reason the ticket cap belongs
+to the server. Lanes merge over the built-in
+default = list(concurrency = 2, queue = 8), so naming a `gpu` lane
+leaves `default` in place. Under a lane's queue depth a job waits;
+past it the job is refused with a reason. See run_job().}
 
 \item{max_upload}{integer largest accepted request body in bytes
 (default 10 MB). Bodies are buffered whole in memory before

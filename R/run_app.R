@@ -64,6 +64,13 @@ app <- function(ui, server, theme = NULL) {
 #'   env_secrets_in()). The usual cause is prefilling an input from
 #'   Sys.getenv(), which publishes the secret to anyone who can fetch
 #'   the page. Set FALSE only deliberately.
+#' @param job_lanes named list sizing the background-job lanes this
+#'   app offers, each list(concurrency =, queue =). A job picks its
+#'   lane; the app sizes it, for the same reason the ticket cap belongs
+#'   to the server. Lanes merge over the built-in
+#'   default = list(concurrency = 2, queue = 8), so naming a `gpu` lane
+#'   leaves `default` in place. Under a lane's queue depth a job waits;
+#'   past it the job is refused with a reason. See run_job().
 #' @param max_upload integer largest accepted request body in bytes
 #'   (default 10 MB). Bodies are buffered whole in memory before
 #'   routing, so this is a memory ceiling as much as a policy one;
@@ -77,8 +84,8 @@ app <- function(ui, server, theme = NULL) {
 #' }
 #' @export
 run_app <- function(app_obj, port = NULL, auth = NULL, static_dir = "www",
-                    max_upload = 10485760L, check_secrets = TRUE,
-                    quiet = FALSE) {
+                    job_lanes = NULL, max_upload = 10485760L,
+                    check_secrets = TRUE, quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
@@ -86,10 +93,14 @@ run_app <- function(app_obj, port = NULL, auth = NULL, static_dir = "www",
         stop("auth must be a function(token), or NULL (see jwt_auth())",
              call. = FALSE)
     }
+    lanes <- resolve_job_lanes(job_lanes)
     port <- resolve_port(port)
 
     old_max <- options(glinty.max_upload = as.integer(max_upload))
     on.exit(options(old_max), add = TRUE)
+    # Children die when the loop does, at a moment we choose rather
+    # than whenever the supervisor notices this process is gone.
+    on.exit(kill_all_jobs(), add = TRUE)
 
     # Reset reactive state
     .globals$current_context <- NULL
@@ -99,6 +110,10 @@ run_app <- function(app_obj, port = NULL, auth = NULL, static_dir = "www",
     .globals$timers <- list()
     .globals$progress <- list()
     .globals$tickets <- new.env(parent = emptyenv())
+    .globals$jobs <- new.env(parent = emptyenv())
+    .globals$job_queues <- list()
+    .globals$job_lanes <- lanes
+    .globals$job_timer <- NULL
 
     # The tree and its revision are computed once: the same wire form
     # goes into every welcome, and the revision goes into both the
