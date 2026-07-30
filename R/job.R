@@ -75,6 +75,15 @@ resolve_job_lanes <- function(job_lanes = NULL) {
                  paste0("'", unknown, "'", collapse = ", "),
                  "; a lane takes concurrency and queue", call. = FALSE)
         }
+        # A list may hold the same name twice, and `cfg$concurrency`
+        # takes the first quietly. Two values written down is two
+        # intentions, and picking one of them is not this function's
+        # business.
+        dup <- unique(fields[duplicated(fields)])
+        if (length(dup) > 0L) {
+            stop("job lane '", nm, "': ", paste(dup, collapse = ", "),
+                 " given more than once", call. = FALSE)
+        }
         lanes[[nm]] <- list(
                             concurrency = lane_count(cfg$concurrency, nm, "concurrency", 1L),
                             queue = lane_count(cfg$queue, nm, "queue", 0L)
@@ -90,6 +99,11 @@ resolve_job_lanes <- function(job_lanes = NULL) {
 #' worse than one that refused to start: the app comes up, behaves
 #' unlike the settings on the screen, and nothing says so.
 #'
+#' The ceiling is there for the same reason. `as.integer(3e9)` is
+#' `NA`, and a lane whose concurrency is `NA` does not fail here --
+#' it fails at the first `run_job()`, where `lane_running(lane) < NA`
+#' is not a comparison anyone can act on.
+#'
 #' @param x the supplied value
 #' @param lane character lane name, for the message
 #' @param field character field name, for the message
@@ -99,7 +113,7 @@ resolve_job_lanes <- function(job_lanes = NULL) {
 lane_count <- function(x, lane, field, min) {
     ok <- is.numeric(x) && length(x) == 1L && !is.na(x) && is.finite(x)
     if (ok) {
-        ok <- x == round(x) && x >= min
+        ok <- x == round(x) && x >= min && x <= .Machine$integer.max
     }
     if (!ok) {
         shown <- if (length(x) == 0L) {
@@ -108,8 +122,8 @@ lane_count <- function(x, lane, field, min) {
             paste(format(x), collapse = ", ")
         }
         stop("job lane '", lane, "': ", field,
-             " must be a single whole number >= ", min, " (given: ", shown,
-             ")", call. = FALSE)
+             " must be a single whole number from ", min, " to ",
+             .Machine$integer.max, " (given: ", shown, ")", call. = FALSE)
     }
     as.integer(x)
 }

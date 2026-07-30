@@ -71,6 +71,25 @@ expect_error(resolve_job_lanes(list(gpu = list(concurrency = 1, queue = 1,
              pattern = "unknown setting 'priority'")
 expect_error(resolve_job_lanes(list(gpu = list(1, 2))),
              pattern = "every setting needs a name")
+
+# A list may hold the same name twice, and cfg$concurrency takes the
+# first quietly. Two values written down is two intentions, and
+# picking one of them is not this function's business.
+expect_error(resolve_job_lanes(list(gpu = list(concurrency = 1,
+                                               concurrency = 2, queue = 3))),
+             pattern = "concurrency given more than once")
+
+# as.integer(3e9) is NA, and a lane whose concurrency is NA does not
+# fail here -- it fails at the first run_job(), where
+# lane_running(lane) < NA is not a comparison anyone can act on.
+expect_error(resolve_job_lanes(list(gpu = list(concurrency = 3e9,
+                                               queue = 1))),
+             pattern = "whole number")
+# the ceiling itself is a usable number
+big <- resolve_job_lanes(list(gpu = list(concurrency = .Machine$integer.max,
+                                         queue = .Machine$integer.max)))
+expect_equal(big$gpu$concurrency, .Machine$integer.max)
+expect_false(is.na(big$gpu$queue))
 # a queue of 0 is a lane that refuses rather than waits, which is
 # legitimate
 expect_equal(resolve_job_lanes(list(gpu = list(concurrency = 1,

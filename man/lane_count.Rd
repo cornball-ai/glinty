@@ -23,4 +23,11 @@ as 2, and a lane running at a number its author did not write is
 worse than one that refused to start: the app comes up, behaves
 unlike the settings on the screen, and nothing says so.
 }
+\details{
+The ceiling is there for the same reason. `as.integer(3e9)` is
+`NA`, and a lane whose concurrency is `NA` does not fail here --
+it fails at the first `run_job()`, where `lane_running(lane) < NA`
+is not a comparison anyone can act on.
+
+}
 \keyword{internal}
