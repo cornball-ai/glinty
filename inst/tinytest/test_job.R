@@ -63,7 +63,7 @@ expect_equal(resolve_job_lanes(list(gpu = list(concurrency = 1,
 
 # --- a process whose life the test drives ---
 spawned <- list()
-options(glinty.job_spawner = function(fn, args) {
+fake_spawner <- function(fn, args) {
     proc <- new.env(parent = emptyenv())
     proc$alive <- TRUE
     proc$value <- NULL
@@ -85,7 +85,8 @@ options(glinty.job_spawner = function(fn, args) {
             proc$alive <- FALSE
         }
     )
-})
+}
+options(glinty.job_spawner = fake_spawner)
 
 finishes <- function(proc, value) {
     proc$alive <- FALSE
@@ -258,12 +259,20 @@ expect_error(job_status(list()))
 #
 # Before the port is resolved and long before a socket is opened: an
 # app with a lane it cannot honour should not come up at all.
+#
+# Each of these asserts the message, not just that something failed.
+# run_app() has plenty of other ways to error -- a port in use, for one
+# -- and an expect_error() that takes any of them would still pass with
+# the lane check deleted.
 tiny_app <- app(ui = page(text_output("x")),
                 server = function(input, output) NULL)
 expect_error(run_app(tiny_app, job_lanes = list(gpu = list(concurrency = 0,
-                                                           queue = 1))))
-expect_error(run_app(tiny_app, job_lanes = list(gpu = list(concurrency = 1))))
-expect_error(run_app(tiny_app, job_lanes = "two at a time"))
+                                                           queue = 1))),
+             pattern = "concurrency must be a single integer")
+expect_error(run_app(tiny_app, job_lanes = list(gpu = list(concurrency = 1))),
+             pattern = "queue must be a single integer")
+expect_error(run_app(tiny_app, job_lanes = "two at a time"),
+             pattern = "named list of lane settings")
 
 # --- bad arguments ---
 reset_jobs()
@@ -389,6 +398,54 @@ p1 <- run_job(function() 1, lane = "default", scope = "app")
 out <- capture.output(print(p1))
 expect_true(grepl("running", out[1], fixed = TRUE))
 expect_true(grepl("lane=default", out[1], fixed = TRUE))
+
+# --- the bundled example is a working app ---
+#
+# The acceptance test on the issue was "a demo app with a slow
+# computation button stays responsive in a second tab". The staying
+# responsive is what the whole file is about; this is the part a test
+# can hold: the example builds, its button starts a job, and its
+# rendered output follows the job to completion.
+reset_jobs()
+options(glinty.job_spawner = fake_spawner)
+
+example <- source(system.file("examples/jobs/app.R", package = "glinty"),
+                  local = new.env())$value
+expect_true(inherits(example, "glinty_app"))
+html <- glinty:::component_to_html(example$ui)
+expect_true(grepl('data-g-target="start"', html, fixed = TRUE))
+
+ex_session <- new_session("example")
+with_session(ex_session, example$server(ex_session$input, ex_session$output))
+flush_reactions()
+
+ui_of <- function(session) {
+    msgs <- Filter(function(m) identical(m$id, "jobs"),
+                   lapply(session$outgoing, function(m) {
+                       jsonlite::fromJSON(m, simplifyVector = FALSE)
+                   }))
+    if (length(msgs) == 0L) NULL else msgs[[length(msgs)]]$value
+}
+first_line <- function(tree) {
+    if (identical(tree$component, "text")) {
+        tree$value
+    } else {
+        tree$children[[1]]$value
+    }
+}
+
+expect_equal(first_line(ui_of(ex_session)), "Nothing started yet.")
+
+glinty:::handle_event(ex_session, "start", 1L)
+flush_reactions()
+expect_equal(length(spawned), 1L)
+expect_true(grepl("running", first_line(ui_of(ex_session)), fixed = TRUE))
+
+finishes(spawned[[1]], "8 seconds of work, in pid 999")
+job_poll()
+flush_reactions()
+expect_true(grepl("in pid 999", first_line(ui_of(ex_session)), fixed = TRUE))
+session_end(ex_session)
 
 # --- the real thing ---
 #

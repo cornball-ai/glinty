@@ -51,7 +51,7 @@ resolve_job_lanes <- function(job_lanes = NULL) {
     }
     nms <- names(job_lanes)
     if (!is.list(job_lanes) || is.null(nms) || any(!nzchar(nms)) ||
-            anyDuplicated(nms)) {
+        anyDuplicated(nms)) {
         stop("job_lanes must be a named list of lane settings, one name ",
              "per lane", call. = FALSE)
     }
@@ -62,8 +62,8 @@ resolve_job_lanes <- function(job_lanes = NULL) {
                  call. = FALSE)
         }
         lanes[[nm]] <- list(
-            concurrency = lane_count(cfg$concurrency, nm, "concurrency", 1L),
-            queue = lane_count(cfg$queue, nm, "queue", 0L)
+                            concurrency = lane_count(cfg$concurrency, nm, "concurrency", 1L),
+                            queue = lane_count(cfg$queue, nm, "queue", 0L)
         )
     }
     lanes
@@ -143,7 +143,7 @@ run_job <- function(fn, args = list(), lane = "default",
     scope <- match.arg(scope)
     lanes <- .globals$job_lanes
     if (!is.character(lane) || length(lane) != 1L || is.na(lane) ||
-            !lane %in% names(lanes)) {
+        !lane %in% names(lanes)) {
         stop("unknown job lane '", paste(lane, collapse = ", "),
              "'; configured lanes: ", paste(names(lanes), collapse = ", "),
              call. = FALSE)
@@ -203,7 +203,11 @@ new_job <- function(fn, args, lane, scope, session) {
     job$args <- args
     job$lane <- lane
     job$scope <- scope
-    job$session_id <- if (is.null(session)) NULL else session$id
+    if (is.null(session)) {
+        job$session_id <- NULL
+    } else {
+        job$session_id <- session$id
+    }
     job$proc <- NULL
     job$state <- reactive_val(list(status = "queued", result = NULL,
                                    error = NULL))
@@ -236,7 +240,7 @@ lane_running <- function(lane) {
     for (id in ls(.globals$jobs, all.names = TRUE)) {
         job <- .globals$jobs[[id]]
         if (!is.null(job) && identical(job$lane, lane) &&
-                identical(isolate(job$state())$status, "running")) {
+            identical(isolate(job$state())$status, "running")) {
             n <- n + 1L
         }
     }
@@ -325,8 +329,8 @@ job_poll <- function() {
     }
     for (id in ls(.globals$jobs, all.names = TRUE)) {
         job <- .globals$jobs[[id]]
-        if (is.null(job) || !identical(isolate(job$state())$status,
-                                       "running")) {
+        if (is.null(job) ||
+            !identical(isolate(job$state())$status, "running")) {
             next
         }
         alive <- tryCatch(job$proc$alive(), error = function(e) FALSE)
@@ -338,8 +342,7 @@ job_poll <- function() {
         if (isTRUE(settled$ok)) {
             job_settle(job, "done", result = settled$value)
         } else {
-            job_settle(job, "error",
-                       error = conditionMessage(settled$error))
+            job_settle(job, "error", error = conditionMessage(settled$error))
         }
     }
     job_pump()
@@ -364,7 +367,7 @@ job_arm <- function() {
         return(invisible(NULL))
     }
     .globals$job_timer <- schedule_timer(getOption("glinty.job_poll", 0.25),
-                                         job_poll)
+        job_poll)
     invisible(NULL)
 }
 
@@ -521,8 +524,8 @@ check_job <- function(job) {
 #' @export
 print.glinty_job <- function(x, ...) {
     state <- isolate(x$state())
-    cat(sprintf("<glinty job %s> lane=%s scope=%s status=%s\n",
-                x$id, x$lane, x$scope, state$status))
+    cat(sprintf("<glinty job %s> lane=%s scope=%s status=%s\n", x$id, x$lane,
+                x$scope, state$status))
     if (!is.null(state$error)) {
         cat("  ", state$error, "\n", sep = "")
     }
@@ -555,17 +558,16 @@ job_spawn <- function(fn, args) {
     # cannot do that.
     done <- function() unlink(c(out, err))
     list(
-        alive = function() proc$is_alive(),
-        result = function() {
-            on.exit(done(), add = TRUE)
-            tryCatch(proc$get_result(),
-                     error = function(e) stop(job_failure(e, err),
-                                              call. = FALSE))
-        },
-        kill = function() {
-            on.exit(done(), add = TRUE)
-            proc$kill()
-        }
+         alive = function() proc$is_alive(),
+         result = function() {
+        on.exit(done(), add = TRUE)
+        tryCatch(proc$get_result(),
+                 error = function(e) stop(job_failure(e, err), call. = FALSE))
+    },
+         kill = function() {
+        on.exit(done(), add = TRUE)
+        proc$kill()
+    }
     )
 }
 
