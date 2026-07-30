@@ -235,3 +235,63 @@ if (capabilities("png")) {
 }
 
 session_end(s)
+
+# --- render_image: kind image, value {src, width?, height?} ---
+#
+# A source the client can already fetch passes through; a file that
+# exists on the server is embedded as a data URI, because a server
+# path means nothing across the wire.
+s <- new_session("rimg")
+with_session(s, {
+    s$output$logo <- render_image(function() "/static/logo.png")
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$kind, "image")
+expect_equal(m$value$src, "/static/logo.png")
+expect_null(m$value$width)
+
+with_session(s, {
+    s$output$dataimg <- render_image(function() "data:image/png;base64,AAAA")
+})
+flush_reactions()
+expect_equal(last_msg(s)$value$src, "data:image/png;base64,AAAA")
+
+# A real file on disk becomes a data URI carrying its stated type.
+imgfile <- tempfile(fileext = ".png")
+grDevices::png(imgfile, width = 50, height = 50)
+graphics::par(mar = c(0, 0, 0, 0))
+plot.new()
+grDevices::dev.off()
+with_session(s, {
+    s$output$still <- render_image(function() {
+        list(src = imgfile, width = 320, height = 180)
+    })
+})
+flush_reactions()
+m <- last_msg(s)
+expect_true(startsWith(m$value$src, "data:image/png;base64,"))
+expect_equal(m$value$width, 320)
+expect_equal(m$value$height, 180)
+unlink(imgfile)
+
+# A file whose type cannot be read is an error naming the fix, not a
+# media type invented to fill the URI.
+binfile <- tempfile(fileext = ".bin")
+writeLines("x", binfile)
+expect_error(glinty:::image_value(list(src = binfile)),
+             "cannot read a media type")
+unlink(binfile)
+expect_error(glinty:::image_mime("/x/noext"), "cannot read a media type")
+# query strings and fragments are not part of the extension
+expect_equal(glinty:::image_mime("/x/a.webp?v=2"), "image/webp")
+
+# Scalars only: shapes that would lie on the wire are refused here.
+expect_error(glinty:::image_value(list(src = c("a", "b"))), "one non-empty")
+expect_error(glinty:::image_value(list(src = "")), "one non-empty")
+expect_error(glinty:::image_value(list(src = "/static/a.png", width = -1)),
+             "positive number")
+expect_error(glinty:::image_value(list(src = "/static/a.png",
+                                       height = c(1, 2))),
+             "positive number")
+session_end(s)
