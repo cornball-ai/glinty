@@ -357,6 +357,13 @@ css_variant_conflicts <- function(path, glinty_css = NULL) {
     if (length(families) == 0L) {
         return(character(0))
     }
+    # The classes to name in the message. `.<base>-*` was a pattern
+    # invented from the base name, and now that the families are
+    # derived it invents names that do not exist: `.g-text-*` for a
+    # family whose members are `.g-muted` and `.g-strong`,
+    # `.g-download-*` for one whose members are `.g-btn-*`. Naming the
+    # real ones is the whole point of having derived them.
+    classes <- css_variant_families()
     rules <- css_rules(readLines(path, warn = FALSE))
 
     findings <- character(0)
@@ -373,9 +380,9 @@ css_variant_conflicts <- function(path, glinty_css = NULL) {
             if (length(clash) == 0L) {
                 next
             }
-            variants <- paste0(".", base, "-*")
+            variants <- paste0(".", classes[[base]], collapse = ", ")
             findings <- c(findings, sprintf(
-                    "%s sets %s, which %s also sets: the base rule wins and the variant stops working",
+                    "%s sets %s, which %s also set: the base rule wins and the variant stops working",
                     sel, paste(sort(clash), collapse = ", "), variants
                 ))
         }

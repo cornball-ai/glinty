@@ -81,6 +81,21 @@ css_force_states <- function(css) {
             i <- i + 1L
             next
         }
+        # A comment is text, whatever it looks like. An unmatched
+        # brace inside one -- `/* .g-btn:hover { */` -- would open a
+        # block in this scanner that nothing closes, and every
+        # selector after it would be read as a declaration and left
+        # unforced. The guard would then find nothing and say so.
+        if (identical(ch, "/") && identical(chars[min(n, i + 1L)], "*")) {
+            close <- i + 2L
+            while (close < n && !(identical(chars[close], "*") &&
+                    identical(chars[close + 1L], "/"))) {
+                close <- close + 1L
+            }
+            # Past the closing */, or past the end when there is none.
+            i <- close + 2L
+            next
+        }
         if (ch %in% c("\"", "'")) {
             quote <- ch
             prelude <- c(prelude, ch)

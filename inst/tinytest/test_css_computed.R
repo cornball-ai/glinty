@@ -59,6 +59,30 @@ expect_equal(
 expect_equal(css_force_states("@font-face { src: url(':hover.woff') }"),
              "@font-face { src: url(':hover.woff') }")
 
+# --- a comment is text, whatever it looks like ---
+#
+# An unmatched brace inside one opens a block this scanner never
+# closes, and every selector after it reads as a declaration and goes
+# unforced -- so the guard finds nothing and says so. Which is the
+# shape of every bug in this file: the clean answer, for the wrong
+# reason.
+expect_equal(
+    css_force_states("/* .g-btn:hover { */\n.g-btn:hover { filter: none }"),
+    "/* .g-btn:hover { */\n.g-btn.g-force-hover { filter: none }")
+# an unmatched closing brace is just as bad the other way
+expect_equal(css_force_states("/* } */ .a:hover { color: red }"),
+             "/* } */ .a.g-force-hover { color: red }")
+# a quote inside a comment does not open a string
+expect_equal(css_force_states("/* don't { */ .a:focus { color: red }"),
+             "/* don't { */ .a.g-force-focus { color: red }")
+# a comment inside a declaration block does not end it
+expect_equal(css_force_states(".a { /* :hover } */ color: red }\n.b:active { top: 0 }"),
+             ".a { /* :hover } */ color: red }\n.b.g-force-active { top: 0 }")
+# and a comment that never closes ends the scan rather than looping
+expect_true(grepl("unterminated",
+                  css_force_states(".a:hover { color: red } /* unterminated"),
+                  fixed = TRUE))
+
 # glinty's own stylesheet survives the round trip: every property it
 # reads out afterwards still looks like a property name, which is what
 # caught a rewrite leaking into values in the first place

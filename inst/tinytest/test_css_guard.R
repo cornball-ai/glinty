@@ -117,6 +117,26 @@ found <- glinty::css_variant_conflicts(tmp)
 expect_equal(length(found), 1L)
 expect_true(grepl("background", found[1]))
 expect_true(grepl("color", found[1]))
+# the message names the classes that exist, not a pattern built from
+# the base name: `.g-text-*` would be an invention for a family whose
+# members are `.g-muted` and `.g-strong`
+expect_true(grepl(".g-btn-ghost", found[1], fixed = TRUE))
+expect_false(grepl("-*", found[1], fixed = TRUE))
+
+writeLines(".g-text { color: red }", tmp)
+found <- glinty::css_variant_conflicts(tmp)
+expect_equal(length(found), 1L)
+expect_true(grepl(".g-muted", found[1], fixed = TRUE))
+expect_false(grepl(".g-text-*", found[1], fixed = TRUE))
+
+writeLines(".g-download { background: red }", tmp)
+found <- glinty::css_variant_conflicts(tmp)
+expect_equal(length(found), 1L)
+expect_true(grepl(".g-btn-primary", found[1], fixed = TRUE))
+expect_false(grepl(".g-download-", found[1], fixed = TRUE))
+
+writeLines(".g-btn { background: linear-gradient(red, blue); color: #fff }",
+           tmp)
 
 # The fix: the gradient belongs to the variant it describes.
 writeLines(c(".g-btn { font-size: 0.95rem; border-radius: 8px; cursor: pointer }",
