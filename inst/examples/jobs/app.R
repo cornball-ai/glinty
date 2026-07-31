@@ -36,8 +36,16 @@ app(
             # Self-contained: the child sees its arguments and nothing
             # else, so the duration goes in as one, and the pid comes
             # back as proof of where it ran.
+            #
+            # set_progress() is the same call an in-process operation
+            # would make. Over here there is no bar and no session, so
+            # it writes where the server is reading instead.
             job <- run_job(function(seconds) {
-                Sys.sleep(seconds)
+                for (i in seq_len(seconds)) {
+                    glinty::set_progress(i / seconds,
+                                         detail = paste("second", i))
+                    Sys.sleep(1)
+                }
                 sprintf("%d seconds of work, in pid %d", seconds, Sys.getpid())
             }, args = list(seconds = 8L))
             jobs(c(isolate(jobs()), list(job)))
@@ -57,8 +65,13 @@ app(
             lines <- lapply(seq_along(all), function(i) {
                 job <- all[[i]]
                 status <- job_status(job)
+                reported <- job_progress(job)
                 detail <- if (identical(status, "done")) {
                     job_result(job)
+                } else if (identical(status, "running") &&
+                               !is.null(reported)) {
+                    sprintf("%d%%, %s", round(reported$value * 100),
+                            reported$detail)
                 } else {
                     job_error(job)
                 }

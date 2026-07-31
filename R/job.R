@@ -260,6 +260,11 @@ new_job <- function(fn, args, lane, scope, session) {
         job$session_id <- session$id
     }
     job$proc <- NULL
+    job$progress_file <- NULL
+    # Separate from state on purpose: progress changes many times
+    # while status changes once, and an output showing a bar should
+    # not re-render everything that reads the status.
+    job$progress <- reactive_val(NULL)
     job$state <- reactive_val(list(status = "queued", result = NULL,
                                    error = NULL))
     class(job) <- "glinty_job"
@@ -308,7 +313,9 @@ lane_running <- function(lane) {
 #' @return invisible(NULL)
 #' @keywords internal
 job_start <- function(job) {
-    proc <- tryCatch(job_spawn(job$fn, job$args), error = function(e) e)
+    job$progress_file <- tempfile("glinty-progress-", fileext = ".json")
+    proc <- tryCatch(job_spawn(job$fn, job$args, job$progress_file),
+                     error = function(e) e)
     if (inherits(proc, "condition")) {
         job_settle(job, "error", error = conditionMessage(proc))
         return(invisible(NULL))
@@ -329,6 +336,15 @@ job_start <- function(job) {
 #' @keywords internal
 job_settle <- function(job, status, result = NULL, error = NULL) {
     job$proc <- NULL
+    if (!is.null(job$progress_file)) {
+        # No last read here. job_poll() reads progress before it asks
+        # whether the process is alive, so the sweep that settles a
+        # job has already taken whatever it reported on its way out.
+        # A read at this point was unreachable, and a mutation sweep
+        # said so: breaking it changed nothing.
+        unlink(job$progress_file)
+        job$progress_file <- NULL
+    }
     if (!is.null(.globals$jobs[[job$id]])) {
         rm(list = job$id, envir = .globals$jobs)
     }
@@ -383,6 +399,14 @@ job_poll <- function() {
         if (is.null(job) ||
             !identical(isolate(job$state())$status, "running")) {
             next
+        }
+        # Progress first, liveness second. A job that reports and then
+        # exits between two sweeps would otherwise have its last
+        # update deleted along with the file, having never been read.
+        reported <- job_read_progress(job)
+        if (!is.null(reported) &&
+                !identical(reported, isolate(job$progress()))) {
+            job$progress(reported)
         }
         alive <- tryCatch(job$proc$alive(), error = function(e) FALSE)
         if (isTRUE(alive)) {
@@ -626,17 +650,24 @@ print.glinty_job <- function(x, ...) {
 #'
 #' @param fn function to run
 #' @param args list of arguments
+#' @param progress_file character path the child reports progress to,
+#'   passed in the environment so it costs the job's function no
+#'   argument of its own
 #' @return list(alive, result, kill)
 #' @keywords internal
-job_spawn <- function(fn, args) {
+job_spawn <- function(fn, args, progress_file = NULL) {
     spawner <- getOption("glinty.job_spawner", NULL)
     if (is.function(spawner)) {
-        return(spawner(fn, args))
+        return(spawner(fn, args, progress_file))
     }
     out <- tempfile("glinty-job-", fileext = ".out")
     err <- tempfile("glinty-job-", fileext = ".err")
+    env <- callr::rcmd_safe_env()
+    if (!is.null(progress_file)) {
+        env <- c(env, GLINTY_JOB_PROGRESS = progress_file)
+    }
     proc <- callr::r_bg(func = fn, args = args, supervise = TRUE,
-                        stdout = out, stderr = err)
+                        stdout = out, stderr = err, env = env)
     # Piped output would be the default. A job that prints steadily and
     # is never read from fills the pipe buffer and blocks in the child,
     # which is the one failure this whole file exists to avoid; files
@@ -654,6 +685,122 @@ job_spawn <- function(fn, args) {
         proc$kill()
     }
     )
+}
+
+#' Where this process reports job progress, if it is a job
+#'
+#' Set on the child by job_spawn(), read by set_progress() and
+#' inc_progress(). An environment variable rather than an argument
+#' because the job's function belongs to the app: adding a parameter
+#' to it would make every job that wants progress take one, and every
+#' job that does not carry a spare.
+#'
+#' @return character path, or NULL in a process that is not a job
+#' @keywords internal
+job_progress_path <- function() {
+    path <- Sys.getenv("GLINTY_JOB_PROGRESS", "")
+    if (nzchar(path)) path else NULL
+}
+
+#' Write this job's progress where the server will read it
+#'
+#' Overwritten rather than appended: progress is a level, not a
+#' stream. Only the newest value means anything, and a file that grows
+#' with every update makes each poll cost more than the one before.
+#'
+#' @param value numeric fraction, or NULL to leave it
+#' @param detail character secondary line, or NULL
+#' @param message character headline, or NULL
+#' @param add logical treat value as an increment
+#' @return TRUE if this process is a job and the write was attempted
+#' @keywords internal
+job_report_progress <- function(value = NULL, detail = NULL, message = NULL,
+                                add = FALSE) {
+    path <- job_progress_path()
+    if (is.null(path)) {
+        return(FALSE)
+    }
+    last <- .globals$job_progress_last
+    if (is.null(last)) {
+        last <- list(value = 0, message = "", detail = "")
+    }
+    if (!is.null(value)) {
+        last$value <- clamp_progress(if (add) last$value + value else value)
+    }
+    if (!is.null(message)) {
+        last$message <- message
+    }
+    if (!is.null(detail)) {
+        last$detail <- detail
+    }
+    .globals$job_progress_last <- last
+    line <- as.character(jsonlite::toJSON(last, auto_unbox = TRUE))
+    # A job whose progress file cannot be written is still a job. The
+    # work matters; the bar does not. An unopenable path warns before
+    # it errors, so both are swallowed -- a warning surfacing from the
+    # child would land in stderr and read as a failure of the work.
+    tryCatch(suppressWarnings(writeLines(line, path)),
+             error = function(e) NULL)
+    TRUE
+}
+
+#' Read what a job last reported
+#'
+#' @param job a glinty_job
+#' @return list(value, message, detail), or NULL
+#' @keywords internal
+job_read_progress <- function(job) {
+    path <- job$progress_file
+    if (is.null(path) || !file.exists(path)) {
+        return(NULL)
+    }
+    lines <- tryCatch(readLines(path, warn = FALSE),
+                      error = function(e) character(0))
+    lines <- lines[nzchar(lines)]
+    if (length(lines) == 0L) {
+        return(NULL)
+    }
+    # A read that lands mid-write sees a truncated line. Ignoring it
+    # costs one update; the next poll has the whole thing.
+    tryCatch(jsonlite::fromJSON(lines[length(lines)], simplifyVector = TRUE),
+             error = function(e) NULL)
+}
+
+#' What a job last reported, reactively
+#'
+#' NULL until the job reports something. Inside the job, report with
+#' the same `set_progress()` and `inc_progress()` an in-process
+#' operation would use -- they notice they are running in a background
+#' process and write where the server is reading:
+#'
+#' \preformatted{
+#' job <- run_job(function(n) {
+#'     for (i in seq_len(n)) {
+#'         glinty::set_progress(i / n, detail = paste("step", i))
+#'         one_step(i)
+#'     }
+#' }, args = list(n = 10))
+#'
+#' output$bar <- render_text(function() {
+#'     p <- job_progress(job)
+#'     if (is.null(p)) "starting" else paste0(round(p$value * 100), "%")
+#' })
+#' }
+#'
+#' Updates arrive when the poller next runs, so the resolution is
+#' `getOption("glinty.job_poll", 0.25)` seconds rather than every call
+#' the job makes.
+#'
+#' @param job a glinty_job from run_job()
+#' @return list(value, message, detail), or NULL
+#' @examples
+#' \dontrun{
+#' output$pct <- render_text(function() job_progress(job)$value)
+#' }
+#' @export
+job_progress <- function(job) {
+    check_job(job)
+    job$progress()
 }
 
 #' Why a background job failed, in one message

@@ -19,5 +19,6 @@
     .globals$job_lanes <- JOB_DEFAULT_LANES
     .globals$job_timer <- NULL
     .globals$job_id_counter <- 0L
+    .globals$job_progress_last <- NULL
     reg_reset()
 }

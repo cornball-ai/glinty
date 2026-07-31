@@ -71,6 +71,13 @@ with_progress <- function(session, expr, message = "", detail = "", value = 0) {
 #' }
 #' @export
 inc_progress <- function(amount = 0.1, detail = NULL, message = NULL) {
+    # In a background job there is no bar and no session to push to,
+    # so the same call writes where the server is reading instead. One
+    # verb, two places: instrumented code moves into a job without
+    # being rewritten.
+    if (job_report_progress(amount, detail, message, add = TRUE)) {
+        return(invisible(NULL))
+    }
     handle <- current_progress()
     if (is.null(handle)) {
         return(invisible(NULL))
@@ -94,6 +101,9 @@ inc_progress <- function(amount = 0.1, detail = NULL, message = NULL) {
 #' }
 #' @export
 set_progress <- function(value = NULL, detail = NULL, message = NULL) {
+    if (job_report_progress(value, detail, message)) {
+        return(invisible(NULL))
+    }
     handle <- current_progress()
     if (is.null(handle)) {
         return(invisible(NULL))
