@@ -59,6 +59,32 @@ expect_equal(
 expect_equal(css_force_states("@font-face { src: url(':hover.woff') }"),
              "@font-face { src: url(':hover.woff') }")
 
+# --- escapes are counted, not glanced at ---
+#
+# An escaped colon is part of a class name, and a quote after an even
+# number of backslashes really does close its string. Testing the one
+# preceding character gets both wrong, and the second one is the worse
+# failure: the scanner stays "inside" a string that ended, so every
+# rewrite after it is suppressed and the guard comes back clean.
+css_escaped <- glinty:::css_escaped
+chars <- strsplit("a\\\\b\\c", "", fixed = TRUE)[[1]]
+expect_false(css_escaped(chars, 1L))
+expect_false(css_escaped(chars, 4L))
+expect_true(css_escaped(chars, 6L))
+
+# a colon that is part of the class name is left alone
+expect_equal(css_force_states(".icon\\:hover { color: red }"),
+             ".icon\\:hover { color: red }")
+# a string ending in an escaped backslash closes, and what follows is
+# still a prelude
+expect_equal(
+    css_force_states('.a::before { content: "\\\\" }\n.b:hover { color: red }'),
+    '.a::before { content: "\\\\" }\n.b.g-force-hover { color: red }')
+# an escaped quote does not close it, and the next real one does
+expect_equal(
+    css_force_states('.a::before { content: "\\"" }\n.b:hover { color: red }'),
+    '.a::before { content: "\\"" }\n.b.g-force-hover { color: red }')
+
 # --- a comment is text, whatever it looks like ---
 #
 # An unmatched brace inside one opens a block this scanner never

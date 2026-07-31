@@ -40,6 +40,29 @@
 #' @keywords internal
 COMPUTED_STATES <- c("hover", "focus", "active")
 
+#' Is the character at this position escaped?
+#'
+#' By counting the backslashes before it, not by looking at one. An
+#' odd number escapes it; an even number means they escaped each other
+#' and this character is structural. The difference matters twice in
+#' the same scanner: `"a\\"` ends its string (two backslashes, then a
+#' real closing quote), and `.icon\:hover` is a class name with a
+#' colon in it rather than a pseudo-class.
+#'
+#' @param chars character vector of single characters
+#' @param i integer position to test
+#' @return logical
+#' @keywords internal
+css_escaped <- function(chars, i) {
+    count <- 0L
+    j <- i - 1L
+    while (j >= 1L && identical(chars[j], "\\")) {
+        count <- count + 1L
+        j <- j - 1L
+    }
+    count %% 2L == 1L
+}
+
 #' Rewrite state pseudo-classes as classes of equal specificity
 #'
 #' `.g-btn:hover` and `.g-btn.g-force-hover` are both one class plus
@@ -74,8 +97,7 @@ css_force_states <- function(css) {
     while (i <= n) {
         ch <- chars[i]
         if (nzchar(quote)) {
-            if (identical(ch, quote) && !identical(chars[max(1L, i - 1L)],
-                    "\\")) {
+            if (identical(ch, quote) && !css_escaped(chars, i)) {
                 quote <- ""
             }
             i <- i + 1L
@@ -116,7 +138,7 @@ css_force_states <- function(css) {
             i <- i + 1L
             next
         }
-        if (identical(ch, ":") && in_prelude() &&
+        if (identical(ch, ":") && in_prelude() && !css_escaped(chars, i) &&
             !identical(chars[max(1L, i - 1L)], ":")) {
             rest <- paste(chars[i:min(n, i + 20L)], collapse = "")
             hit <- COMPUTED_STATES[vapply(COMPUTED_STATES, function(state) {
