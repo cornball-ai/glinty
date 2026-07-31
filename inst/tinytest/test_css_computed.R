@@ -30,13 +30,96 @@ expect_equal(lengths(regmatches(css_force_states(".g-btn:hover"),
 # pseudo-elements are elements, not states, and are left alone
 expect_equal(css_force_states(".g-divider-labelled::after { content: '' }"),
              ".g-divider-labelled::after { content: '' }")
-# and a pseudo-class this does not force is left to not match, which is
-# a gap in coverage rather than a wrong answer
-expect_true(grepl("g-force-focus-visible",
-                  css_force_states(".a:focus-visible { color: red }"),
-                  fixed = TRUE))
+# a pseudo-class this does not force is left alone, which is a gap in
+# coverage rather than a wrong answer
+expect_equal(css_force_states(".a:focus-visible { color: red }"),
+             ".a:focus-visible { color: red }")
 expect_equal(css_force_states(":root { --g-primary: red }"),
              ":root { --g-primary: red }")
+
+# --- selector preludes only ---
+#
+# A declaration's value is none of this function's business, and a
+# stylesheet is full of values a plain gsub would rewrite. Both of
+# these are legal CSS that used to come out mangled.
+expect_equal(css_force_states('.a::after { content: ":hover" }'),
+             '.a::after { content: ":hover" }')
+expect_equal(css_force_states(".a { background: url(data:image/svg+xml;utf8,<svg id=':hover'/>) }"),
+             ".a { background: url(data:image/svg+xml;utf8,<svg id=':hover'/>) }")
+# the selector is still rewritten when a value nearby mentions a state
+expect_equal(css_force_states('.a:hover { content: ":hover" }'),
+             '.a.g-force-hover { content: ":hover" }')
+
+# a media query holds rules, so the selectors inside it are preludes
+# too -- and the declarations inside those are not
+expect_equal(
+    css_force_states("@media (max-width: 9px) { .a:hover { content: ':hover' } }"),
+    "@media (max-width: 9px) { .a.g-force-hover { content: ':hover' } }")
+# but a block that holds declarations does not get its values rewritten
+expect_equal(css_force_states("@font-face { src: url(':hover.woff') }"),
+             "@font-face { src: url(':hover.woff') }")
+
+# --- escapes are counted, not glanced at ---
+#
+# An escaped colon is part of a class name, and a quote after an even
+# number of backslashes really does close its string. Testing the one
+# preceding character gets both wrong, and the second one is the worse
+# failure: the scanner stays "inside" a string that ended, so every
+# rewrite after it is suppressed and the guard comes back clean.
+css_escaped <- glinty:::css_escaped
+chars <- strsplit("a\\\\b\\c", "", fixed = TRUE)[[1]]
+expect_false(css_escaped(chars, 1L))
+expect_false(css_escaped(chars, 4L))
+expect_true(css_escaped(chars, 6L))
+
+# a colon that is part of the class name is left alone
+expect_equal(css_force_states(".icon\\:hover { color: red }"),
+             ".icon\\:hover { color: red }")
+# a string ending in an escaped backslash closes, and what follows is
+# still a prelude
+expect_equal(
+    css_force_states('.a::before { content: "\\\\" }\n.b:hover { color: red }'),
+    '.a::before { content: "\\\\" }\n.b.g-force-hover { color: red }')
+# an escaped quote does not close it, and the next real one does
+expect_equal(
+    css_force_states('.a::before { content: "\\"" }\n.b:hover { color: red }'),
+    '.a::before { content: "\\"" }\n.b.g-force-hover { color: red }')
+
+# --- a comment is text, whatever it looks like ---
+#
+# An unmatched brace inside one opens a block this scanner never
+# closes, and every selector after it reads as a declaration and goes
+# unforced -- so the guard finds nothing and says so. Which is the
+# shape of every bug in this file: the clean answer, for the wrong
+# reason.
+expect_equal(
+    css_force_states("/* .g-btn:hover { */\n.g-btn:hover { filter: none }"),
+    "/* .g-btn:hover { */\n.g-btn.g-force-hover { filter: none }")
+# an unmatched closing brace is just as bad the other way
+expect_equal(css_force_states("/* } */ .a:hover { color: red }"),
+             "/* } */ .a.g-force-hover { color: red }")
+# a quote inside a comment does not open a string
+expect_equal(css_force_states("/* don't { */ .a:focus { color: red }"),
+             "/* don't { */ .a.g-force-focus { color: red }")
+# a comment inside a declaration block does not end it
+expect_equal(css_force_states(".a { /* :hover } */ color: red }\n.b:active { top: 0 }"),
+             ".a { /* :hover } */ color: red }\n.b.g-force-active { top: 0 }")
+# and a comment that never closes ends the scan rather than looping
+expect_true(grepl("unterminated",
+                  css_force_states(".a:hover { color: red } /* unterminated"),
+                  fixed = TRUE))
+
+# glinty's own stylesheet survives the round trip: every property it
+# reads out afterwards still looks like a property name, which is what
+# caught a rewrite leaking into values in the first place
+own <- readLines(system.file("www", "glinty.css", package = "glinty"),
+                 warn = FALSE)
+forced <- css_force_states(paste(own, collapse = "\n"))
+props <- unique(unlist(lapply(glinty:::css_rules(forced),
+                              function(r) r$properties)))
+expect_equal(props[!grepl("^-?-?[a-z][a-z0-9-]*$", props)], character(0))
+# and the rewrite really happened
+expect_true(grepl("g-force-hover", forced, fixed = TRUE))
 
 # --- shorthands are read back as the longhands they set ---
 expect_true(all(c("background-color", "background-image") %in%
@@ -95,25 +178,52 @@ expect_true(any(grepl("on :hover", found, fixed = TRUE)))
 expect_equal(computed_findings(
         list(k = list(distinct = 1L, values = list("a"))),
         list(k = list(distinct = 1L, values = list("b")))), character(0))
-# and a measurement missing from the second run is not a finding
-expect_equal(computed_findings(before, list()), character(0))
 
-# --- the probe covers the families the source guard names ---
-families <- computed_probe_families()
-bases <- vapply(families, function(f) f$base, character(1))
-expect_equal(sort(bases), sort(names(glinty:::css_variant_families())))
+# --- a short measurement is an error, not a clean bill ---
+#
+# Both runs measure the same probe plan, so the key sets must match.
+# One of them coming back short means a page failed to render or the
+# script stopped early, and every conclusion drawn from it would be
+# "no findings" -- the answer that looks like success.
+expect_error(computed_findings(before, list()),
+             pattern = "do not cover the same probes")
+expect_error(computed_findings(before, c(after, list(surprise = after[[1]]))),
+             pattern = "unexpected")
+expect_error(computed_findings(list(), after), pattern = "unexpected")
+
+# the label names the classes an app would write, not the component
+labelled <- computed_findings(
+    list("text||color" = list(distinct = 2L, values = list("a", "b"))),
+    list("text||color" = list(distinct = 1L, values = list("a"))),
+    labels = c(text = ".g-text"))
+expect_true(grepl(".g-text", labelled[1], fixed = TRUE))
+
+# --- the probe covers every component that has variants ---
+#
+# One entry per component, not per base class: button and
+# download_button both lower to .g-btn, and their probes must not
+# collide.
+props <- lapply(glinty:::css_variant_properties(), computed_longhands)
+families <- computed_probe_families(props)
+components <- vapply(families, function(f) f$component, character(1))
+expect_true(all(names(glinty:::CSS_VARIANT_BUILDERS) %in% components))
+expect_equal(anyDuplicated(components), 0L)
+# text_output is probed, and under its own classes
+outputs <- Filter(function(f) identical(f$component, "text_output"), families)
+expect_equal(length(outputs), 1L)
+expect_equal(outputs[[1]]$classes, "g-output")
+
 for (family in families) {
     expect_true(length(family$variants) > 1L)
     # the markup comes from the real lowering, so it cannot drift from
     # what an app renders
     rendered <- glinty:::component_to_html(family$make(family$variants[1]))
-    expect_true(grepl(paste0("class=\"", family$base), rendered, fixed = TRUE))
+    expect_true(all(family$classes %in% glinty:::html_outer_classes(rendered)),
+                info = paste(family$component, "renders its base classes"))
 }
 
 # --- the page carries both stylesheets, in load order ---
-page <- computed_probe_html("/* APP */", "/* GLINTY */", families,
-                            list("g-btn" = "color", "g-panel" = "color",
-                                 "g-text" = "color", "g-divider" = "color"))
+page <- computed_probe_html("/* APP */", "/* GLINTY */", families)
 expect_true(grepl("GLINTY", page, fixed = TRUE))
 expect_true(grepl("APP", page, fixed = TRUE))
 # the app's sheet loads second, which is the whole reason its rules win
@@ -122,10 +232,7 @@ expect_true(regexpr("GLINTY", page, fixed = TRUE) <
 # the plan is declared once, not once per line of the script
 expect_equal(length(gregexpr("const plan =", page, fixed = TRUE)[[1]]), 1L)
 # the baseline page is the same page without the app's stylesheet
-baseline <- computed_probe_html(NULL, "/* GLINTY */", families,
-                                list("g-btn" = "color", "g-panel" = "color",
-                                     "g-text" = "color",
-                                     "g-divider" = "color"))
+baseline <- computed_probe_html(NULL, "/* GLINTY */", families)
 expect_false(grepl("APP", baseline, fixed = TRUE))
 expect_true(grepl("GLINTY", baseline, fixed = TRUE))
 
@@ -176,6 +283,21 @@ if (is.null(chrome)) {
     # !important on the base class, which no source reader models
     writeLines(".g-btn { color: #333 !important }", tmp)
     expect_true(length(glinty::css_computed_conflicts(tmp)) > 0L)
+
+    # The families used to be a stated table that claimed
+    # `.g-text-muted`. html_text() emits `g-text g-muted`, so `color`
+    # was never in the property set and this came back clean.
+    writeLines(".g-text { color: red !important }", tmp)
+    found <- glinty::css_computed_conflicts(tmp)
+    expect_true(length(found) > 0L)
+    expect_true(all(grepl("text variants", found, fixed = TRUE)))
+    expect_true(any(grepl("color", found, fixed = TRUE)))
+
+    # text_output has its own base class, and had no entry at all
+    writeLines(".g-output { color: red; font-weight: 700 }", tmp)
+    found <- glinty::css_computed_conflicts(tmp)
+    expect_true(length(found) > 0L)
+    expect_true(all(grepl("text_output variants", found, fixed = TRUE)))
 
     # Shared geometry is what a base class is for.
     writeLines(paste(".g-btn { font-family: inherit; cursor: pointer;",

@@ -15,9 +15,10 @@
 # where all the buttons look the same, which is easy to read as a
 # design choice.
 #
-# Which classes form a variant family is stated here, beside a check
-# that the statement matches COMPONENT_SCHEMA and the stylesheet, so
-# the three cannot drift apart quietly.
+# Which classes form a variant family is derived from the lowering --
+# rendered, not restated. It used to be a stated table, and the table
+# was wrong in three places at once, none of which the tests could see
+# because they checked it against the schema it had been built from.
 
 #' Empty out anything a semicolon or colon can hide inside
 #'
@@ -124,36 +125,120 @@ css_rules <- function(text) {
     out
 }
 
+#' One component per variant family, built the way an app builds it
+#'
+#' The families are derived from what these render, so this list is
+#' the only thing stated: which components carry variants at all. The
+#' schema supplies the values; the lowering supplies the classes.
+#'
+#' @return named list: component name -> function(variant) -> component
+#' @keywords internal
+CSS_VARIANT_BUILDERS <- list(
+                             button = function(v) button("probe", "Button", variant = v),
+                             download_button = function(v) download_button("probe", "D", variant = v),
+                             panel = function(v) panel(txt("Panel"), variant = v),
+                             text = function(v) txt("Text", variant = v),
+                             text_output = function(v) text_output("probe", variant = v),
+                             divider = function(v) {
+    if (identical(v, "labelled")) divider("L") else divider()
+}
+)
+
+#' The classes on a rendered component's outermost element
+#'
+#' @param html character one component's HTML
+#' @return character class names, empty when there are none
+#' @keywords internal
+html_outer_classes <- function(html) {
+    open <- regmatches(html, regexpr("^<[a-z][a-z0-9]*[^>]*", html))
+    if (length(open) == 0L) {
+        return(character(0))
+    }
+    attr <- regmatches(open, regexpr("class=\"[^\"]*\"", open))
+    if (length(attr) == 0L) {
+        return(character(0))
+    }
+    parts <- strsplit(sub("^class=\"", "", sub("\"$", "", attr)), " +")[[1]]
+    parts[nzchar(parts)]
+}
+
 #' The base classes that carry variants, and the variants they carry
 #'
-#' Stated, not derived. An earlier version of this read the families out
-#' of glinty.css by looking for `.g-x` with `.g-x-*` siblings, which
-#' invents families that are not ones -- `.g-tab-nav` is a piece of a
-#' tabset rather than a flavour of it, `.g-radio-group` is a container
-#' rather than a kind of radio -- and then needs a blocklist that grows
-#' every time the stylesheet does.
+#' Derived from the lowering: every variant of every component that
+#' has them is rendered, and the classes they all share are the base
+#' while the rest tell them apart.
 #'
-#' Which classes are a variant family is a fact about the lowering that
-#' emits them (see `html_button`, `html_panel`), so it belongs beside
-#' the lowering. ``css_variant_classes_styled()`` checks this against the
-#' stylesheet, so the two cannot drift apart quietly.
+#' This used to be a stated table, and the table was wrong. It said
+#' `text`'s variants were `.g-text-muted` and `.g-text-strong`;
+#' `html_text()` emits `g-text g-muted` and `g-text g-strong`. It gave
+#' `divider` a `.g-divider-line`; the line case adds no class at all.
+#' It had no entry for `text_output`, which lowers to `.g-output`
+#' rather than `.g-text`. So `.g-text { color: red }` -- the exact
+#' shape these guards exist to catch -- went unreported, because
+#' `color` was never in the property set being compared.
+#'
+#' The tests checked the table against `COMPONENT_SCHEMA`, which is
+#' where the variant *values* come from, so a table built out of those
+#' values agreed with itself and the markup was never consulted. It is
+#' computed from the markup now. Deriving from the *stylesheet* would
+#' still be wrong -- that invents families like `.g-tab-nav` and needs
+#' a blocklist that grows with the CSS -- but the lowering is the
+#' authority on which classes exist, and it is the thing that must not
+#' drift from this.
 #'
 #' @return named list: base class -> its variant classes
 #'
 #' @keywords internal
-css_variant_families <- function() {
-    variants <- function(base, values) {
-        stats::setNames(list(paste0(base, "-", values)), base)
+#' Which classes tell each component's variants apart
+#'
+#' The single derivation both guards read: what the lowering emits for
+#' every variant of every component that has them, split into the
+#' classes they all share and the classes that differ.
+#'
+#' @return named list: component -> list(component, values, shared,
+#'   telling)
+#' @keywords internal
+css_variant_components <- function() {
+    out <- list()
+    for (name in names(CSS_VARIANT_BUILDERS)) {
+        values <- COMPONENT_SCHEMA[[name]]$variant$values
+        if (is.null(values)) {
+            stop("component '", name, "' has no variant in COMPONENT_SCHEMA",
+                 call. = FALSE)
+        }
+        classes <- lapply(values, function(v) {
+            html_outer_classes(component_to_html(
+                    CSS_VARIANT_BUILDERS[[name]](v)))
+        })
+        shared <- Reduce(intersect, classes)
+        if (length(shared) == 0L) {
+            stop("component '", name, "' has no class common to all its ",
+                 "variants, so it has no base class to guard", call. = FALSE)
+        }
+        telling <- setdiff(unique(unlist(classes)), shared)
+        if (length(telling) == 0L) {
+            next
+        }
+        out[[name]] <- list(component = name, values = values,
+                            shared = sort(shared), telling = sort(telling))
     }
-    c(
-        # button and download_button share the class and the variant set
-        variants("g-btn",
-                 c("default", "primary", "secondary", "danger", "ghost")),
-        variants("g-panel", c("plain", "card", "sidebar")),
-        # text and text_output; heading is text's only extra
-        variants("g-text", c("normal", "muted", "strong", "heading")),
-        variants("g-divider", c("line", "labelled"))
-    )
+    out
+}
+
+#' @rdname css_variant_components
+#' @keywords internal
+css_variant_families <- function() {
+    out <- list()
+    for (entry in css_variant_components()) {
+        # Registered under every class all its variants share, not
+        # just one. download_button lowers to `g-btn g-btn-<variant>
+        # g-download`, and a rule on `.g-download` cancels the variants
+        # exactly as a rule on `.g-btn` does.
+        for (base in entry$shared) {
+            out[[base]] <- sort(unique(c(out[[base]], entry$telling)))
+        }
+    }
+    out
 }
 
 #' Which variant classes glinty's own stylesheet gives a treatment
@@ -272,6 +357,13 @@ css_variant_conflicts <- function(path, glinty_css = NULL) {
     if (length(families) == 0L) {
         return(character(0))
     }
+    # The classes to name in the message. `.<base>-*` was a pattern
+    # invented from the base name, and now that the families are
+    # derived it invents names that do not exist: `.g-text-*` for a
+    # family whose members are `.g-muted` and `.g-strong`,
+    # `.g-download-*` for one whose members are `.g-btn-*`. Naming the
+    # real ones is the whole point of having derived them.
+    classes <- css_variant_families()
     rules <- css_rules(readLines(path, warn = FALSE))
 
     findings <- character(0)
@@ -288,9 +380,9 @@ css_variant_conflicts <- function(path, glinty_css = NULL) {
             if (length(clash) == 0L) {
                 next
             }
-            variants <- paste0(".", base, "-*")
+            variants <- paste0(".", classes[[base]], collapse = ", ")
             findings <- c(findings, sprintf(
-                    "%s sets %s, which %s also sets: the base rule wins and the variant stops working",
+                    "%s sets %s, which %s also set: the base rule wins and the variant stops working",
                     sel, paste(sort(clash), collapse = ", "), variants
                 ))
         }

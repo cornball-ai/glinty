@@ -31,30 +31,58 @@ expect_equal(length(r), 1L)
 expect_equal(r[[1]]$selectors, ".a")
 expect_equal(r[[1]]$properties, "color")
 
-# --- the families are stated, and match the schema ---
+# --- the families come from the lowering, not from a list ---
 #
-# Which classes form a variant family is a fact about the lowering. This
-# checks the statement against COMPONENT_SCHEMA, so a variant added to
-# the vocabulary without being added here fails rather than going
-# unguarded.
-fam <- families()
-expect_true(all(c("g-btn", "g-panel", "g-text", "g-divider") %in% names(fam)))
+# They used to be stated, and the statement was wrong. It claimed
+# `.g-text-muted` where html_text() emits `g-text g-muted`, gave
+# divider a `.g-divider-line` that no markup carries, and had no entry
+# for text_output, which lowers to `.g-output`. The tests checked the
+# table against COMPONENT_SCHEMA -- which is where the variant *values*
+# come from -- so a table built out of those values agreed with itself
+# and the markup was never consulted.
+components <- glinty:::css_variant_components()
+builders <- glinty:::CSS_VARIANT_BUILDERS
+outer_classes <- glinty:::html_outer_classes
+component_to_html <- glinty:::component_to_html
 
-schema_variants <- function(component) {
-    glinty:::COMPONENT_SCHEMA[[component]]$variant$values
+# every component the schema gives a variant has a builder here, so a
+# variant added to the vocabulary cannot go unguarded
+schema_with_variants <- Filter(function(n) {
+    !is.null(glinty:::COMPONENT_SCHEMA[[n]]$variant)
+}, names(glinty:::COMPONENT_SCHEMA))
+expect_equal(sort(names(builders)), sort(schema_with_variants))
+
+# and every class in the derivation is one the lowering really emits
+for (entry in components) {
+    for (value in entry$values) {
+        cls <- outer_classes(component_to_html(
+                builders[[entry$component]](value)))
+        expect_true(all(entry$shared %in% cls),
+                    info = paste(entry$component, value, "carries the base"))
+        expect_equal(setdiff(cls, c(entry$shared, entry$telling)),
+                     character(0),
+                     info = paste(entry$component, value,
+                                  "emits no class the derivation missed"))
+    }
 }
-for (pair in list(c("button", "g-btn"), c("panel", "g-panel"),
-                  c("text", "g-text"), c("divider", "g-divider"))) {
-    wanted <- paste0(pair[2], "-", schema_variants(pair[1]))
-    expect_true(all(wanted %in% fam[[pair[2]]]),
-                info = paste(pair[1], "variants are all declared a family"))
-}
-# download_button and text_output reuse another component's classes, so
-# their variants must already be covered
-expect_true(all(paste0("g-btn-", schema_variants("download_button")) %in%
+
+fam <- families()
+
+# the specific claims the stated table got wrong
+expect_true(all(c("g-muted", "g-strong") %in% fam[["g-text"]]))
+expect_false("g-text-muted" %in% fam[["g-text"]])
+expect_false("g-divider-line" %in% fam[["g-divider"]])
+# text_output is its own family: .g-output, not .g-text
+expect_true("g-output" %in% names(fam))
+expect_true(all(c("g-muted", "g-strong") %in% fam[["g-output"]]))
+expect_false("g-output" %in% fam[["g-text"]])
+# download_button shares g-btn and adds g-download, and a rule on
+# either one cancels the variants, so both are bases
+expect_true(all(c("g-btn", "g-download") %in% names(fam)))
+expect_equal(fam[["g-download"]], fam[["g-btn"]])
+expect_true(all(paste0("g-btn-",
+                       glinty:::COMPONENT_SCHEMA$button$variant$values) %in%
                 fam[["g-btn"]]))
-expect_true(all(paste0("g-text-", schema_variants("text_output")) %in%
-                fam[["g-text"]]))
 
 # --- the stated names match the stylesheet ---
 # Not every variant needs a rule: default and normal are deliberately
@@ -64,7 +92,9 @@ expect_true(all(paste0("g-text-", schema_variants("text_output")) %in%
 found <- styled()
 expect_true(length(found) > 0L)
 for (base in names(fam)) {
-    expect_true(any(startsWith(found, paste0(base, "-"))),
+    # By membership, not by prefix: .g-muted is one of .g-text's
+    # variants and shares none of its name.
+    expect_true(any(fam[[base]] %in% found),
                 info = paste(base, "has at least one styled variant"))
 }
 # and every styled name is one the families claim
@@ -87,6 +117,26 @@ found <- glinty::css_variant_conflicts(tmp)
 expect_equal(length(found), 1L)
 expect_true(grepl("background", found[1]))
 expect_true(grepl("color", found[1]))
+# the message names the classes that exist, not a pattern built from
+# the base name: `.g-text-*` would be an invention for a family whose
+# members are `.g-muted` and `.g-strong`
+expect_true(grepl(".g-btn-ghost", found[1], fixed = TRUE))
+expect_false(grepl("-*", found[1], fixed = TRUE))
+
+writeLines(".g-text { color: red }", tmp)
+found <- glinty::css_variant_conflicts(tmp)
+expect_equal(length(found), 1L)
+expect_true(grepl(".g-muted", found[1], fixed = TRUE))
+expect_false(grepl(".g-text-*", found[1], fixed = TRUE))
+
+writeLines(".g-download { background: red }", tmp)
+found <- glinty::css_variant_conflicts(tmp)
+expect_equal(length(found), 1L)
+expect_true(grepl(".g-btn-primary", found[1], fixed = TRUE))
+expect_false(grepl(".g-download-", found[1], fixed = TRUE))
+
+writeLines(".g-btn { background: linear-gradient(red, blue); color: #fff }",
+           tmp)
 
 # The fix: the gradient belongs to the variant it describes.
 writeLines(c(".g-btn { font-size: 0.95rem; border-radius: 8px; cursor: pointer }",

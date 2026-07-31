@@ -11,9 +11,9 @@ COMPUTED_STATES
 }
 \description{
 :hover, :focus and :active are the ones a variant defines a
-treatment for. `:focus-visible` rewrites to
-`.g-force-focus-visible`, which nothing carries, so rules written
-against it are not exercised -- a gap worth knowing rather than a
+treatment for. Anything else -- `:focus-visible`, `:disabled` --
+is left exactly as written and simply never matches a probe, so
+rules against it go unexercised: a gap worth knowing rather than a
 wrong answer.
 }
 \keyword{internal}
