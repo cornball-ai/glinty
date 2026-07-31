@@ -1,5 +1,25 @@
 # glinty (development version)
 
+**`css_computed_conflicts()`.** The check `css_variant_conflicts()`
+documents itself as not being. It renders every variant of every
+family, loads the stylesheets in the order a real page loads them, and
+reads `getComputedStyle()` out of headless Chrome -- so it sees what
+the cascade actually did rather than what the selectors look like.
+
+- Catches the three shapes source reading cannot: a `:hover` rule on a
+  base class overruling a variant's hover, `!important`, and a
+  shorthand cancelling a longhand (`background` on `.g-btn` wipes the
+  `background-color` every variant sets).
+- Differential: the page is measured with and without the app's
+  stylesheet, and only a distinction glinty makes and the app removes
+  is a finding. Nothing has to be kept in step with glinty.css.
+- States are forced by rewriting `:hover` into `.g-force-hover`, which
+  has the same specificity, so hover, focus and active are measured
+  alongside the default state.
+- Needs a browser and says so. A missing one is an error naming what
+  to install, never a quiet pass, and `GLINTY_REQUIRE_BROWSER` (set in
+  CI) turns "there was no browser" into a failure.
+
 **`render_image()`.** The renderer the docs for `image_output()` had
 promised all along. Sends kind `image` (`{src, width?, height?}`): a
 `data:` URI, `/static/` path, or URL passes through, and a source
