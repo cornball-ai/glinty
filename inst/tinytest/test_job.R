@@ -97,7 +97,7 @@ expect_equal(resolve_job_lanes(list(gpu = list(concurrency = 1,
 
 # --- a process whose life the test drives ---
 spawned <- list()
-fake_spawner <- function(fn, args) {
+fake_spawner <- function(fn, args, progress_file = NULL) {
     proc <- new.env(parent = emptyenv())
     proc$alive <- TRUE
     proc$value <- NULL
@@ -105,6 +105,7 @@ fake_spawner <- function(fn, args) {
     proc$killed <- FALSE
     proc$fn <- fn
     proc$args <- args
+    proc$progress_file <- progress_file
     spawned[[length(spawned) + 1L]] <<- proc
     list(
         alive = function() proc$alive,
@@ -446,7 +447,7 @@ expect_null(.g$job_timer)
 
 # --- a spawn that fails is an error, not a job stuck queued ---
 reset_jobs()
-options(glinty.job_spawner = function(fn, args) stop("no processes left"))
+options(glinty.job_spawner = function(fn, args, progress_file = NULL) stop("no processes left"))
 f1 <- run_job(function() 1, scope = "app")
 expect_equal(job_status(f1), "error")
 expect_true(grepl("no processes left", job_error(f1), fixed = TRUE))
@@ -454,7 +455,7 @@ expect_equal(length(ls(.g$jobs)), 0L)
 
 # and the slot it never took goes to the job behind it
 reset_jobs(list(default = list(concurrency = 1L, queue = 4L)))
-options(glinty.job_spawner = function(fn, args) stop("no processes left"))
+options(glinty.job_spawner = function(fn, args, progress_file = NULL) stop("no processes left"))
 f2 <- run_job(function() 1, scope = "app")
 f3 <- run_job(function() 2, scope = "app")
 expect_equal(job_status(f2), "error")
@@ -462,7 +463,7 @@ expect_equal(job_status(f3), "error")
 
 # --- printing a handle ---
 reset_jobs()
-options(glinty.job_spawner = function(fn, args) {
+options(glinty.job_spawner = function(fn, args, progress_file = NULL) {
     list(alive = function() TRUE, result = function() NULL,
          kill = function() invisible(NULL))
 })

@@ -1,5 +1,36 @@
 # glinty (development version)
 
+**Background jobs report progress.** `job_progress(job)` is a reactive
+read of what the job last reported, and inside the job the reporting
+call is the same `set_progress()` / `inc_progress()` an in-process
+operation would make -- they notice they are running in a background
+process and write where the server is reading. Instrumented code moves
+into a job without being rewritten.
+
+```r
+job <- run_job(function(n) {
+    for (i in seq_len(n)) {
+        glinty::set_progress(i / n, detail = paste("step", i))
+        one_step(i)
+    }
+}, args = list(n = 10))
+
+output$bar <- render_text(function() {
+    p <- job_progress(job)
+    if (is.null(p)) "starting" else paste0(round(p$value * 100), "%")
+})
+```
+
+- The path travels in the child's environment, so the job's function
+  needs no extra argument of its own -- and a job that does not report
+  progress carries no spare parameter.
+- The file holds one line, overwritten: progress is a level, not a
+  stream, and a file that grew with every update would make each poll
+  cost more than the one before.
+- Resolution is `getOption("glinty.job_poll", 0.25)` seconds rather
+  than every call the job makes.
+- `run_example("jobs")` shows the percentage while the work runs.
+
 **`css_computed_conflicts()`.** The check `css_variant_conflicts()`
 documents itself as not being. It renders every variant of every
 family, loads the stylesheets in the order a real page loads them, and

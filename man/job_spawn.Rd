@@ -3,12 +3,16 @@
 \alias{job_spawn}
 \title{Start a background R process}
 \usage{
-job_spawn(fn, args)
+job_spawn(fn, args, progress_file = NULL)
 }
 \arguments{
 \item{fn}{function to run}
 
 \item{args}{list of arguments}
+
+\item{progress_file}{character path the child reports progress to,
+passed in the environment so it costs the job's function no
+argument of its own}
 }
 \value{
 list(alive, result, kill)
