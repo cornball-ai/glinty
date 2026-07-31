@@ -405,7 +405,7 @@ job_poll <- function() {
         # update deleted along with the file, having never been read.
         reported <- job_read_progress(job)
         if (!is.null(reported) &&
-                !identical(reported, isolate(job$progress()))) {
+            !identical(reported, isolate(job$progress()))) {
             job$progress(reported)
         }
         alive <- tryCatch(job$proc$alive(), error = function(e) FALSE)
@@ -699,7 +699,11 @@ job_spawn <- function(fn, args, progress_file = NULL) {
 #' @keywords internal
 job_progress_path <- function() {
     path <- Sys.getenv("GLINTY_JOB_PROGRESS", "")
-    if (nzchar(path)) path else NULL
+    if (nzchar(path)) {
+        path
+    } else {
+        NULL
+    }
 }
 
 #' Write this job's progress where the server will read it
@@ -739,8 +743,7 @@ job_report_progress <- function(value = NULL, detail = NULL, message = NULL,
     # work matters; the bar does not. An unopenable path warns before
     # it errors, so both are swallowed -- a warning surfacing from the
     # child would land in stderr and read as a failure of the work.
-    tryCatch(suppressWarnings(writeLines(line, path)),
-             error = function(e) NULL)
+    tryCatch(suppressWarnings(writeLines(line, path)), error = function(e) NULL)
     TRUE
 }
 
