@@ -354,8 +354,7 @@ image_value <- function(v) {
 # Image types glinty can name without being told; the set every
 # frontend displays.
 IMAGE_MIME <- c(png = "image/png", jpg = "image/jpeg", jpeg = "image/jpeg",
-                gif = "image/gif", webp = "image/webp",
-                svg = "image/svg+xml")
+                gif = "image/gif", webp = "image/webp", svg = "image/svg+xml")
 
 #' The media type of an image file
 #'

@@ -70,14 +70,13 @@ css_force_states <- function(css) {
 #' @keywords internal
 computed_longhands <- function(props) {
     map <- list(
-        background = c("background-color", "background-image"),
-        border = c("border-top-color", "border-top-width",
-                   "border-top-style"),
-        "border-color" = "border-top-color",
-        "border-bottom" = c("border-bottom-color", "border-bottom-width"),
-        padding = c("padding-top", "padding-left"),
-        margin = c("margin-top", "margin-left"),
-        font = c("font-size", "font-weight", "font-family")
+                background = c("background-color", "background-image"),
+                border = c("border-top-color", "border-top-width", "border-top-style"),
+                "border-color" = "border-top-color",
+                "border-bottom" = c("border-bottom-color", "border-bottom-width"),
+                padding = c("padding-top", "padding-left"),
+                margin = c("margin-top", "margin-left"),
+                font = c("font-size", "font-weight", "font-family")
     )
     out <- character(0)
     for (prop in props) {
@@ -98,12 +97,12 @@ computed_longhands <- function(props) {
 #' @keywords internal
 computed_probe_families <- function() {
     make <- list(
-        "g-btn" = function(v) button("probe", "Button", variant = v),
-        "g-panel" = function(v) panel(txt("Panel"), variant = v),
-        "g-text" = function(v) txt("Text", variant = v),
-        "g-divider" = function(v) {
-            if (identical(v, "labelled")) divider("Label") else divider()
-        }
+                 "g-btn" = function(v) button("probe", "Button", variant = v),
+                 "g-panel" = function(v) panel(txt("Panel"), variant = v),
+                 "g-text" = function(v) txt("Text", variant = v),
+                 "g-divider" = function(v) {
+        if (identical(v, "labelled")) divider("Label") else divider()
+    }
     )
     families <- css_variant_families()
     out <- list()
@@ -165,8 +164,8 @@ computed_probe_html <- function(app_css, glinty_css, families, props) {
             for (state in c("", COMPUTED_STATES)) {
                 id <- paste(family$base, variant, state, sep = "|")
                 html <- component_to_html(family$make(variant))
-                parts <- c(parts, probe_element(html, id,
-                                                if (nzchar(state)) state))
+                parts <- c(parts,
+                           probe_element(html, id, if (nzchar(state)) state))
             }
         }
         # I() so a family or property list of length one still
@@ -181,21 +180,21 @@ computed_probe_html <- function(app_css, glinty_css, families, props) {
     # script and `const plan` redeclared fifty times.
     script <- paste(c(
                       paste0("const plan = ", as.character(jsonlite::toJSON(
-                    unname(plan), auto_unbox = TRUE)), ";"),
+                        unname(plan), auto_unbox = TRUE)), ";"),
                       readLines(system.file("tools", "computed-style.js",
-                                            package = "glinty"), warn = FALSE)
-    ), collapse = "\n")
+                    package = "glinty"), warn = FALSE)
+        ), collapse = "\n")
     paste0(
-        "<!doctype html><html><head><meta charset=\"utf-8\">\n",
-        "<style>\n", css_force_states(glinty_css), "\n</style>\n",
+           "<!doctype html><html><head><meta charset=\"utf-8\">\n",
+           "<style>\n", css_force_states(glinty_css), "\n</style>\n",
         if (is.null(app_css)) {
             ""
         } else {
             paste0("<style>\n", css_force_states(app_css), "\n</style>\n")
         },
-        "</head><body>\n", paste(parts, collapse = "\n"),
-        "\n<pre id=\"glinty-computed\"></pre>\n",
-        "<script>\n", script, "\n</script>\n</body></html>"
+           "</head><body>\n", paste(parts, collapse = "\n"),
+           "\n<pre id=\"glinty-computed\"></pre>\n",
+           "<script>\n", script, "\n</script>\n</body></html>"
     )
 }
 
@@ -213,13 +212,14 @@ computed_measure <- function(html, chrome, dir, tag) {
     out <- suppressWarnings(system2(chrome, c(
                 "--headless", "--disable-gpu", "--no-sandbox",
                 "--no-first-run", "--disable-extensions",
-                paste0("--user-data-dir=", file.path(dir, paste0(tag, "-profile"))),
+                paste0("--user-data-dir=",
+                       file.path(dir, paste0(tag, "-profile"))),
                 "--virtual-time-budget=2000", "--dump-dom",
                 paste0("file://", page)
             ), stdout = TRUE, stderr = FALSE))
     dom <- paste(out, collapse = "\n")
     found <- regmatches(dom, regexpr(
-            "<pre id=\"glinty-computed\">.*?</pre>", dom, perl = TRUE))
+                                     "<pre id=\"glinty-computed\">.*?</pre>", dom, perl = TRUE))
     if (length(found) == 0L) {
         stop("the browser returned a page without the probe results; ",
              "it may have failed to start", call. = FALSE)
@@ -298,7 +298,7 @@ css_computed_conflicts <- function(path, chrome = NULL, glinty_css = NULL) {
     }
     if (is.null(glinty_css)) {
         glinty_css <- readLines(system.file("www", "glinty.css",
-                                            package = "glinty"), warn = FALSE)
+                package = "glinty"), warn = FALSE)
     }
     glinty_css <- paste(glinty_css, collapse = "\n")
     app_css <- paste(readLines(path, warn = FALSE), collapse = "\n")
@@ -316,11 +316,11 @@ css_computed_conflicts <- function(path, chrome = NULL, glinty_css = NULL) {
     on.exit(unlink(dir, recursive = TRUE), add = TRUE)
 
     baseline <- computed_measure(
-        computed_probe_html(NULL, glinty_css, families, props),
-        browser_bin, dir, "baseline")
+                                 computed_probe_html(NULL, glinty_css, families, props),
+                                 browser_bin, dir, "baseline")
     withapp <- computed_measure(
-        computed_probe_html(app_css, glinty_css, families, props),
-        browser_bin, dir, "app")
+                                computed_probe_html(app_css, glinty_css, families, props),
+                                browser_bin, dir, "app")
 
     computed_findings(baseline, withapp)
 }
@@ -349,14 +349,14 @@ computed_findings <- function(baseline, withapp) {
         }
         parts <- strsplit(key, "|", fixed = TRUE)[[1]]
         findings <- c(findings, sprintf(
-                ".%s-* all share one %s%s (%s) where glinty gives them %d: the variant stops working",
-                parts[1], parts[3],
+                                        ".%s-* all share one %s%s (%s) where glinty gives them %d: the variant stops working",
+                                        parts[1], parts[3],
                 if (length(parts) > 2L && nzchar(parts[2])) {
                     paste0(" on :", parts[2])
                 } else {
                     ""
                 },
-                after$values[[1]], before$distinct
+                                        after$values[[1]], before$distinct
             ))
     }
     sort(findings)
