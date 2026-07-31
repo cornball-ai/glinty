@@ -152,9 +152,8 @@ expect_equal(job_progress(running)$value, 0.6)
 
 # --- the last report survives the job finishing ---
 #
-# The file is deleted when the job settles, and a job that reports and
-# then finishes in the same breath would otherwise lose its final
-# update between one poll and the next.
+# The file is deleted when the job settles, so the final value has to
+# be read before that happens.
 writeLines('{"value":1,"message":"done","detail":"finished"}',
            running$progress_file)
 kept <- running$progress_file
@@ -167,6 +166,50 @@ expect_equal(job_progress(running)$value, 1)
 expect_equal(job_progress(running)$detail, "finished")
 # and the file is gone rather than left in tempdir for the session
 expect_false(file.exists(kept))
+
+# --- the last report survives even when it lands mid-sweep ---
+#
+# Reading before the liveness check is not enough on its own. The
+# child can write its final value in the gap between that read and
+# alive() answering false, and the file is deleted a moment later. The
+# window is small and entirely real: a job whose last act is to report
+# 100% would lose it as often as the scheduler felt like.
+#
+# This fake writes the final value from inside alive(), which puts the
+# write exactly in that gap, every time.
+reset_progress()
+racing <- NULL
+options(glinty.job_spawner = function(fn, args, progress_file = NULL) {
+    proc <- new.env(parent = emptyenv())
+    proc$alive <- TRUE
+    proc$polls <- 0L
+    spawned[[length(spawned) + 1L]] <<- proc
+    list(
+        alive = function() {
+            proc$polls <- proc$polls + 1L
+            if (proc$polls >= 2L) {
+                # after the sweep has already read the file
+                writeLines('{"value":1,"message":"","detail":"last word"}',
+                           progress_file)
+                proc$alive <- FALSE
+            }
+            proc$alive
+        },
+        result = function() "result",
+        kill = function() proc$alive <- FALSE
+    )
+})
+racing <- run_job(function() 1, scope = "app")
+writeLines('{"value":0.5,"message":"","detail":"halfway"}',
+           racing$progress_file)
+job_poll()
+expect_equal(job_progress(racing)$detail, "halfway")
+
+job_poll()
+flush_reactions()
+expect_equal(job_status(racing), "done")
+expect_equal(job_progress(racing)$detail, "last word")
+expect_equal(job_progress(racing)$value, 1)
 
 # a cancelled job cleans up too
 reset_progress()

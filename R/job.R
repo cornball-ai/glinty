@@ -337,11 +337,25 @@ job_start <- function(job) {
 job_settle <- function(job, status, result = NULL, error = NULL) {
     job$proc <- NULL
     if (!is.null(job$progress_file)) {
-        # No last read here. job_poll() reads progress before it asks
-        # whether the process is alive, so the sweep that settles a
-        # job has already taken whatever it reported on its way out.
-        # A read at this point was unreachable, and a mutation sweep
-        # said so: breaking it changed nothing.
+        # The last word, read after the process is known to be over.
+        #
+        # Reading before the liveness check is not enough: the child
+        # can write its final value in the gap between that read and
+        # alive() answering false, and then the file would be deleted
+        # having never been read. The window is small and entirely
+        # real -- a job whose last act is to report 100% would lose it
+        # about as often as the scheduler felt like.
+        #
+        # A first attempt dropped this as unreachable because a
+        # mutation sweep did not kill it. The sweep was right that
+        # nothing tested it and wrong about why: the fake process
+        # settled between polls rather than during one. A fake whose
+        # alive() writes the final value and then returns FALSE
+        # reproduces it exactly.
+        final <- job_read_progress(job)
+        if (!is.null(final)) {
+            job$progress(final)
+        }
         unlink(job$progress_file)
         job$progress_file <- NULL
     }
