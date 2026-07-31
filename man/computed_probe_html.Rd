@@ -3,7 +3,7 @@
 \alias{computed_probe_html}
 \title{Build the page the browser measures}
 \usage{
-computed_probe_html(app_css, glinty_css, families, props)
+computed_probe_html(app_css, glinty_css, families)
 }
 \arguments{
 \item{app_css}{character app stylesheet text, or NULL for the
@@ -12,8 +12,6 @@ baseline page}
 \item{glinty_css}{character glinty stylesheet text}
 
 \item{families}{list from computed_probe_families()}
-
-\item{props}{named list of properties to read, per base class}
 }
 \value{
 character HTML document

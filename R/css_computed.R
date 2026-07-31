@@ -32,9 +32,9 @@
 #' Which states the probe forces
 #'
 #' :hover, :focus and :active are the ones a variant defines a
-#' treatment for. `:focus-visible` rewrites to
-#' `.g-force-focus-visible`, which nothing carries, so rules written
-#' against it are not exercised -- a gap worth knowing rather than a
+#' treatment for. Anything else -- `:focus-visible`, `:disabled` --
+#' is left exactly as written and simply never matches a probe, so
+#' rules against it go unexercised: a gap worth knowing rather than a
 #' wrong answer.
 #'
 #' @keywords internal
@@ -52,11 +52,74 @@ COMPUTED_STATES <- c("hover", "focus", "active")
 #' @return the same text with state pseudo-classes rewritten
 #' @keywords internal
 css_force_states <- function(css) {
-    for (state in COMPUTED_STATES) {
-        css <- gsub(paste0("(?<!:):", state, "\\b"),
-                    paste0(".g-force-", state), css, perl = TRUE)
+    # Selector preludes only. A declaration's *value* is none of this
+    # function's business, and a stylesheet is full of values a plain
+    # gsub would rewrite: `content: ":hover"` is legal CSS, and every
+    # icon in glinty.css is a data URI.
+    #
+    # "Prelude" is not the same as "depth 0": @media holds rules, so
+    # the selectors inside it are preludes too, while the declarations
+    # inside those are not. The stack records which kind of block each
+    # brace opened.
+    nesting <- c("@media", "@supports", "@container", "@layer", "@scope")
+    chars <- strsplit(css, "", fixed = TRUE)[[1]]
+    out <- as.list(chars)
+    stack <- logical(0)
+    prelude <- character(0)
+    quote <- ""
+    i <- 1L
+    n <- length(chars)
+    in_prelude <- function() length(stack) == 0L || all(stack)
+
+    while (i <= n) {
+        ch <- chars[i]
+        if (nzchar(quote)) {
+            if (identical(ch, quote) && !identical(chars[max(1L, i - 1L)],
+                    "\\")) {
+                quote <- ""
+            }
+            i <- i + 1L
+            next
+        }
+        if (ch %in% c("\"", "'")) {
+            quote <- ch
+            prelude <- c(prelude, ch)
+            i <- i + 1L
+            next
+        }
+        if (identical(ch, "{")) {
+            text <- trimws(paste(prelude, collapse = ""))
+            at <- regmatches(text, regexpr("@[a-z-]+", text))
+            stack <- c(stack, length(at) > 0L && at[1] %in% nesting)
+            prelude <- character(0)
+            i <- i + 1L
+            next
+        }
+        if (identical(ch, "}")) {
+            stack <- utils::head(stack, -1L)
+            prelude <- character(0)
+            i <- i + 1L
+            next
+        }
+        if (identical(ch, ":") && in_prelude() &&
+            !identical(chars[max(1L, i - 1L)], ":")) {
+            rest <- paste(chars[i:min(n, i + 20L)], collapse = "")
+            hit <- COMPUTED_STATES[vapply(COMPUTED_STATES, function(state) {
+                grepl(paste0("^:", state, "([^a-z0-9-]|$)"), rest)
+            }, logical(1))]
+            if (length(hit) > 0L) {
+                out[[i]] <- paste0(".g-force-", hit[1])
+                blank <- seq.int(i + 1L, i + nchar(hit[1]))
+                out[blank] <- ""
+                prelude <- c(prelude, out[[i]])
+                i <- i + nchar(hit[1]) + 1L
+                next
+            }
+        }
+        prelude <- c(prelude, ch)
+        i <- i + 1L
     }
-    css
+    paste(unlist(out), collapse = "")
 }
 
 #' The longhand properties a shorthand resolves to
@@ -93,26 +156,28 @@ computed_longhands <- function(props) {
 #' written out here, so a change to how a button lowers cannot leave
 #' this probing something the app never renders.
 #'
-#' @return list of list(base, variants, html) entries
+#' It probes one entry per *component*, not per base class, because
+#' two components can share a base -- button and download_button both
+#' lower to `.g-btn` -- and their probes must not collide. The classes
+#' each one shares across its variants come along for the message.
+#'
+#' @param props named list: base class -> properties to read
+#' @return list of list(component, classes, variants, make, properties)
 #' @keywords internal
-computed_probe_families <- function() {
-    make <- list(
-                 "g-btn" = function(v) button("probe", "Button", variant = v),
-                 "g-panel" = function(v) panel(txt("Panel"), variant = v),
-                 "g-text" = function(v) txt("Text", variant = v),
-                 "g-divider" = function(v) {
-        if (identical(v, "labelled")) divider("Label") else divider()
-    }
-    )
-    families <- css_variant_families()
+computed_probe_families <- function(props) {
     out <- list()
-    for (base in names(families)) {
-        if (is.null(make[[base]])) {
+    for (entry in css_variant_components()) {
+        wanted <- unique(unlist(props[entry$shared], use.names = FALSE))
+        if (length(wanted) == 0L) {
             next
         }
-        variants <- sub(paste0("^", base, "-"), "", families[[base]])
-        out[[length(out) + 1L]] <- list(base = base, variants = variants,
-                                        make = make[[base]])
+        out[[length(out) + 1L]] <- list(
+                                        component = entry$component,
+                                        classes = entry$shared,
+                                        variants = entry$values,
+                                        make = CSS_VARIANT_BUILDERS[[entry$component]],
+                                        properties = wanted
+        )
     }
     out
 }
@@ -153,16 +218,15 @@ probe_element <- function(html, id, force = NULL) {
 #'   baseline page
 #' @param glinty_css character glinty stylesheet text
 #' @param families list from computed_probe_families()
-#' @param props named list of properties to read, per base class
 #' @return character HTML document
 #' @keywords internal
-computed_probe_html <- function(app_css, glinty_css, families, props) {
+computed_probe_html <- function(app_css, glinty_css, families) {
     parts <- character(0)
     plan <- list()
     for (family in families) {
         for (variant in family$variants) {
             for (state in c("", COMPUTED_STATES)) {
-                id <- paste(family$base, variant, state, sep = "|")
+                id <- paste(family$component, variant, state, sep = "|")
                 html <- component_to_html(family$make(variant))
                 parts <- c(parts,
                            probe_element(html, id, if (nzchar(state)) state))
@@ -171,9 +235,9 @@ computed_probe_html <- function(app_css, glinty_css, families, props) {
         # I() so a family or property list of length one still
         # crosses as an array: auto_unbox would make it a string, and
         # the page would iterate its characters.
-        plan[[family$base]] <- list(base = family$base,
-                                    variants = I(family$variants),
-                                    properties = I(props[[family$base]]))
+        plan[[family$component]] <- list(base = family$component,
+            variants = I(family$variants),
+            properties = I(family$properties))
     }
     # c() then collapse, not paste() of several vectors: paste()
     # recycles, so the plan would be repeated onto every line of the
@@ -303,26 +367,28 @@ css_computed_conflicts <- function(path, chrome = NULL, glinty_css = NULL) {
     glinty_css <- paste(glinty_css, collapse = "\n")
     app_css <- paste(readLines(path, warn = FALSE), collapse = "\n")
 
-    families <- computed_probe_families()
-    variant_props <- css_variant_properties(glinty_css)
-    props <- lapply(variant_props, computed_longhands)
-    families <- Filter(function(f) length(props[[f$base]]) > 0L, families)
+    props <- lapply(css_variant_properties(glinty_css), computed_longhands)
+    families <- computed_probe_families(props)
     if (length(families) == 0L) {
         return(character(0))
     }
+    labels <- vapply(families, function(f) {
+        paste0(".", f$classes, collapse = "")
+    }, character(1))
+    names(labels) <- vapply(families, function(f) f$component, character(1))
 
     dir <- file.path(tempdir(), paste0("glinty-computed-", Sys.getpid()))
     dir.create(dir, showWarnings = FALSE, recursive = TRUE)
     on.exit(unlink(dir, recursive = TRUE), add = TRUE)
 
     baseline <- computed_measure(
-                                 computed_probe_html(NULL, glinty_css, families, props),
-                                 browser_bin, dir, "baseline")
+                                 computed_probe_html(NULL, glinty_css, families), browser_bin, dir,
+                                 "baseline")
     withapp <- computed_measure(
-                                computed_probe_html(app_css, glinty_css, families, props),
-                                browser_bin, dir, "app")
+                                computed_probe_html(app_css, glinty_css, families), browser_bin, dir,
+                                "app")
 
-    computed_findings(baseline, withapp)
+    computed_findings(baseline, withapp, labels)
 }
 
 #' Turn two measurements into findings
@@ -332,25 +398,52 @@ css_computed_conflicts <- function(path, chrome = NULL, glinty_css = NULL) {
 #' glinty did not make -- is an app styling its variants, which is the
 #' whole point of variants.
 #'
+#' Both runs measure the same probe plan, so the two sets of keys must
+#' match exactly. A key in one and not the other means a page failed
+#' to render or the script stopped early, and every conclusion drawn
+#' from a short measurement would be "no findings" -- the answer that
+#' looks like success.
+#'
 #' @param baseline list from computed_measure() without the app CSS
 #' @param withapp list from computed_measure() with it
+#' @param labels named character: component -> the classes to name in
+#'   the message
 #' @return character vector of findings
 #' @keywords internal
-computed_findings <- function(baseline, withapp) {
+computed_findings <- function(baseline, withapp, labels = character(0)) {
+    missing <- setdiff(names(baseline), names(withapp))
+    extra <- setdiff(names(withapp), names(baseline))
+    if (length(missing) > 0L || length(extra) > 0L) {
+        stop("the two measurements do not cover the same probes, so ",
+             "neither can be trusted: ",
+            if (length(missing)) {
+                paste0(length(missing), " missing (", missing[1], ")")
+            } else {
+                ""
+            },
+            if (length(extra)) {
+                paste0(length(extra), " unexpected (", extra[1], ")")
+            } else {
+                ""
+            }, call. = FALSE)
+    }
     findings <- character(0)
     for (key in names(baseline)) {
         before <- baseline[[key]]
         after <- withapp[[key]]
-        if (is.null(after) || !isTRUE(before$distinct > 1L)) {
-            next
-        }
-        if (after$distinct > 1L) {
+        if (!isTRUE(before$distinct > 1L) || after$distinct > 1L) {
             next
         }
         parts <- strsplit(key, "|", fixed = TRUE)[[1]]
+        # Single bracket: [[ errors on a name that is not there, and a
+        # missing label is a cosmetic problem, not a reason to fail.
+        label <- unname(labels[parts[1]])
+        if (length(label) != 1L || is.na(label)) {
+            label <- parts[1]
+        }
         findings <- c(findings, sprintf(
-                                        ".%s-* all share one %s%s (%s) where glinty gives them %d: the variant stops working",
-                                        parts[1], parts[3],
+                                        "%s variants (%s) all share one %s%s (%s) where glinty gives them %d: the variant stops working",
+                                        parts[1], label, parts[3],
                 if (length(parts) > 2L && nzchar(parts[2])) {
                     paste0(" on :", parts[2])
                 } else {
