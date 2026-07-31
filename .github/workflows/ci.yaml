@@ -69,7 +69,17 @@ jobs:
           R CMD build .
           _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --as-cran glinty_*.tar.gz
 
+      # GLINTY_REQUIRE_BROWSER turns "no browser, so those checks did
+      # not run" from a quiet pass into a failure. The runner image
+      # ships Google Chrome, so the computed-style checks are expected
+      # to run here; if they ever stop, that is either a changed image
+      # or a broken find_chrome(), and both should be loud.
+      - name: The browser the computed-style checks need
+        run: google-chrome --version
+
       - name: Test
+        env:
+          GLINTY_REQUIRE_BROWSER: "1"
         run: |
           sudo R CMD INSTALL glinty_*.tar.gz
           Rscript -e 'tinytest::test_package("glinty")'
