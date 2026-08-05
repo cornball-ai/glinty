@@ -102,8 +102,10 @@ get_header <- function(req, name) {
 http_response_raw <- function(status, content_type, body,
                               extra_headers = NULL) {
     reason <- switch(as.character(status), "200" = "OK",
-                     "400" = "Bad Request", "403" = "Forbidden",
-                     "404" = "Not Found", "426" = "Upgrade Required",
+                     "206" = "Partial Content", "400" = "Bad Request",
+                     "403" = "Forbidden", "404" = "Not Found",
+                     "416" = "Range Not Satisfiable",
+                     "426" = "Upgrade Required",
                      "500" = "Internal Server Error", "OK")
     if (is.character(body)) {
         body <- charToRaw(paste(body, collapse = ""))
@@ -127,15 +129,71 @@ http_response_raw <- function(status, content_type, body,
     c(charToRaw(header), body)
 }
 
+#' Parse a byte-range request header
+#'
+#' Handles the single-range forms a media element actually sends:
+#' `bytes=from-to`, `bytes=from-` (to the end) and `bytes=-suffix` (the
+#' last n bytes). Anything else, multi-range included, returns `NULL`:
+#' the whole file is always a valid answer to a range request, so an
+#' unparsed header costs a fall back rather than an error.
+#'
+#' @param range character `Range` header value, or NULL
+#' @param size numeric file size in bytes
+#' @return `NULL` to serve the whole file, `NA` when the range names
+#'   bytes the file does not have (a 416), otherwise `list(from, to)`
+#'   with inclusive zero-based offsets
+#' @keywords internal
+parse_range <- function(range, size) {
+    if (is.null(range) || length(range) != 1L || is.na(range) ||
+        !nzchar(range)) {
+        return(NULL)
+    }
+    m <- regmatches(range,
+                    regexec("^bytes=([0-9]*)-([0-9]*)$", trimws(range)))[[1]]
+    if (length(m) != 3L || (!nzchar(m[2]) && !nzchar(m[3]))) {
+        return(NULL)
+    }
+    if (!is.finite(size) || size <= 0) {
+        return(NA)
+    }
+    if (nzchar(m[2])) {
+        from <- as.numeric(m[2])
+        to <- if (nzchar(m[3])) as.numeric(m[3]) else size - 1
+        if (from >= size) {
+            return(NA)
+        }
+        to <- min(to, size - 1)
+    } else {
+        n <- as.numeric(m[3]) # suffix: the last n bytes
+        if (n <= 0) {
+            return(NA)
+        }
+        from <- max(0, size - n)
+        to <- size - 1
+    }
+    if (to < from) {
+        return(NA)
+    }
+    list(from = from, to = to)
+}
+
 #' Serve a file from a static directory
 #'
-#' Keeps browseR's traversal guard and MIME table.
+#' Keeps browseR's traversal guard and MIME table, and answers byte-range
+#' requests.
+#'
+#' Ranges are what make a `<video>` seekable: without them the element
+#' can play from the start but every scrub re-fetches the file, and the
+#' whole thing passes through memory each time. Every response advertises
+#' `Accept-Ranges: bytes`, because a client that is not told it can seek
+#' will not try.
 #'
 #' @param file_name character path relative to dir
 #' @param dir character directory to serve from
+#' @param range character `Range` header value, or NULL for the whole file
 #' @return raw HTTP response
 #' @keywords internal
-serve_static <- function(file_name, dir) {
+serve_static <- function(file_name, dir, range = NULL) {
     if (grepl("..", file_name, fixed = TRUE)) {
         return(http_response_raw(403L, "text/plain", "Forbidden"))
     }
@@ -143,15 +201,38 @@ serve_static <- function(file_name, dir) {
     if (!file.exists(file_path) || dir.exists(file_path)) {
         return(http_response_raw(404L, "text/plain", "Not found"))
     }
-    body <- readBin(file_path, "raw", file.info(file_path)$size)
-    http_response_raw(200L, mime_type(tools::file_ext(file_path)), body)
+    size <- file.info(file_path)$size
+    ctype <- mime_type(tools::file_ext(file_path))
+    span <- parse_range(range, size)
+    if (is.null(span)) {
+        body <- readBin(file_path, "raw", size)
+        return(http_response_raw(200L, ctype, body,
+                                 c("Accept-Ranges" = "bytes")))
+    }
+    if (!is.list(span)) {
+        return(http_response_raw(416L, "text/plain", "Range Not Satisfiable",
+                                 c("Accept-Ranges" = "bytes",
+                                   "Content-Range" = paste0("bytes */", size))))
+    }
+    con <- file(file_path, "rb")
+    on.exit(close(con), add = TRUE)
+    if (span$from > 0) {
+        seek(con, where = span$from)
+    }
+    body <- readBin(con, "raw", span$to - span$from + 1)
+    http_response_raw(206L, ctype, body,
+                      c("Accept-Ranges" = "bytes",
+                        "Content-Range" = sprintf("bytes %.0f-%.0f/%.0f",
+                                                  span$from, span$to, size)))
 }
 
 #' Map a file extension to a MIME type
 #'
-#' webm is registered as video/webm for the container, but glinty's
-#' only media output is audio, and audio-only webm in an <audio>
-#' element wants audio/webm.
+#' webm is registered as video/webm for the container, but glinty
+#' produces audio-only webm and an <audio> element wants audio/webm.
+#' It stays audio here for that reason: a served .webm is one glinty
+#' wrote. mp4/m4v/mov carry no such history and map to video, which is
+#' what a <video> element needs to play a file at all.
 #'
 #' @param ext character file extension, with or without case
 #' @return character MIME type, falling back to
@@ -165,6 +246,8 @@ mime_type <- function(ext) {
            "svg" = "image/svg+xml", "ico" = "image/x-icon",
            "wav" = "audio/wav", "mp3" = "audio/mpeg", "m4a" = "audio/mp4",
            "ogg" = "audio/ogg", "flac" = "audio/flac", "webm" = "audio/webm",
+           "mp4" = "video/mp4", "m4v" = "video/mp4",
+           "mov" = "video/quicktime",
            "woff" = "font/woff", "woff2" = "font/woff2",
            "pdf" = "application/pdf", "zip" = "application/zip",
            "json" = "application/json", "application/octet-stream")
