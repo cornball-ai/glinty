@@ -3,9 +3,16 @@
 \alias{run_app}
 \title{Run a glinty application}
 \usage{
-run_app(app_obj, port = NULL, auth = NULL, static_dir = "www",
-        job_lanes = NULL, max_upload = 10485760L, check_secrets = TRUE,
-        quiet = FALSE)
+run_app(
+  app_obj,
+  port = NULL,
+  auth = NULL,
+  static_dir = "www",
+  job_lanes = NULL,
+  max_upload = 10485760L,
+  check_secrets = TRUE,
+  quiet = FALSE
+)
 }
 \arguments{
 \item{app_obj}{a glinty_app object}

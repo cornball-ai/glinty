@@ -3,8 +3,13 @@
 \alias{radio_buttons}
 \title{Create a radio button group}
 \usage{
-radio_buttons(id, label = "", choices = character(0), selected = NULL,
-              emit = "settle")
+radio_buttons(
+  id,
+  label = "",
+  choices = character(0),
+  selected = NULL,
+  emit = "settle"
+)
 }
 \arguments{
 \item{id}{character input ID}

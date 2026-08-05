@@ -3,8 +3,14 @@
 \alias{field}
 \title{Declare one component field}
 \usage{
-field(type, required = FALSE, default = NULL, values = NULL, min = NULL,
-      max = NULL)
+field(
+  type,
+  required = FALSE,
+  default = NULL,
+  values = NULL,
+  min = NULL,
+  max = NULL
+)
 }
 \arguments{
 \item{type}{character one of "string", "number", "int", "bool",

@@ -3,8 +3,14 @@
 \alias{update_select_input}
 \title{Update a select input from the server}
 \usage{
-update_select_input(session, id, choices = NULL, selected = NULL, label = NULL,
-                    multiple = NULL)
+update_select_input(
+  session,
+  id,
+  choices = NULL,
+  selected = NULL,
+  label = NULL,
+  multiple = NULL
+)
 }
 \arguments{
 \item{session}{a glinty_session}

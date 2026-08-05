@@ -3,7 +3,14 @@
 \alias{date_input}
 \title{Create a date input}
 \usage{
-date_input(id, label = "", value = NULL, min = NULL, max = NULL, emit = "settle")
+date_input(
+  id,
+  label = "",
+  value = NULL,
+  min = NULL,
+  max = NULL,
+  emit = "settle"
+)
 }
 \arguments{
 \item{id}{character input ID}

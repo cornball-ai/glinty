@@ -3,8 +3,15 @@
 \alias{number_input}
 \title{Create a numeric input}
 \usage{
-number_input(id, label = "", value = NULL, min = NULL, max = NULL, step = NULL,
-             emit = "live")
+number_input(
+  id,
+  label = "",
+  value = NULL,
+  min = NULL,
+  max = NULL,
+  step = NULL,
+  emit = "live"
+)
 }
 \arguments{
 \item{id}{character input ID}

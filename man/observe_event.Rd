@@ -3,8 +3,15 @@
 \alias{observe_event}
 \title{Observe a single reactive event}
 \usage{
-observe_event(event_fn, handler_fn, ignore_init = TRUE, ignore_null = TRUE,
-              once = FALSE, priority = 0L, label = "")
+observe_event(
+  event_fn,
+  handler_fn,
+  ignore_init = TRUE,
+  ignore_null = TRUE,
+  once = FALSE,
+  priority = 0L,
+  label = ""
+)
 }
 \arguments{
 \item{event_fn}{a zero-arg function whose tracked reads define the

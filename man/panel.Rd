@@ -3,7 +3,14 @@
 \alias{panel}
 \title{Group children in a container}
 \usage{
-panel(..., variant = "plain", title = NULL, grow = NULL, width = NULL, id = NULL)
+panel(
+  ...,
+  variant = "plain",
+  title = NULL,
+  grow = NULL,
+  width = NULL,
+  id = NULL
+)
 }
 \arguments{
 \item{...}{child components}

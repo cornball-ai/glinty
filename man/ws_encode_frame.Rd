@@ -3,7 +3,13 @@
 \alias{ws_encode_frame}
 \title{Encode one frame}
 \usage{
-ws_encode_frame(opcode, payload = raw(0L), mask = FALSE, fin = TRUE, key = NULL)
+ws_encode_frame(
+  opcode,
+  payload = raw(0L),
+  mask = FALSE,
+  fin = TRUE,
+  key = NULL
+)
 }
 \arguments{
 \item{opcode}{integer frame opcode}

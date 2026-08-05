@@ -3,8 +3,15 @@
 \alias{slider_input}
 \title{Create a range slider}
 \usage{
-slider_input(id, label = "", min = 0, max = 1, value = NULL, step = NULL,
-             emit = "live")
+slider_input(
+  id,
+  label = "",
+  min = 0,
+  max = 1,
+  value = NULL,
+  step = NULL,
+  emit = "live"
+)
 }
 \arguments{
 \item{id}{character input ID}

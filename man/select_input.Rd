@@ -3,8 +3,14 @@
 \alias{select_input}
 \title{Create a select dropdown}
 \usage{
-select_input(id, label = "", choices = character(0), selected = NULL,
-             multiple = FALSE, emit = "settle")
+select_input(
+  id,
+  label = "",
+  choices = character(0),
+  selected = NULL,
+  multiple = FALSE,
+  emit = "settle"
+)
 }
 \arguments{
 \item{id}{character input ID}
