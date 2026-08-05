@@ -342,11 +342,14 @@ route_http <- function(req, page_html, pkg_www, static_dir,
     if (req$path %in% c("/", "")) {
         return(http_response_raw(200L, "text/html; charset=utf-8", page_html))
     }
+    # A media element seeks by asking for byte ranges; the header has to
+    # reach serve_static() or every scrub costs a whole file.
+    range <- get_header(req, "range")
     if (startsWith(req$path, "/glinty/")) {
-        return(serve_static(sub("^/glinty/", "", req$path), pkg_www))
+        return(serve_static(sub("^/glinty/", "", req$path), pkg_www, range))
     }
     if (!is.null(static_dir) && startsWith(req$path, "/static/")) {
-        return(serve_static(sub("^/static/", "", req$path), static_dir))
+        return(serve_static(sub("^/static/", "", req$path), static_dir, range))
     }
     http_response_raw(404L, "text/plain", "Not found")
 }
