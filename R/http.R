@@ -148,8 +148,7 @@ parse_range <- function(range, size) {
         !nzchar(range)) {
         return(NULL)
     }
-    m <- regmatches(range,
-                    regexec("^bytes=([0-9]*)-([0-9]*)$", trimws(range)))[[1]]
+    m <- regmatches(range, regexec("^bytes=([0-9]*)-([0-9]*)$", trimws(range)))[[1]]
     if (length(m) != 3L || (!nzchar(m[2]) && !nzchar(m[3]))) {
         return(NULL)
     }
@@ -158,7 +157,11 @@ parse_range <- function(range, size) {
     }
     if (nzchar(m[2])) {
         from <- as.numeric(m[2])
-        to <- if (nzchar(m[3])) as.numeric(m[3]) else size - 1
+        if (nzchar(m[3])) {
+            to <- as.numeric(m[3])
+        } else {
+            to <- size - 1
+        }
         if (from >= size) {
             return(NA)
         }
@@ -223,7 +226,7 @@ serve_static <- function(file_name, dir, range = NULL) {
     http_response_raw(206L, ctype, body,
                       c("Accept-Ranges" = "bytes",
                         "Content-Range" = sprintf("bytes %.0f-%.0f/%.0f",
-                                                  span$from, span$to, size)))
+                span$from, span$to, size)))
 }
 
 #' Map a file extension to a MIME type
@@ -247,8 +250,8 @@ mime_type <- function(ext) {
            "wav" = "audio/wav", "mp3" = "audio/mpeg", "m4a" = "audio/mp4",
            "ogg" = "audio/ogg", "flac" = "audio/flac", "webm" = "audio/webm",
            "mp4" = "video/mp4", "m4v" = "video/mp4",
-           "mov" = "video/quicktime",
-           "woff" = "font/woff", "woff2" = "font/woff2",
-           "pdf" = "application/pdf", "zip" = "application/zip",
-           "json" = "application/json", "application/octet-stream")
+           "mov" = "video/quicktime", "woff" = "font/woff",
+           "woff2" = "font/woff2", "pdf" = "application/pdf",
+           "zip" = "application/zip", "json" = "application/json",
+           "application/octet-stream")
 }
