@@ -3,8 +3,14 @@
 \alias{page}
 \title{Create a page}
 \usage{
-page(..., title = "glinty app", css = NULL, js = NULL, favicon = NULL,
-     head = NULL)
+page(
+  ...,
+  title = "glinty app",
+  css = NULL,
+  js = NULL,
+  favicon = NULL,
+  head = NULL
+)
 }
 \arguments{
 \item{...}{child components}

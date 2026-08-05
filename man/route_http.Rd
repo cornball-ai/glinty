@@ -3,7 +3,13 @@
 \alias{route_http}
 \title{Route a plain HTTP request}
 \usage{
-route_http(req, page_html, pkg_www, static_dir, started = as.numeric(Sys.time()))
+route_http(
+  req,
+  page_html,
+  pkg_www,
+  static_dir,
+  started = as.numeric(Sys.time())
+)
 }
 \arguments{
 \item{req}{parsed request}

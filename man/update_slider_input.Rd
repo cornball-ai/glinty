@@ -3,8 +3,14 @@
 \alias{update_slider_input}
 \title{Update a slider input from the server}
 \usage{
-update_slider_input(session, id, value = NULL, min = NULL, max = NULL,
-                    step = NULL)
+update_slider_input(
+  session,
+  id,
+  value = NULL,
+  min = NULL,
+  max = NULL,
+  step = NULL
+)
 }
 \arguments{
 \item{session}{a glinty_session}

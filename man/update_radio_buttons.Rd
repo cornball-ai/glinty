@@ -3,7 +3,13 @@
 \alias{update_radio_buttons}
 \title{Update a radio button group from the server}
 \usage{
-update_radio_buttons(session, id, choices = NULL, selected = NULL, label = NULL)
+update_radio_buttons(
+  session,
+  id,
+  choices = NULL,
+  selected = NULL,
+  label = NULL
+)
 }
 \arguments{
 \item{session}{a glinty_session}

@@ -3,8 +3,14 @@
 \alias{textarea_input}
 \title{Create a multi-line text input}
 \usage{
-textarea_input(id, label = "", value = "", rows = 4L, placeholder = NULL,
-               emit = "live")
+textarea_input(
+  id,
+  label = "",
+  value = "",
+  rows = 4L,
+  placeholder = NULL,
+  emit = "live"
+)
 }
 \arguments{
 \item{id}{character input ID}

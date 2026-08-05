@@ -3,8 +3,13 @@
 \alias{full_page_html}
 \title{Wrap rendered HTML in a full page}
 \usage{
-full_page_html(body_html, title = "glinty app", head = NULL,
-               ui_revision = NULL, theme_css = NULL)
+full_page_html(
+  body_html,
+  title = "glinty app",
+  head = NULL,
+  ui_revision = NULL,
+  theme_css = NULL
+)
 }
 \arguments{
 \item{body_html}{character HTML for the page body}

@@ -3,8 +3,13 @@
 \alias{jwt_auth}
 \title{Verify JSON Web Tokens in run_app(auth = )}
 \usage{
-jwt_auth(secret = NULL, pubkey = NULL, algorithm = c("HS256", "RS256"),
-         aud = NULL, leeway = 30)
+jwt_auth(
+  secret = NULL,
+  pubkey = NULL,
+  algorithm = c("HS256", "RS256"),
+  aud = NULL,
+  leeway = 30
+)
 }
 \arguments{
 \item{secret}{character HMAC secret, for HS256}
