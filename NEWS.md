@@ -1,5 +1,16 @@
 # glinty (development version)
 
+**Four S3 methods were shipping with no documentation.** `$`, `[[`,
+`$<-` and `[[<-` on the input and output proxies had help pages that
+`R CMD build` was silently dropping: their file names contain
+characters that are not legal on every platform, so the build printed
+"excluding invalid files" and carried on, and the `R CMD check` that
+followed read a tarball they were no longer in. Every CI job stayed
+green. Fixed in tinyrox (>= 0.4.1.1), which now names them
+`cash-.glinty_input.Rd` and so on, with the real topic kept in
+`\name{}` so help still resolves. CI reads the build's own account of
+what it excluded now, rather than only the check that follows it.
+
 **Background jobs report progress.** `job_progress(job)` is a reactive
 read of what the job last reported, and inside the job the reporting
 call is the same `set_progress()` / `inc_progress()` an in-process
