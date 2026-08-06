@@ -64,9 +64,21 @@ jobs:
             if (length(pkgs)) install.packages(pkgs)
           '
 
+      # R CMD build drops files it considers invalid -- a man page
+      # named after an S3 method on `$` or `[[`, for one -- and says so
+      # in passing rather than failing. The check that follows then
+      # examines a tarball those files are not in and reports nothing
+      # wrong. Four of glinty's help topics went missing that way while
+      # every job here stayed green, so the build's own account of what
+      # it threw away is now read.
       - name: Build and check
         run: |
-          R CMD build .
+          R CMD build . 2>&1 | tee /tmp/build.log
+          if grep -q "excluding invalid files" /tmp/build.log; then
+            echo "::error::R CMD build excluded files from the tarball"
+            sed -n '/excluding invalid files/,/^\*/p' /tmp/build.log
+            exit 1
+          fi
           _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --as-cran glinty_*.tar.gz
 
       # GLINTY_REQUIRE_BROWSER turns "no browser, so those checks did
