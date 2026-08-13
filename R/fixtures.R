@@ -115,8 +115,7 @@ component_fixtures <- function() {
         ),
                  list(
                       name = "plot-output-height-only",
-                      component = component("plot_output", id = "strip",
-                height = 120L),
+                      component = component("plot_output", id = "strip", height = 120L),
                       notes = "the timeline-strip shape: width tracks the container, height is declared"
         ),
                  list(
