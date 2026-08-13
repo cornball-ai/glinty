@@ -525,6 +525,21 @@ fixed_plot <- component_to_html(component("plot_output", id = "p",
 expect_true(grepl('width="400"', fixed_plot, fixed = TRUE))
 expect_false(grepl("aspect-ratio", fixed_plot, fixed = TRUE))
 
+# a height-only plot still tracks its container's width -- the
+# timeline-strip shape -- but its height is declared, so the aspect
+# fallback stays off
+half_plot <- component_to_html(component("plot_output", id = "p",
+                                         height = 340L))
+expect_true(grepl("width:100%", half_plot, fixed = TRUE))
+expect_false(grepl("aspect-ratio", half_plot, fixed = TRUE))
+expect_true(grepl('height="340"', half_plot, fixed = TRUE))
+
+# width-only stays fully declared on that axis: no container tracking
+wide_plot <- component_to_html(component("plot_output", id = "p",
+                                         width = 400L))
+expect_false(grepl("width:100%", wide_plot, fixed = TRUE))
+expect_true(grepl('width="400"', wide_plot, fixed = TRUE))
+
 # --- tabset marks exactly one panel open ---
 tabs <- component_to_html(component("tabset", id = "t", panels = list(
     list(title = "One", children = list(component("text", value = "a"))),

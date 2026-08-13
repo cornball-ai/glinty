@@ -982,9 +982,12 @@
                 alt: c.alt,
                 width: c.width,
                 height: c.height,
-                style: (c.width === null || c.width === undefined) &&
-                    (c.height === null || c.height === undefined)
-                    ? "width:100%;aspect-ratio:4 / 3" : null
+                /* no width: fill the container; the aspect fallback
+                   only rides when the height is open too */
+                style: (c.width === null || c.width === undefined)
+                    ? ((c.height === null || c.height === undefined)
+                        ? "width:100%;aspect-ratio:4 / 3" : "width:100%")
+                    : null
             }));
         case "image_output":
             return el("img", assign(slotAttrs(c), {

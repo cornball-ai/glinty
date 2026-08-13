@@ -114,6 +114,11 @@ component_fixtures <- function() {
                       notes = "explicit dimensions, which a native client needs"
         ),
                  list(
+                      name = "plot-output-height-only",
+                      component = component("plot_output", id = "strip", height = 120L),
+                      notes = "the timeline-strip shape: width tracks the container, height is declared"
+        ),
+                 list(
                       name = "audio-output",
                       component = component("audio_output", id = "player"),
                       notes = "browser has a player element; Flutter needs a package outside the SDK"
