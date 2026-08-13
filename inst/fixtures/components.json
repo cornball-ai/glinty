@@ -122,7 +122,8 @@
               }
             ]
           }
-        ]
+        ],
+        "scroll": false
       }
     },
     {
@@ -138,7 +139,8 @@
           }
         ],
         "variant": "card",
-        "title": "Results"
+        "title": "Results",
+        "fill": false
       }
     },
     {
@@ -146,7 +148,8 @@
       "notes": "a lowering must not crash on an empty container",
       "component": {
         "component": "column",
-        "children": []
+        "children": [],
+        "scroll": false
       }
     },
     {
@@ -345,7 +348,74 @@
             "level": 1
           }
         ],
-        "title": "Fixture page"
+        "title": "Fixture page",
+        "width": "content"
+      }
+    },
+    {
+      "name": "page-full",
+      "notes": "width is a viewport hint; the browser drops the reading column, native may ignore it",
+      "component": {
+        "component": "page",
+        "children": [
+          {
+            "component": "text",
+            "value": "wide",
+            "variant": "normal"
+          }
+        ],
+        "title": "Workspace",
+        "width": "full"
+      }
+    },
+    {
+      "name": "workspace-fill",
+      "notes": "the workspace shape: stretched row, filled panel, a grown column that scrolls its overflow",
+      "component": {
+        "component": "row",
+        "children": [
+          {
+            "component": "panel",
+            "children": [
+              {
+                "component": "column",
+                "children": [
+                  {
+                    "component": "text",
+                    "value": "log",
+                    "variant": "normal"
+                  }
+                ],
+                "grow": 1,
+                "scroll": true
+              }
+            ],
+            "variant": "plain",
+            "grow": 1,
+            "fill": true
+          }
+        ],
+        "align": "stretch"
+      }
+    },
+    {
+      "name": "text-mono-small",
+      "notes": "mono aligns by character, small is fine print; both stay semantic",
+      "component": {
+        "component": "column",
+        "children": [
+          {
+            "component": "text",
+            "value": "00:01:12",
+            "variant": "mono"
+          },
+          {
+            "component": "text",
+            "value": "fine print",
+            "variant": "small"
+          }
+        ],
+        "scroll": false
       }
     },
     {
@@ -565,7 +635,8 @@
               }
             ],
             "variant": "sidebar",
-            "width": 280
+            "width": 280,
+            "fill": false
           },
           {
             "component": "column",
@@ -576,7 +647,8 @@
                 "variant": "normal"
               }
             ],
-            "grow": 1
+            "grow": 1,
+            "scroll": false
           }
         ],
         "gap": 16

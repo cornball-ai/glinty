@@ -491,12 +491,16 @@
         normal: "g-text",
         muted: "g-text g-muted",
         strong: "g-text g-strong",
-        heading: "g-text g-text-heading"
+        heading: "g-text g-text-heading",
+        mono: "g-text g-mono",
+        small: "g-text g-small"
     };
     var OUTPUT_CLASSES = {
         normal: "g-output",
         muted: "g-output g-muted",
-        strong: "g-output g-strong"
+        strong: "g-output g-strong",
+        mono: "g-output g-mono",
+        small: "g-output g-small"
     };
     var OUTPUT_KIND_OF = {
         text_output: "text",
@@ -523,8 +527,8 @@
        warning rather than an error, because a same-protocol server
        one release newer may know variants this client does not. */
     var KNOWN_VARIANTS = {
-        text: ["normal", "muted", "strong", "heading"],
-        text_output: ["normal", "muted", "strong"],
+        text: ["normal", "muted", "strong", "heading", "mono", "small"],
+        text_output: ["normal", "muted", "strong", "mono", "small"],
         button: ["default", "primary", "secondary", "danger", "ghost"],
         download_button: ["default", "primary", "secondary", "danger",
                           "ghost"],
@@ -634,12 +638,12 @@
         }
         if (c.align) {
             var map = { start: "flex-start", center: "center",
-                        end: "flex-end" };
+                        end: "flex-end", stretch: "stretch" };
             style.push("align-items:" + map[c.align]);
         }
         style = style.concat(flexStyle(c));
         var node = el("div", {
-            "class": cls + sizedClass(c),
+            "class": cls + sizedClass(c) + (c.scroll ? " g-scroll" : ""),
             id: c.id,
             style: style.length ? style.join(";") : null
         });
@@ -889,7 +893,10 @@
             node.setAttribute("data-g-size", c.size);
             return node;
         case "page":
-            node = el("div", { "class": "g-page", id: c.id });
+            node = el("div", {
+                "class": c.width === "full" ? "g-page g-page-full" : "g-page",
+                id: c.id
+            });
             appendChildren(node, c.children);
             return node;
         case "row":
@@ -900,7 +907,8 @@
             var panelStyle = flexStyle(c);
             node = el("div", {
                 "class": "g-panel g-panel-" +
-                    checkVariant("panel", c.variant) + sizedClass(c),
+                    checkVariant("panel", c.variant) + sizedClass(c) +
+                    (c.fill ? " g-fill" : ""),
                 id: c.id,
                 style: panelStyle.length ? panelStyle.join(";") : null
             });

@@ -41,7 +41,7 @@
                 "size": 16
               }
             },
-            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
               "children": [
@@ -63,7 +63,8 @@
                   "variant": "normal"
                 }
               ],
-              "title": "Demo"
+              "title": "Demo",
+              "width": "content"
             }
           }
         }
@@ -79,7 +80,7 @@
             "type": "hello",
             "protocol": 3,
             "client": "glinty-js/0.5.0",
-            "prerendered": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9"
+            "prerendered": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86"
           }
         },
         {
@@ -88,7 +89,7 @@
             "type": "welcome",
             "session": "s2",
             "protocol": 3,
-            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
               "children": [
@@ -110,7 +111,8 @@
                   "variant": "normal"
                 }
               ],
-              "title": "Demo"
+              "title": "Demo",
+              "width": "content"
             }
           }
         }
@@ -135,7 +137,7 @@
             "type": "welcome",
             "session": "s6",
             "protocol": 3,
-            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
               "children": [
@@ -157,7 +159,8 @@
                   "variant": "normal"
                 }
               ],
-              "title": "Demo"
+              "title": "Demo",
+              "width": "content"
             }
           }
         }
@@ -229,7 +232,7 @@
             "type": "welcome",
             "session": "s3",
             "protocol": 3,
-            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
               "children": [
@@ -251,7 +254,8 @@
                   "variant": "normal"
                 }
               ],
-              "title": "Demo"
+              "title": "Demo",
+              "width": "content"
             }
           }
         }
@@ -275,7 +279,7 @@
             "type": "welcome",
             "session": "s4",
             "protocol": 4,
-            "ui_revision": "f495e3f2685614c4c5f5768b987c2767178d4b85c051c6288174d113a00e40a9",
+            "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
               "children": [
@@ -297,7 +301,8 @@
                   "variant": "normal"
                 }
               ],
-              "title": "Demo"
+              "title": "Demo",
+              "width": "content"
             }
           }
         }
@@ -481,7 +486,8 @@
                   "value": "",
                   "emit": "live"
                 }
-              ]
+              ],
+              "scroll": false
             }
           }
         }

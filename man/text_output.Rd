@@ -8,7 +8,9 @@ text_output(id, variant = "normal")
 \arguments{
 \item{id}{character output ID}
 
-\item{variant}{character "normal", "muted" or "strong"}
+\item{variant}{character "normal", "muted", "strong", "mono" or
+"small". "mono" is for values that align by character: timecodes,
+file listings, hashes. "small" is fine print}
 }
 \value{
 A UI component

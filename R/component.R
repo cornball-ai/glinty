@@ -51,7 +51,8 @@ COMPONENT_SCHEMA <- list(
                          text = list(
                                      value = field("string", required = TRUE),
                                      variant = field("enum", default = "normal",
-            values = c("normal", "muted", "strong", "heading")),
+            values = c("normal", "muted", "strong", "heading", "mono",
+                       "small")),
                                      id = field("string")
     ),
                          heading = list(
@@ -90,6 +91,14 @@ COMPONENT_SCHEMA <- list(
                          page = list(
                                      children = field("children", required = TRUE),
                                      title = field("string", default = "glinty app"),
+                                     # "content" is the centred reading column;
+                                     # "full" hands a workspace app the whole
+                                     # viewport. An enum rather than a number:
+                                     # the browser maps it to max-width, a
+                                     # native frontend to padding, and neither
+                                     # mapping survives the other's units.
+                                     width = field("enum", default = "content",
+            values = c("content", "full")),
                                      id = field("string")
     ),
                          # `grow` and `width` say how a container takes space
@@ -103,7 +112,7 @@ COMPONENT_SCHEMA <- list(
                          row = list(
                                     children = field("children", required = TRUE),
                                     gap = field("int", min = 0, max = 128),
-                                    align = field("enum", values = c("start", "center", "end")),
+                                    align = field("enum", values = c("start", "center", "end", "stretch")),
                                     grow = field("int", min = 0, max = 32),
                                     width = field("int", min = 0, max = 4096),
                                     id = field("string")
@@ -113,6 +122,11 @@ COMPONENT_SCHEMA <- list(
                                        gap = field("int", min = 0, max = 128),
                                        grow = field("int", min = 0, max = 32),
                                        width = field("int", min = 0, max = 4096),
+                                       # A column that scrolls its overflow
+                                       # instead of growing the page: the
+                                       # message-list / log shape. Pairs with
+                                       # `grow` inside a filled panel.
+                                       scroll = field("bool", default = FALSE),
                                        id = field("string")
     ),
                          panel = list(
@@ -122,6 +136,12 @@ COMPONENT_SCHEMA <- list(
                                       title = field("string"),
                                       grow = field("int", min = 0, max = 32),
                                       width = field("int", min = 0, max = 4096),
+                                      # The panel becomes a column that hands
+                                      # its height to its children, so one of
+                                      # them can grow and scroll. Without it a
+                                      # panel is only ever as tall as its
+                                      # content.
+                                      fill = field("bool", default = FALSE),
                                       id = field("string")
     ),
                          # A picture that is part of the UI rather than an
@@ -266,7 +286,7 @@ COMPONENT_SCHEMA <- list(
                          text_output = list(
         id = field("string", required = TRUE),
         variant = field("enum", default = "normal",
-                        values = c("normal", "muted", "strong"))
+                        values = c("normal", "muted", "strong", "mono", "small"))
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),

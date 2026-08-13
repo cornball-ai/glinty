@@ -267,8 +267,8 @@ class GlintyRenderer {
   /// same-protocol server one release newer may know variants this
   /// client does not.
   static const _knownVariants = <String, List<String>>{
-    'text': ['normal', 'muted', 'strong', 'heading'],
-    'text_output': ['normal', 'muted', 'strong'],
+    'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
+    'text_output': ['normal', 'muted', 'strong', 'mono', 'small'],
     'button': ['default', 'primary', 'secondary', 'danger', 'ghost'],
     'download_button': ['default', 'primary', 'secondary', 'danger', 'ghost'],
     'panel': ['plain', 'card', 'sidebar'],
@@ -408,7 +408,14 @@ class GlintyRenderer {
       case 'page':
         return _column(context, c);
       case 'column':
-        return _sized(c, _column(context, c));
+        // scroll: overflow scrolls instead of growing the page. Grown
+        // children inside stop growing, which _spaced documents -- a
+        // scroll view has all the height it asks for and none spare.
+        return _sized(
+            c,
+            c.boolean('scroll')
+                ? SingleChildScrollView(child: _column(context, c))
+                : _column(context, c));
       case 'row':
         return _sized(c, _row(context, c));
       case 'panel':
@@ -485,6 +492,13 @@ class GlintyRenderer {
         return theme.bodyMedium?.copyWith(fontWeight: FontWeight.bold);
       case 'heading':
         return theme.titleMedium;
+      case 'mono':
+        // the verbatim output's stack: the theme's mono token first
+        return theme.bodySmall?.copyWith(
+            fontFamily: monoStack.first,
+            fontFamilyFallback: monoStack.sublist(1));
+      case 'small':
+        return theme.bodySmall;
       default:
         return theme.bodyMedium;
     }
@@ -606,19 +620,26 @@ class GlintyRenderer {
     final wants = c.children.any((k) => (k.integer('grow') ?? 0) > 0);
     Widget make(bool canGrow) {
       final kids = _spaced(context, c.children, gap, row, canGrow: canGrow);
-      return row
-          ? Row(
-              mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
-              crossAxisAlignment: switch (c.str('align')) {
-                'center' => CrossAxisAlignment.center,
-                'end' => CrossAxisAlignment.end,
-                _ => CrossAxisAlignment.start,
-              },
-              children: kids)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
-              children: kids);
+      if (!row) {
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
+            children: kids);
+      }
+      final made = Row(
+          mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: switch (c.str('align')) {
+            'center' => CrossAxisAlignment.center,
+            'end' => CrossAxisAlignment.end,
+            'stretch' => CrossAxisAlignment.stretch,
+            _ => CrossAxisAlignment.start,
+          },
+          children: kids);
+      // stretch forces a tight cross axis on every child, which is an
+      // error when the row's own height is unbounded -- the usual case
+      // inside a page column. IntrinsicHeight bounds it at the tallest
+      // child, which is what the browser's align-items: stretch does.
+      return c.str('align') == 'stretch' ? IntrinsicHeight(child: made) : made;
     }
 
     // No grown child means no constraint to check, and no reason to
@@ -638,18 +659,31 @@ class GlintyRenderer {
 
   Widget _panel(BuildContext context, GlintyComponent c) {
     final title = c.str('title');
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (title != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-          ),
-        ...c.children.map((k) => build(context, k)),
-      ],
-    );
+    final fill = c.boolean('fill');
+    Widget makeBody(bool canGrow) => Column(
+          // filled panels stretch children across their width, the way
+          // the browser's flex column does; plain panels keep the old
+          // start alignment
+          crossAxisAlignment:
+              fill ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+          mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            if (title != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child:
+                    Text(title, style: Theme.of(context).textTheme.titleSmall),
+              ),
+            ..._spaced(context, c.children, 0, false, canGrow: canGrow),
+          ],
+        );
+    // No LayoutBuilder gate here, unlike _flex: a filled panel's
+    // natural home is a stretched row, which measures its children
+    // through IntrinsicHeight -- and a LayoutBuilder cannot answer an
+    // intrinsics query. So fill grants Expanded outright. A filled
+    // panel in an unbounded spot is a layout error by definition:
+    // there is no height to hand over.
+    final body = makeBody(fill);
     final variant = _variant('panel', c.str('variant'));
     if (variant == 'card') {
       return Card(child: Padding(padding: const EdgeInsets.all(12), child: body));

@@ -299,8 +299,10 @@ same as safe to add.
 | `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload` | `size: int` (16) |
 | `divider` | — | `label: string`, `variant` |
 | `spacer` | — | `size: int` (1, in theme spacing units) |
-| `row` / `column` | `children: []` | `gap: int`, `align`, `grow: int`, `width: int`, `id` |
-| `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `id` |
+| `page` | `children: []` | `title` ("glinty app"), `width`: `content` \| `full` (`content`), `id` |
+| `row` | `children: []` | `gap: int`, `align`: `start` \| `center` \| `end` \| `stretch`, `grow: int`, `width: int`, `id` |
+| `column` | `children: []` | `gap: int`, `grow: int`, `width: int`, `scroll: bool` (false), `id` |
+| `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `fill: bool` (false), `id` |
 | `image` | `src: string` | `alt` (""), `width: int`, `height: int` |
 | `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
@@ -349,8 +351,9 @@ rather than an intention.
 | `icon` | `Icon` | name → `IconData`; needs a name→icon map |
 | `divider` | `Divider` | `labelled` → `Row` with `Expanded` rules |
 | `spacer` | `SizedBox` | size × theme spacing |
-| `row` / `column` | `Row` / `Column` | `gap` → separators; `grow` → `Expanded`, `width` → `SizedBox` |
-| `panel` | `Card` / `Container` | variant selects |
+| `page` | `Column` | `width` is a viewport-layout hint; native keeps its own padding |
+| `row` / `column` | `Row` / `Column` | `gap` → separators; `grow` → `Expanded`, `width` → `SizedBox`; `align: stretch` → `IntrinsicHeight`; `scroll` → `SingleChildScrollView` |
+| `panel` | `Card` / `Container` | variant selects; `fill` → a max-size `Column` whose grown children take `Expanded` |
 | `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit |
 | `password_input` | `TextField(obscureText: true)` | |
 | `textarea_input` | `TextField(maxLines:)` | |
@@ -604,8 +607,8 @@ client is free to render `danger` however it likes.
 |---|---|
 | `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost` |
 | `panel` | `plain`, `card`, `sidebar` |
-| `text` | `normal`, `muted`, `strong`, `heading` |
-| `text_output` | `normal`, `muted`, `strong` |
+| `text` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
+| `text_output` | `normal`, `muted`, `strong`, `mono`, `small` |
 | `divider` | `line`, `labelled` |
 
 Unknown variants fall back to the first listed, with a console warning

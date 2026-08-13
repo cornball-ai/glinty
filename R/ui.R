@@ -12,6 +12,9 @@
 #'
 #' @param ... child components
 #' @param title character page title
+#' @param width character "content" for the centred reading column,
+#'   "full" for the whole viewport. Forms and documents read best in a
+#'   column; a workspace with side-by-side panels wants everything
 #' @param css character vector of stylesheet URLs, e.g.
 #'   "/static/styles.css"
 #' @param js character vector of script URLs
@@ -21,10 +24,11 @@
 #' @return A UI component
 #' @examples
 #' page(heading("Hello"), title = "My app")
+#' page(row(panel(txt("left")), panel(txt("right"))), width = "full")
 #' @export
-page <- function(..., title = "glinty app", css = NULL, js = NULL,
-                 favicon = NULL, head = NULL) {
-    x <- component("page", children = list(...), title = title)
+page <- function(..., title = "glinty app", width = "content", css = NULL,
+                 js = NULL, favicon = NULL, head = NULL) {
+    x <- component("page", children = list(...), title = title, width = width)
     # Assets are a transport concern, not UI. Kept off the component so
     # they never reach a client that cannot use them.
     attr(x, "assets") <- page_head(css = css, js = js, favicon = favicon,
@@ -41,7 +45,9 @@ page <- function(..., title = "glinty app", css = NULL, js = NULL,
 #' on the wire; only the R name gives way.
 #'
 #' @param value character text to show
-#' @param variant character "normal", "muted", "strong" or "heading"
+#' @param variant character "normal", "muted", "strong", "heading",
+#'   "mono" or "small". "mono" is for values that align by character:
+#'   timecodes, file listings, hashes. "small" is fine print
 #' @param id character element ID
 #' @return A UI component
 #' @examples
@@ -140,7 +146,9 @@ spacer <- function(size = 1L) {
 #'
 #' @param ... child components
 #' @param gap integer space between children, in pixels
-#' @param align character "start", "center" or "end"
+#' @param align character "start", "center", "end" or "stretch";
+#'   "stretch" makes every child as tall as the tallest, which is what
+#'   side-by-side panels want
 #' @param grow integer share of the parent's spare space; 0 or NULL
 #'   takes none. A row of one grown child and one fixed-width child is
 #'   the sidebar-plus-content shape
@@ -163,14 +171,19 @@ row <- function(..., gap = NULL, align = NULL, grow = NULL, width = NULL,
 #' @param grow integer share of the parent's spare space; 0 or NULL
 #'   takes none
 #' @param width integer fixed width in pixels
+#' @param scroll logical scroll overflowing content instead of growing.
+#'   A grown, scrolling column inside `panel(fill = TRUE)` is the
+#'   message-list shape: it takes the panel's spare height and scrolls
+#'   what does not fit
 #' @param id character element ID
 #' @return A UI component
 #' @examples
 #' column(heading("Stack"), text_output("a"), text_output("b"))
 #' @export
-column <- function(..., gap = NULL, grow = NULL, width = NULL, id = NULL) {
+column <- function(..., gap = NULL, grow = NULL, width = NULL,
+                   scroll = FALSE, id = NULL) {
     component("column", children = list(...), gap = gap, grow = grow,
-              width = width, id = id)
+              width = width, scroll = scroll, id = id)
 }
 
 #' Group children in a container
@@ -181,15 +194,21 @@ column <- function(..., gap = NULL, grow = NULL, width = NULL, id = NULL) {
 #' @param grow integer share of the parent's spare space; 0 or NULL
 #'   takes none
 #' @param width integer fixed width in pixels
+#' @param fill logical hand the panel's height to its children, so one
+#'   of them can grow into it. Without it a panel is as tall as its
+#'   content and a child's `grow` has nothing to take
 #' @param id character element ID
 #' @return A UI component
 #' @examples
 #' panel(txt("body"), variant = "card", title = "Results")
+#' panel(column(text_output("log"), grow = 1L, scroll = TRUE),
+#'       fill = TRUE)
 #' @export
 panel <- function(..., variant = "plain", title = NULL, grow = NULL,
-                  width = NULL, id = NULL) {
+                  width = NULL, fill = FALSE, id = NULL) {
     component("panel", children = list(...), variant = variant,
-              title = title, grow = grow, width = width, id = id)
+              title = title, grow = grow, width = width, fill = fill,
+              id = id)
 }
 
 #' A picture that is part of the UI

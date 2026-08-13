@@ -10,7 +10,9 @@ row(..., gap = NULL, align = NULL, grow = NULL, width = NULL, id = NULL)
 
 \item{gap}{integer space between children, in pixels}
 
-\item{align}{character "start", "center" or "end"}
+\item{align}{character "start", "center", "end" or "stretch";
+"stretch" makes every child as tall as the tallest, which is what
+side-by-side panels want}
 
 \item{grow}{integer share of the parent's spare space; 0 or NULL
 takes none. A row of one grown child and one fixed-width child is
