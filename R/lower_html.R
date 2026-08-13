@@ -545,8 +545,7 @@ html_video_output <- function(x) {
                             controls = if (isTRUE(x$controls)) "controls",
                             autoplay = if (isTRUE(x$autoplay)) "autoplay",
                             muted = if (isTRUE(x$muted)) "muted",
-                            loop = if (isTRUE(x$loop)) "loop",
-                            preload = "metadata")))
+                            loop = if (isTRUE(x$loop)) "loop", preload = "metadata")))
 }
 
 # --- composite layout ---

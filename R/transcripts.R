@@ -302,8 +302,7 @@ wire_transcripts <- function() {
                             "without replacing the element -- an output",
                             "message swaps the video, this moves inside it"),
               frames = list(
-                            list(dir = "in", message = list(type = "event",
-                        id = "render")),
+                            list(dir = "in", message = list(type = "event", id = "render")),
                             list(dir = "out", message = list(
                         type = "output", id = "preview", kind = "video",
                         value = list(src = "/static/cut.mp4",
