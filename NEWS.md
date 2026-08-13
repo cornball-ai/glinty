@@ -1,5 +1,26 @@
 # glinty (development version)
 
+**The workspace vocabulary.** A workspace app -- an editor, a
+dashboard, anything built from side-by-side panels -- could not be
+said without a custom stylesheet. Now it can (#34):
+
+- `page(width = "full")` takes the whole viewport instead of the
+  centred reading column, at workspace density.
+- `row(align = "stretch")` makes side-by-side children match heights.
+- `panel(fill = TRUE)` hands the panel's height to its children, so
+  one of them can grow into it.
+- `column(scroll = TRUE)` scrolls its overflow instead of growing the
+  page; grown and scrolling is the message-list shape.
+- `txt()` and `text_output()` take variants `"mono"` (timecodes, file
+  listings, hashes -- anything that aligns by character) and `"small"`
+  (fine print).
+
+All of it is component vocabulary, not CSS: the Flutter lowering maps
+`stretch` onto `IntrinsicHeight`, `fill` onto a max-size `Column` with
+`Expanded` children, `scroll` onto `SingleChildScrollView`, and the
+text variants onto the theme's type scale, while a `page` width stays
+a viewport hint it may ignore.
+
 **Four S3 methods were shipping with no documentation.** `$`, `[[`,
 `$<-` and `[[<-` on the input and output proxies had help pages that
 `R CMD build` was silently dropping: their file names contain

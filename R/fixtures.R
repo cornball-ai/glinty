@@ -188,6 +188,32 @@ component_fixtures <- function() {
                       notes = "the root every client is handed in welcome"
         ),
                  list(
+                      name = "page-full",
+                      component = component("page", title = "Workspace",
+                width = "full",
+                children = list(component("text", value = "wide"))),
+                      notes = "width is a viewport hint; the browser drops the reading column, native may ignore it"
+        ),
+                 list(
+                      name = "workspace-fill",
+                      component = component("row", align = "stretch",
+                children = list(
+                                component("panel", fill = TRUE, grow = 1L,
+                    children = list(
+                                    component("column", grow = 1L,
+                        scroll = TRUE,
+                        children = list(component("text", value = "log"))))))),
+                      notes = "the workspace shape: stretched row, filled panel, a grown column that scrolls its overflow"
+        ),
+                 list(
+                      name = "text-mono-small",
+                      component = component("column", children = list(
+                    component("text", value = "00:01:12", variant = "mono"),
+                    component("text", value = "fine print",
+                        variant = "small"))),
+                      notes = "mono aligns by character, small is fine print; both stay semantic"
+        ),
+                 list(
                       name = "textarea-input",
                       component = component("textarea_input", id = "notes",
                 label = "Notes:", value = "line one",

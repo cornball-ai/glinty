@@ -6,7 +6,9 @@
 #' Create a text output slot
 #'
 #' @param id character output ID
-#' @param variant character "normal", "muted" or "strong"
+#' @param variant character "normal", "muted", "strong", "mono" or
+#'   "small". "mono" is for values that align by character: timecodes,
+#'   file listings, hashes. "small" is fine print
 #' @return A UI component
 #' @examples
 #' text_output("greeting")

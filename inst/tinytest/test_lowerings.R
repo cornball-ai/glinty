@@ -292,6 +292,65 @@ both <- component_to_html(component("row", gap = 16L, grow = 2L,
 expect_true(grepl("gap:16px", both, fixed = TRUE))
 expect_true(grepl("--g-grow:2", both, fixed = TRUE))
 
+# --- the workspace vocabulary: full page, stretched row, filled
+# panel, scrolling column ---
+#
+# Together these say "editor" instead of "document": the page takes
+# the viewport, side-by-side panels match heights, and a log inside
+# one grows and scrolls instead of growing the page.
+full <- component_to_html(component("page", width = "full",
+                                    children = list()))
+expect_true(grepl("g-page g-page-full", full, fixed = TRUE))
+expect_false(grepl("g-page-full",
+                   component_to_html(component("page", children = list())),
+                   fixed = TRUE))
+expect_error(component("page", width = "wide", children = list()),
+             "content, full")
+
+stretch <- component_to_html(component("row", align = "stretch",
+                                       children = list()))
+expect_true(grepl("align-items:stretch", stretch, fixed = TRUE))
+
+filled <- component_to_html(component("panel", fill = TRUE,
+                                      children = list()))
+expect_true(grepl("g-fill", filled, fixed = TRUE))
+expect_false(grepl("g-fill",
+                   component_to_html(component("panel", children = list())),
+                   fixed = TRUE))
+
+scroller <- component_to_html(component("column", scroll = TRUE, grow = 1L,
+                                        children = list()))
+expect_true(grepl("g-scroll", scroller, fixed = TRUE))
+expect_true(grepl("g-sized", scroller, fixed = TRUE))
+expect_false(grepl("g-scroll",
+                   component_to_html(component("column", children = list())),
+                   fixed = TRUE))
+
+# fill belongs to panel and scroll to column; the schema refuses the
+# transplant rather than ignoring it
+expect_error(component("row", scroll = TRUE, children = list()),
+             "unknown field")
+expect_error(component("column", fill = TRUE, children = list()),
+             "unknown field")
+
+# mono and small stay semantic: a class, never an inline style
+expect_true(grepl("g-text g-mono",
+                  component_to_html(component("text", value = "00:01:12",
+                                              variant = "mono")),
+                  fixed = TRUE))
+expect_true(grepl("g-text g-small",
+                  component_to_html(component("text", value = "fine",
+                                              variant = "small")),
+                  fixed = TRUE))
+expect_true(grepl("g-output g-mono",
+                  component_to_html(component("text_output", id = "tc",
+                                              variant = "mono")),
+                  fixed = TRUE))
+expect_true(grepl("g-output g-small",
+                  component_to_html(component("text_output", id = "fp",
+                                              variant = "small")),
+                  fixed = TRUE))
+
 # --- v3.1: an image that is part of the UI ---
 img <- component_to_html(component("image", src = "/static/logo.png",
                                    alt = "cornball.ai", width = 32L))

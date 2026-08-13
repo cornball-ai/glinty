@@ -34,7 +34,12 @@ component_to_html <- function(x) {
            collapse = html_collapse(x),
            divider = html_divider(x),
            spacer = html_spacer(x),
-           page = html_container(x, "div", "g-page"),
+           page = html_container(x, "div",
+                if (identical(x$width, "full")) {
+                    "g-page g-page-full"
+                } else {
+                    "g-page"
+                }),
            row = html_layout(x, "g-layout-row"),
            column = html_layout(x, "g-layout-col"),
            panel = html_panel(x),
@@ -123,7 +128,8 @@ html_unsupported <- function(name) {
 
 html_text <- function(x) {
     cls <- c(normal = "g-text", muted = "g-text g-muted",
-             strong = "g-text g-strong", heading = "g-text g-text-heading")
+             strong = "g-text g-strong", heading = "g-text g-text-heading",
+             mono = "g-text g-mono", small = "g-text g-small")
     html_el("span", list(class = unname(cls[[x$variant]]), id = x$id),
             html_escape(x$value))
 }
@@ -251,11 +257,12 @@ html_layout <- function(x, cls) {
     }
     if (!is.null(x$align)) {
         align <- switch(x$align, start = "flex-start", center = "center",
-                        end = "flex-end")
+                        end = "flex-end", stretch = "stretch")
         style <- paste(c(style, paste0("align-items:", align)), collapse = ";")
     }
     style <- paste(c(style, html_flex_style(x)), collapse = ";")
-    html_el("div", list(class = paste(c(cls, if (html_is_sized(x)) "g-sized"),
+    html_el("div", list(class = paste(c(cls, if (html_is_sized(x)) "g-sized",
+                    if (isTRUE(x$scroll)) "g-scroll"),
                                       collapse = " "),
                         id = x$id,
                         style = if (nzchar(style)) style else NULL),
@@ -269,7 +276,8 @@ html_panel <- function(x) {
                                 html_escape(x$title)), inner)
     }
     html_el("div", list(class = paste(c(paste0("g-panel g-panel-", x$variant),
-                    if (html_is_sized(x)) "g-sized"),
+                    if (html_is_sized(x)) "g-sized",
+                    if (isTRUE(x$fill)) "g-fill"),
                                       collapse = " "),
                         id = x$id, style = html_flex_style(x)), inner)
 }
@@ -486,7 +494,8 @@ html_slot <- function(x) {
 
 html_text_output <- function(x) {
     cls <- c(normal = "g-output", muted = "g-output g-muted",
-             strong = "g-output g-strong")
+             strong = "g-output g-strong", mono = "g-output g-mono",
+             small = "g-output g-small")
     html_el("span", c(html_slot(x), list(class = unname(cls[[x$variant]]))))
 }
 
