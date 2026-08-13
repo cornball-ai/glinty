@@ -294,6 +294,26 @@ wire_transcripts <- function() {
             )
         ),
          list(
+              name = "video-output",
+              notes = paste("a video value is a URL plus its type: seeking",
+                            "works by byte-range requests against a URL,",
+                            "which is why the src is never embedded bytes.",
+                            "The video_update that follows drives playback",
+                            "without replacing the element -- an output",
+                            "message swaps the video, this moves inside it"),
+              frames = list(
+                            list(dir = "in", message = list(type = "event", id = "render")),
+                            list(dir = "out", message = list(
+                        type = "output", id = "preview", kind = "video",
+                        value = list(src = "/static/cut.mp4",
+                                     mime = "video/mp4", duration = 4.2)
+                    )),
+                            list(dir = "out", message = list(
+                        type = "video_update", id = "preview",
+                        current_time = 1.5, playing = TRUE))
+            )
+        ),
+         list(
               name = "event-then-ui",
               notes = paste("dynamic UI: an output whose value is a component",
                             "tree; every client builds it the way it builds",

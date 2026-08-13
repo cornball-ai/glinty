@@ -202,6 +202,30 @@
       }
     },
     {
+      "name": "video-output",
+      "notes": "the value's src is a URL on purpose: seeking byte-range-requests it",
+      "component": {
+        "component": "video_output",
+        "id": "preview",
+        "controls": true,
+        "autoplay": false,
+        "muted": false,
+        "loop": false
+      }
+    },
+    {
+      "name": "video-output-config",
+      "notes": "autoplay rides muted, the one combination browsers allow",
+      "component": {
+        "component": "video_output",
+        "id": "wall",
+        "controls": false,
+        "autoplay": true,
+        "muted": true,
+        "loop": true
+      }
+    },
+    {
       "name": "text-input",
       "notes": "emit defaults to live; browser debounces, Flutter uses onChanged",
       "component": {

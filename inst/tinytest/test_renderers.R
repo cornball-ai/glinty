@@ -210,6 +210,98 @@ expect_equal(m$type, "error")
 expect_equal(m$id, "bad_snd")
 expect_true(grepl("finite, non-negative", m$message))
 
+# --- render_video: kind video, value {src, mime, poster?, duration?} ---
+#
+# audio's discipline plus a rule of its own: the src is a URL, never
+# embedded bytes. Seeking works by byte-range requests against a URL,
+# and a data URI has no ranges to ask for.
+with_session(s, {
+    s$output$vid <- render_video(function() "/static/cut.mp4")
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "output")
+expect_equal(m$kind, "video")
+expect_equal(m$value$src, "/static/cut.mp4")
+expect_equal(m$value$mime, "video/mp4")
+expect_null(m$value$poster)
+expect_null(m$value$duration)
+
+# the extension table: m4v is mp4's box, mov and webm are their own,
+# and query strings and case are not part of the answer
+expect_equal(glinty:::video_mime("/static/a.m4v"), "video/mp4")
+expect_equal(glinty:::video_mime("/static/a.MOV?v=2"), "video/quicktime")
+expect_equal(glinty:::video_mime("/static/a.webm"), "video/webm")
+expect_error(glinty:::video_mime("/gen/out.bin"), "list(src = , mime = )",
+             fixed = TRUE)
+
+# a data URI is allowed -- it plays, it cannot scrub -- and declares
+# its own type
+expect_equal(glinty:::video_value(
+    list(src = "data:video/mp4;base64,AAAA"))$mime, "video/mp4")
+
+# the list form says it all outright
+with_session(s, {
+    s$output$vid2 <- render_video(function() {
+        list(src = "/static/cut.mp4", mime = "video/mp4",
+             poster = "data:image/png;base64,iVBOR", duration = 4.2)
+    })
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$value$poster, "data:image/png;base64,iVBOR")
+expect_equal(m$value$duration, 4.2)
+
+# NULL is still "nothing to play"
+with_session(s, {
+    s$output$vid3 <- render_video(function() NULL)
+})
+flush_reactions()
+expect_null(last_msg(s)$value)
+
+# --- a video value is scalars, same as audio, plus its own refusals ---
+vv <- glinty:::video_value
+
+expect_error(vv(list(src = c("a.mp4", "b.mp4"))), "one non-empty src")
+expect_error(vv(list(src = "")), "one non-empty src")
+expect_error(vv(list(mime = "video/mp4")), "one non-empty src")
+expect_error(vv(list(src = "a.mp4", mime = "audio/wav")),
+             "not a video media type")
+expect_error(vv(list(src = "data:image/png;base64,iVBOR")),
+             "not a video media type")
+expect_error(vv(list(src = "data:video/mp4;base64,AAAA",
+                     mime = "video/webm")),
+             "declares video/mp4 and mime = says video/webm", fixed = TRUE)
+expect_error(vv(list(src = "a.mp4", poster = c("a.png", "b.png"))),
+             "one non-empty string")
+expect_error(vv(list(src = "a.mp4", duration = -1)),
+             "finite, non-negative")
+
+# a server file is refused rather than embedded: video is the media
+# size where a data URI on every reactive tick stops being a
+# convenience
+f <- tempfile(fileext = ".mp4")
+writeBin(as.raw(0:3), f)
+expect_error(vv(list(src = f)), "static_dir")
+unlink(f)
+
+# a poster naming a server file is one image, and IS embedded --
+# render_image()'s deal
+p <- tempfile(fileext = ".png")
+writeBin(as.raw(c(0x89, 0x50, 0x4e, 0x47)), p)
+out <- vv(list(src = "/static/cut.mp4", poster = p))
+expect_true(startsWith(out$poster, "data:image/png;base64,"))
+unlink(p)
+
+# the refusal reaches the slot that asked, as an error frame
+with_session(s, {
+    s$output$bad_vid <- render_video(function() list(src = "x.avi"))
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_equal(m$id, "bad_vid")
+
 # --- render_plot: kind image, value {src, width, height} ---
 if (capabilities("png")) {
     with_session(s, {

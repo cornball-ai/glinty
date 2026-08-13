@@ -272,6 +272,159 @@ audio_value <- function(v) {
     out
 }
 
+#' Render a video source
+#'
+#' Sends a `video` output: `{src, mime, poster?, duration?}`. The
+#' media-type discipline is [render_audio()]'s: fn may return the src
+#' alone and let this read the type off the extension or out of a
+#' data URI, or return a list to say outright -- and a type it cannot
+#' read is an error naming the fix.
+#'
+#' The src wants to be a URL the client can fetch -- a `/static/`
+#' path the app serves -- rather than embedded bytes. Seeking works
+#' by byte-range requests against a URL, which glinty's static server
+#' answers; a data URI has no ranges to ask for, so it plays but
+#' cannot scrub. A server file path is therefore refused rather than
+#' embedded: video is the one media size where a data URI on every
+#' reactive tick stops being a convenience. Browsers cache by URL, so
+#' a re-rendered cut wants a new file name, not the old one
+#' rewritten.
+#'
+#' `poster` is the frame shown before play. An existing server file
+#' is embedded as a data URI (it is one image, [render_image()]'s
+#' deal); a URL passes through.
+#'
+#' @param fn zero-arg function returning the source string, or a list
+#'   with `src` and optionally `mime`, `poster` and `duration`
+#'   (seconds)
+#' @return a glinty_renderer for assignment to output$id
+#' @examples
+#' \dontrun{
+#' output$preview <- render_video(function() "/static/cut.mp4")
+#' }
+#' @export
+render_video <- function(fn) {
+    new_renderer(function() {
+        v <- fn()
+        if (is.null(v)) {
+            return(NULL)
+        }
+        if (!is.list(v)) {
+            v <- list(src = v)
+        }
+        video_value(v)
+    }, "video")
+}
+
+#' Check a video value into the shape the protocol states
+#'
+#' audio_value()'s discipline, plus two of its own: a server file
+#' path is refused rather than embedded (see [render_video()]), and a
+#' poster naming a server file becomes a data URI here, where the
+#' bytes are reachable.
+#'
+#' @param v list with `src` and optionally `mime`, `poster`,
+#'   `duration`
+#' @return list(src, mime, poster?, duration?)
+#' @keywords internal
+video_value <- function(v) {
+    src <- v$src
+    if (!is.character(src) || length(src) != 1L || is.na(src) || !nzchar(src)) {
+        stop("render_video() needs one non-empty src string", call. = FALSE)
+    }
+    if (!grepl("^data:", src, ignore.case = TRUE) && file.exists(src)) {
+        stop("render_video() does not embed server files: serve the ",
+             "directory with run_app(static_dir = ) and return the file's ",
+             "/static/ URL, so the client can seek by byte range",
+             call. = FALSE)
+    }
+
+    mime <- if (is.null(v$mime)) {
+        video_mime(src)
+    } else {
+        given <- v$mime
+        if (!is.character(given) || length(given) != 1L || is.na(given)) {
+            stop("render_video() mime must be one media type string",
+                 call. = FALSE)
+        }
+        given <- check_video_mime(tolower(trimws(given)))
+        declared <- data_uri_mime(src)
+        if (!is.null(declared) && !identical(declared, given)) {
+            stop("the video data URI declares ", declared,
+                 " and mime = says ", given, call. = FALSE)
+        }
+        given
+    }
+
+    out <- list(src = src, mime = mime)
+    if (!is.null(v$poster)) {
+        p <- v$poster
+        if (!is.character(p) || length(p) != 1L || is.na(p) || !nzchar(p)) {
+            stop("render_video() poster must be one non-empty string",
+                 call. = FALSE)
+        }
+        if (!startsWith(p, "data:") && file.exists(p)) {
+            bytes <- readBin(p, "raw", file.info(p)$size)
+            uri <- paste0("data:", image_mime(p), ";base64,",
+                          jsonlite::base64_enc(bytes))
+            p <- gsub("[\r\n]", "", uri)
+        }
+        out$poster <- p
+    }
+    if (!is.null(v$duration)) {
+        d <- v$duration
+        if (!is.numeric(d) || length(d) != 1L || is.na(d) || !is.finite(d) ||
+            d < 0) {
+            stop("render_video() duration must be one finite, non-negative ",
+                 "number of seconds", call. = FALSE)
+        }
+        out$duration <- as.numeric(d)
+    }
+    out
+}
+
+VIDEO_MIME <- c(mp4 = "video/mp4", m4v = "video/mp4",
+                mov = "video/quicktime", webm = "video/webm")
+
+#' The media type of a video source
+#'
+#' audio_mime()'s rule: a data URI declares its own type, a path's
+#' extension states one, and neither is a guess. Note the value's
+#' webm is video/webm; serve_static() names the *file* audio/webm,
+#' which is a different question (see mime_type()).
+#'
+#' @param src character data URI or path
+#' @return character media type
+#' @keywords internal
+video_mime <- function(src) {
+    if (grepl("^data:", src, ignore.case = TRUE)) {
+        declared <- data_uri_mime(src)
+        if (is.null(declared)) {
+            stop("video data URI declares no media type; pass mime = ",
+                 call. = FALSE)
+        }
+        return(check_video_mime(declared))
+    }
+    ext <- tolower(tools::file_ext(sub("[?#].*$", "", src)))
+    if (!ext %in% names(VIDEO_MIME)) {
+        stop("cannot name the media type of \"", src,
+             "\"; return list(src = , mime = ) instead", call. = FALSE)
+    }
+    unname(VIDEO_MIME[[ext]])
+}
+
+#' Refuse a media type that is not video
+#'
+#' @param mime character lowercase media type
+#' @return mime, invisibly refused by stop() when it is not video
+#' @keywords internal
+check_video_mime <- function(mime) {
+    if (!grepl("^video/[!#$%&'*+.^_`|~0-9a-z-]+$", mime)) {
+        stop("\"", mime, "\" is not a video media type", call. = FALSE)
+    }
+    mime
+}
+
 # Media types glinty can name without being told. Every format a
 # browser plays, which is the set an app can reasonably hand over.
 #' Render an image source

@@ -4,7 +4,7 @@
 \alias{OUTPUT_KINDS}
 \title{Output components and the value kinds they accept}
 \format{
-An object of class \code{list} of length 7.
+An object of class \code{list} of length 8.
 }
 \usage{
 OUTPUT_KINDS

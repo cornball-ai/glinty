@@ -173,8 +173,8 @@ expect_equal(ms$frames[[2L]]$message$kind, "image")
 
 # every message type used is one PROTOCOL.md declares
 known <- c("hello", "welcome", "input", "output", "measure", "event",
-           "input_update", "ticket", "modal", "progress", "custom",
-           "error", "ping", "pong")
+           "input_update", "video_update", "ticket", "modal", "progress",
+           "custom", "error", "ping", "pong")
 for (t in tr) {
     for (fr in t$frames) {
         expect_true(fr$message$type %in% known)

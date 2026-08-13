@@ -97,4 +97,41 @@ expect_equal(m$value, 7)
 expect_equal(m$min, 1)
 expect_false("max" %in% names(m))
 
+# --- video: playback commands, not input updates ---
+update_video(s, "preview", current_time = 1.5, playing = TRUE)
+m <- last_msg()
+expect_equal(m$type, "video_update")
+expect_equal(m$id, "preview")
+expect_equal(m$current_time, 1.5)
+expect_true(m$playing)
+
+# each half of the state travels alone, and NULL leaves the other be
+update_video(s, "preview", playing = FALSE)
+m <- last_msg()
+expect_false(m$playing)
+expect_false("current_time" %in% names(m))
+
+update_video(s, "preview", current_time = 0)
+m <- last_msg()
+expect_equal(m$current_time, 0)
+expect_false("playing" %in% names(m))
+
+# an all-NULL update sends nothing
+n <- length(s$outgoing)
+update_video(s, "preview")
+expect_equal(length(s$outgoing), n)
+
+# refusals name the field: a position is one finite non-negative
+# number, playing is one TRUE or FALSE
+expect_error(update_video(s, "preview", current_time = -1),
+             "finite, non-negative")
+expect_error(update_video(s, "preview", current_time = c(1, 2)),
+             "finite, non-negative")
+expect_error(update_video(s, "preview", current_time = Inf),
+             "finite, non-negative")
+expect_error(update_video(s, "preview", playing = NA),
+             "TRUE or FALSE")
+expect_error(update_video(s, "preview", playing = "yes"),
+             "TRUE or FALSE")
+
 session_end(s)

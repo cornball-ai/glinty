@@ -414,6 +414,18 @@ h1, h2, h3, h4 {
     height: auto;
 }
 
+/* Fill the container's width, keep the video's own aspect, letterbox
+   on black the way every playback surface does. Height stays the
+   video's business: constraining it is the layout's job (a filled
+   panel, a grown column), not a viewport guess made here. */
+.g-video-output {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0.5rem 0;
+    background: #000;
+}
+
 /* Why a transfer was refused, beside the control that asked. A
    title attribute is invisible on a touch screen; this can be read
    and is removed on the next attempt. */

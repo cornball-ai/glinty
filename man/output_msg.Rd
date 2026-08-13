@@ -8,7 +8,8 @@ output_msg(id, kind, value)
 \arguments{
 \item{id}{character output ID}
 
-\item{kind}{character one of text, html, table, image, audio, ui}
+\item{kind}{character one of text, html, table, image, audio,
+video, ui}
 
 \item{value}{the renderer's value}
 }

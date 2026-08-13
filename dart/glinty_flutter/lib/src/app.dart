@@ -36,6 +36,7 @@ class GlintyApp extends StatefulWidget {
     this.onDownload,
     this.onLink,
     this.audioBuilder,
+    this.videoBuilder,
     this.onUpload,
     this.customHandlers,
     this.open,
@@ -59,6 +60,10 @@ class GlintyApp extends StatefulWidget {
   /// platform plugin, which this package does not take on; without
   /// one the slot says so rather than sitting there silent.
   final GlintyAudioBuilder? audioBuilder;
+
+  /// Builds the player for a video_output -- the same seam, cut for
+  /// the same reason (video_player, media_kit: the embedder's pick).
+  final GlintyVideoBuilder? videoBuilder;
 
   /// Picks files and sends them for a `file_input`. The dialog and
   /// the POST are platform work; glinty owns the ticket in between.
@@ -95,6 +100,7 @@ class _GlintyAppState extends State<GlintyApp> {
       onDownload: widget.onDownload,
       onLink: widget.onLink,
       audioBuilder: widget.audioBuilder,
+      videoBuilder: widget.videoBuilder,
       onUpload: widget.onUpload,
       open: widget.open,
     );
@@ -124,6 +130,7 @@ class _GlintyAppState extends State<GlintyApp> {
         old.token != widget.token ||
         (old.onDownload == null) != (widget.onDownload == null) ||
         (old.audioBuilder == null) != (widget.audioBuilder == null) ||
+        (old.videoBuilder == null) != (widget.videoBuilder == null) ||
         (old.onUpload == null) != (widget.onUpload == null)) {
       _conn.dispose();
       _conn = _connect();
@@ -138,6 +145,7 @@ class _GlintyAppState extends State<GlintyApp> {
     _conn.onDownload = widget.onDownload;
     _conn.onLink = widget.onLink;
     _conn.audioBuilder = widget.audioBuilder;
+    _conn.videoBuilder = widget.videoBuilder;
     _conn.onUpload = widget.onUpload;
     _wireHandlers(_conn);
   }
@@ -171,7 +179,8 @@ class GlintyView extends StatelessWidget {
       this.session,
       this.connection,
       this.renderer,
-      this.audioBuilder})
+      this.audioBuilder,
+      this.videoBuilder})
       : assert(session != null || connection != null,
             'GlintyView needs a session or a connection');
 
@@ -181,6 +190,9 @@ class GlintyView extends StatelessWidget {
 
   /// Builds the player for an audio_output; see [GlintyApp].
   final GlintyAudioBuilder? audioBuilder;
+
+  /// Builds the player for a video_output; see [GlintyApp].
+  final GlintyVideoBuilder? videoBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +247,7 @@ class GlintyView extends StatelessWidget {
           // connection knows what address that is.
           assetBase: conn?.assetBase,
           audioBuilder: audioBuilder ?? conn?.audioBuilder,
+          videoBuilder: videoBuilder ?? conn?.videoBuilder,
           onUpload: conn?.onUpload,
           tickets: s.tickets,
           // A download registers itself as the waiter for its own

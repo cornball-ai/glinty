@@ -305,6 +305,13 @@ COMPONENT_SCHEMA <- list(
         controls = field("bool", default = TRUE),
         autoplay = field("bool", default = FALSE)
     ),
+                         video_output = list(
+        id = field("string", required = TRUE),
+        controls = field("bool", default = TRUE),
+        autoplay = field("bool", default = FALSE),
+        muted = field("bool", default = FALSE),
+        loop = field("bool", default = FALSE)
+    ),
                          # Browser-only, like tag(): raw markup has no widget equivalent.
                          html_output = list(id = field("string", required = TRUE)),
                          ui_output = list(id = field("string", required = TRUE)),
@@ -334,7 +341,7 @@ COMPONENT_SCHEMA <- list(
 OUTPUT_KINDS <- list(text_output = "text", verbatim_output = "text",
                      table_output = "table", plot_output = "image",
                      image_output = "image", audio_output = "audio",
-                     ui_output = "ui")
+                     video_output = "video", ui_output = "ui")
 
 #' What each input emits, and of what type
 #'

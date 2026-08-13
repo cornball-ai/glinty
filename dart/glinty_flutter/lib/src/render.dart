@@ -32,6 +32,8 @@ const supportedComponents = <String>{
   // supported because the protocol asks what this client can render,
   // and it can -- given somewhere to send the sound.
   'audio_output',
+  // The same seam again, through videoBuilder.
+  'video_output',
   // Same shape: the app picks the files and posts them, through
   // onUpload; glinty owns the ticket in between.
   'file_input',
@@ -99,6 +101,40 @@ class GlintyAudioSource {
   /// not this renderer's.
   final bool controls;
   final bool autoplay;
+}
+
+/// A video value, ready to hand to a player.
+///
+/// The same resolution rule as [GlintyAudioSource]: src and poster
+/// arrive resolved against the address serving the app, and [mime]
+/// is required because a platform player asks what it is given.
+class GlintyVideoSource {
+  const GlintyVideoSource({
+    required this.src,
+    required this.mime,
+    this.poster,
+    this.duration,
+    this.controls = true,
+    this.autoplay = false,
+    this.muted = false,
+    this.loop = false,
+  });
+
+  final Uri src;
+  final String mime;
+
+  /// The frame shown before play, when the server sent one.
+  final Uri? poster;
+
+  /// Length in seconds, when the server knew it.
+  final double? duration;
+
+  /// What the component asked for; the player decides what each
+  /// means, the same deal audio's flags make.
+  final bool controls;
+  final bool autoplay;
+  final bool muted;
+  final bool loop;
 }
 
 /// The server refused a transfer, or the connection did.
@@ -176,6 +212,13 @@ typedef GlintyUploadHandler = Future<void> Function(
 typedef GlintyAudioBuilder = Widget Function(
     BuildContext context, GlintyAudioSource source);
 
+/// The video seam, cut where the audio one is and for the same
+/// reason: a video engine (video_player, media_kit) is a dependency
+/// the embedder chooses, not one every glinty app inherits. Without
+/// a builder the slot draws a visible placeholder naming the gap.
+typedef GlintyVideoBuilder = Widget Function(
+    BuildContext context, GlintyVideoSource source);
+
 class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
@@ -187,6 +230,7 @@ class GlintyRenderer {
       this.onMeasure,
       this.assetBase,
       this.audioBuilder,
+      this.videoBuilder,
       this.onUpload,
       this.tickets = const {},
       this.awaitTicket,
@@ -237,6 +281,10 @@ class GlintyRenderer {
   /// says so, the way a download button with nowhere to send its
   /// grant renders disabled.
   final GlintyAudioBuilder? audioBuilder;
+
+  /// Builds the player for a video_output; the same seam and the
+  /// same default: without one the slot names the gap.
+  final GlintyVideoBuilder? videoBuilder;
 
   /// Picks files and sends them for a file_input. Without one the
   /// control says so rather than opening nothing.
@@ -454,6 +502,8 @@ class GlintyRenderer {
         return _fileInput(context, c);
       case 'audio_output':
         return _slot(context, c, 'audio', () => _audio(context, c));
+      case 'video_output':
+        return _slot(context, c, 'video', () => _video(context, c));
       case 'ui_output':
         return _slot(context, c, 'ui', () => _dynamicUi(context, c));
       case 'tabset':
@@ -1250,6 +1300,61 @@ class GlintyRenderer {
               : null,
           controls: c.boolean('controls'),
           autoplay: c.boolean('autoplay'),
+        ));
+  }
+
+  /// _audio's twin: resolve, insist on the media type, hand the
+  /// embedder a [GlintyVideoSource]. The value's src is a URL by the
+  /// protocol's own advice -- seeking range-requests it -- so the
+  /// resolution rule matters more here than anywhere.
+  Widget _video(BuildContext context, GlintyComponent c) {
+    final build = videoBuilder;
+    if (build == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[no video player wired: pass videoBuilder to play this]');
+    }
+    final value = values[c.str('id')];
+    if (value is! Map) return const SizedBox.shrink();
+    final src = value['src'];
+    final mime = value['mime'];
+    if (src is! String || src.isEmpty) return const SizedBox.shrink();
+    if (mime is! String || mime.isEmpty) {
+      return _problem(const Color(0xFFF8D7DA),
+          '[this video arrived without a media type]');
+    }
+
+    Uri? resolve(String s) {
+      final parsed = Uri.tryParse(s);
+      final scheme = parsed?.scheme.toLowerCase() ?? '';
+      if (parsed != null &&
+          (scheme == 'data' || scheme == 'http' || scheme == 'https')) {
+        return parsed;
+      }
+      return assetBase?.resolve(s);
+    }
+
+    final resolved = resolve(src);
+    if (resolved == null) {
+      return _problem(const Color(0xFFFFF3CD),
+          '[cannot load "$src": no server address to resolve it against]');
+    }
+    final poster = value['poster'];
+
+    return build(
+        context,
+        GlintyVideoSource(
+          src: resolved,
+          mime: mime,
+          poster: poster is String && poster.isNotEmpty
+              ? resolve(poster)
+              : null,
+          duration: value['duration'] is num
+              ? (value['duration'] as num).toDouble()
+              : null,
+          controls: c.boolean('controls'),
+          autoplay: c.boolean('autoplay'),
+          muted: c.boolean('muted'),
+          loop: c.boolean('loop'),
         ));
   }
 
