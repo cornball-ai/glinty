@@ -21,16 +21,19 @@
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "raw_html", "row", "select_input",
         "slider_input", "spacer", "tabset", "text", "text_input",
-        "text_output", "textarea_input", "ui_output", "verbatim_output"
+        "text_output", "textarea_input", "ui_output", "verbatim_output",
+        "video_output"
     ];
-    var SUPPORTED_KINDS = ["text", "html", "table", "image", "audio", "ui"];
+    var SUPPORTED_KINDS = ["text", "html", "table", "image", "audio",
+                           "video", "ui"];
     /* Every one of these is implemented below: uploadFiles(),
        startDownload(), showModal(), applyProgress(), reportPlotDims().
        `measure` was missing here while the client had been reporting
        plot boxes all along -- the inverse of naming a feature nothing
        implements, and just as much a thing the server would believe. */
     var SUPPORTED_FEATURES = [
-        "upload", "download", "modal", "progress", "measure"
+        "upload", "download", "modal", "progress", "measure",
+        "video_control"
     ];
 
     /* The one reserved component id: a button carrying it closes the
@@ -509,6 +512,7 @@
         plot_output: "image",
         image_output: "image",
         audio_output: "audio",
+        video_output: "video",
         html_output: "html",
         ui_output: "ui"
     };
@@ -1000,6 +1004,20 @@
                 controls: c.controls ? "controls" : null,
                 autoplay: c.autoplay ? "autoplay" : null
             }));
+        case "video_output":
+            node = el("video", assign(slotAttrs(c), {
+                "class": "g-video-output",
+                controls: c.controls ? "controls" : null,
+                autoplay: c.autoplay ? "autoplay" : null,
+                muted: c.muted ? "muted" : null,
+                loop: c.loop ? "loop" : null,
+                preload: "metadata"
+            }));
+            /* The muted attribute only mutes an element the parser
+               built; on one built here it is inert, and autoplay
+               depends on it. The property is the one that works. */
+            if (c.muted) node.muted = true;
+            return node;
         case "html_output":
             return el("div", assign(slotAttrs(c), {
                 "class": "g-html-output"
@@ -1162,6 +1180,28 @@
         case "audio":
             el.src = (msg.value || {}).src || "";
             break;
+        case "video": {
+            var vv = msg.value || {};
+            /* Re-assigning even an identical src restarts the load
+               and drops the playback position, so only a changed
+               source touches it. Invalidation is by URL: a new cut
+               arrives under a new name. */
+            if (!vv.src) {
+                el.removeAttribute("src");
+            } else if (el.getAttribute("src") !== vv.src) {
+                /* The attribute, not the property: they trigger the
+                   same load, but only the attribute reads back the
+                   string that was set, which is what the comparison
+                   above needs. */
+                el.setAttribute("src", vv.src);
+            }
+            if (vv.poster) {
+                el.setAttribute("poster", vv.poster);
+            } else {
+                el.removeAttribute("poster");
+            }
+            break;
+        }
         case "ui": {
             el.textContent = "";
             var node = buildComponent(msg.value);
@@ -1236,6 +1276,35 @@
             );
             if (target) target.checked = true;
         }
+    }
+
+    /* Server-driven playback: seek and play/pause the player that is
+       already there, without the element swap an output message does
+       -- which is what keeps the position and the decode pipeline
+       alive. Only a video element answers; a video_update aimed at
+       any other slot is a server bug, ignored per element. */
+    function applyVideoUpdate(msg) {
+        elementsFor(msg.id).forEach(function (el) {
+            if (el.tagName !== "VIDEO") return;
+            if (typeof msg.current_time === "number" &&
+                isFinite(msg.current_time)) {
+                el.currentTime = msg.current_time;
+            }
+            if (msg.playing === true) {
+                var p = el.play();
+                /* play() is a promise, and refusing it is the
+                   browser's right (autoplay policy). Refused is
+                   paused, which the server can see; unhandled it is
+                   a console error on every blocked tick. */
+                if (p && p.catch) {
+                    p.catch(function (e) {
+                        console.warn("glinty: play() refused", e);
+                    });
+                }
+            } else if (msg.playing === false) {
+                el.pause();
+            }
+        });
     }
 
     function applyInputUpdate(msg) {
@@ -1517,6 +1586,9 @@
             break;
         case "input_update":
             applyInputUpdate(msg);
+            break;
+        case "video_update":
+            applyVideoUpdate(msg);
             break;
         case "modal":
             if (msg.action === "hide") {

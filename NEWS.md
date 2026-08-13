@@ -1,5 +1,20 @@
 # glinty (development version)
 
+**Video is a component.** `video_output()` and `render_video()` are
+the pair audio already had (#37): the slot is a real `<video>`
+element, the value is `{src, mime, poster?, duration?}` under
+`render_audio()`'s media-type discipline. The src is a URL on
+purpose -- seeking works by byte-range requests, which the static
+server has answered since #31, and a data URI has no ranges to ask
+for, so a server file is refused rather than embedded. Playback can
+be driven from the server too: `update_video(session, id,
+current_time =, playing =)` seeks and plays/pauses the player that
+is already there, without the element swap a new output value does.
+On the Flutter side `video_output` renders through a
+`GlintyVideoBuilder` seam, cut exactly where `GlintyAudioBuilder`
+is: the embedder picks the engine, and without one the slot names
+the gap and `hello` does not claim the component.
+
 **A height-only plot tracks its container's width.** Responsive
 plots have filled their container since Protocol v3, but only when
 *both* dimensions were open; `plot_output(id, height = 340)` -- the

@@ -60,6 +60,7 @@ class GlintyConnection extends ChangeNotifier {
     this.onDownload,
     this.onLink,
     this.audioBuilder,
+    this.videoBuilder,
     this.onUpload,
   })  : assert(retryBase <= retryCap,
             'retryBase is where the backoff starts and retryCap is where it stops; '
@@ -80,7 +81,9 @@ class GlintyConnection extends ChangeNotifier {
       // placeholder naming the gap -- honest on screen, but a claim
       // the server would believe if hello still listed it.
       components: componentsFor(
-          audio: audioBuilder != null, files: onUpload != null),
+          audio: audioBuilder != null,
+          video: videoBuilder != null,
+          files: onUpload != null),
       // A local edit changes what the controls draw; without this
       // the store updates and the UI never hears until some later
       // server frame happens to arrive.
@@ -124,6 +127,10 @@ class GlintyConnection extends ChangeNotifier {
   /// only at the view, because what this client can draw is part of
   /// what it tells the server in hello.
   GlintyAudioBuilder? audioBuilder;
+
+  /// Builds the player for a video_output; held here for the same
+  /// reason audioBuilder is.
+  GlintyVideoBuilder? videoBuilder;
 
   /// Picks files and sends them for a file_input. Held here for the
   /// same reason: it decides what hello declares.

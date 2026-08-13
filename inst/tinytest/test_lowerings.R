@@ -540,6 +540,28 @@ wide_plot <- component_to_html(component("plot_output", id = "p",
 expect_false(grepl("width:100%", wide_plot, fixed = TRUE))
 expect_true(grepl('width="400"', wide_plot, fixed = TRUE))
 
+# --- video_output: a real element, flags as attributes ---
+#
+# preload="metadata" always: duration and dimensions arrive, the
+# frames wait for a play or a seek, which byte-range-requests exactly
+# what it needs.
+vid <- component_to_html(component("video_output", id = "v"))
+expect_true(grepl("<video", vid, fixed = TRUE))
+expect_true(grepl('data-g-kind="video"', vid, fixed = TRUE))
+expect_true(grepl('controls="controls"', vid, fixed = TRUE))
+expect_true(grepl('preload="metadata"', vid, fixed = TRUE))
+expect_false(grepl("autoplay", vid, fixed = TRUE))
+expect_false(grepl("muted", vid, fixed = TRUE))
+expect_false(grepl("loop", vid, fixed = TRUE))
+
+wall <- component_to_html(component("video_output", id = "w",
+                                    controls = FALSE, autoplay = TRUE,
+                                    muted = TRUE, loop = TRUE))
+expect_false(grepl("controls", wall, fixed = TRUE))
+expect_true(grepl('autoplay="autoplay"', wall, fixed = TRUE))
+expect_true(grepl('muted="muted"', wall, fixed = TRUE))
+expect_true(grepl('loop="loop"', wall, fixed = TRUE))
+
 # --- tabset marks exactly one panel open ---
 tabs <- component_to_html(component("tabset", id = "t", panels = list(
     list(title = "One", children = list(component("text", value = "a"))),

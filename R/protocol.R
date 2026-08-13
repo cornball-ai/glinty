@@ -6,7 +6,8 @@
 #' what the value is.
 #'
 #' @param id character output ID
-#' @param kind character one of text, html, table, image, audio, ui
+#' @param kind character one of text, html, table, image, audio,
+#'   video, ui
 #' @param value the renderer's value
 #' @return character JSON string
 #' @keywords internal
@@ -30,6 +31,23 @@ output_msg <- function(id, kind, value) {
 #' @keywords internal
 input_update_msg <- function(id, fields) {
     msg <- c(list(type = "input_update", id = id), fields)
+    as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
+}
+
+#' Create a video playback message
+#'
+#' Playback state for a video_output, driven from the server: a seek
+#' position, a play or a pause -- without replacing the element the
+#' way a new output value would, which is what keeps the position and
+#' the pipeline alive.
+#'
+#' @param id character output ID
+#' @param fields named list of playback fields (current_time,
+#'   playing) with NULLs already dropped
+#' @return character JSON string
+#' @keywords internal
+video_update_msg <- function(id, fields) {
+    msg <- c(list(type = "video_update", id = id), fields)
     as.character(jsonlite::toJSON(msg, auto_unbox = TRUE, null = "null"))
 }
 

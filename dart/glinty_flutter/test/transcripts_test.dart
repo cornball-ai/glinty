@@ -590,6 +590,27 @@ void main() {
       expect(value['duration'], 1.5);
     });
 
+    test('a video value is a URL plus its type; playback frames are safe', () {
+      // The src is a URL by the protocol's own design: seeking works
+      // by byte-range requests, and embedded bytes have no ranges to
+      // ask for. The video_update that follows drives a player this
+      // client leaves to its embedder, so here it is an unknown type
+      // -- ignored, never refused.
+      final s = GlintySession();
+      s.receive(serverFrame('hello-welcome', 'welcome'));
+      s.receive(serverFrame('video-output', 'output'));
+
+      expect(s.refused, isFalse);
+      expect(s.kinds['preview'], 'video');
+      final value = s.values['preview'] as Map<String, dynamic>;
+      expect(value['src'], '/static/cut.mp4');
+      expect(value['mime'], 'video/mp4');
+      expect(value['duration'], 4.2);
+
+      s.receive(serverFrame('video-output', 'video_update'));
+      expect(s.refused, isFalse);
+    });
+
     test('a ui-kind output is parsed into a tree, and seeds its store', () {
       // Both halves of what welcome does, at the scale of one slot:
       // hold the tree, and seed the store so the controls in it have

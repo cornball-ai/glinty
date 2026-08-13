@@ -275,7 +275,8 @@ them.
 `download_button`
 
 **Outputs**: `text_output`, `verbatim_output`, `table_output`,
-`plot_output`, `image_output`, `audio_output`, `ui_output`
+`plot_output`, `image_output`, `audio_output`, `video_output`,
+`ui_output`
 
 **Escape hatch**: `raw_html` — what `tag()` now produces:
 `{"component": "raw_html", "html": "<details>..."}`, a single opaque
@@ -313,6 +314,7 @@ same as safe to add.
 | `button` | `id`, `label` | `variant`, `icon`, `value: string` |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
+| `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false) |
 | `tabset` | `id`, `panels: [{title, children}]` | `selected` |
 | `conditional_panel` | `condition`, `children: []` | — |
 
@@ -375,6 +377,7 @@ rather than an intention.
 | `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
 | `ui_output` | the same `build()`, on a subtree that arrived as a value | seeds the input store the way `welcome` does, and takes those inputs back when the slot stops carrying them |
 | `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
+| `video_output` | the embedder's player, through `videoBuilder` | the same seam as audio (video_player, media_kit: the embedder's pick); src and poster resolved, `mime` passed on |
 | `file_input` | the embedder.s picker and POST, through `onUpload` | glinty owns the ticket in between, and asks for it only once files are in hand |
 | `html_output`, `raw_html` | — | **refused by name**; see below |
 
@@ -464,6 +467,7 @@ side does not know is a button that renders and does nothing.
 | `table` | `{header, rows}` | `render_table()` |
 | `image` | `{src, width, height}` | `render_plot()` |
 | `audio` | `{src, mime, duration?}` | `render_audio()` |
+| `video` | `{src, mime, poster?, duration?}` | `render_video()` |
 | `ui` | component tree | `render_ui()` |
 | `html` | string | `render_html()`, browser-only |
 
@@ -483,6 +487,42 @@ is an output like any other, so it travels as `output` with
 `image` and `audio` carry structure rather than a bare string, because
 a native client needs the dimensions and MIME type a browser would
 sniff.
+
+`video` follows audio's shape with one deliberate difference: its
+`src` is a URL, never embedded bytes. Seeking works by byte-range
+requests against a URL -- which the static file server answers with
+206s -- and a data URI has no ranges to ask for. The server refuses
+to embed a video file rather than shipping one that plays but cannot
+scrub. Invalidation is by URL: a re-rendered cut arrives under a new
+name, because clients cache by the old one. `poster` is one image
+and may be a data URI.
+
+### Video playback
+
+A new output value *replaces* the video; driving the player that is
+already there is its own message:
+
+```json
+{"type": "video_update", "id": "preview", "current_time": 1.5,
+ "playing": true}
+```
+
+Sent by `update_video()`. Both fields are optional and an absent
+field leaves that half of the playback state alone: a seek does not
+decide whether to play, a pause does not move the position. The
+shape that wants it is an external playhead -- a timeline, a
+transport slider -- kept in sync with a preview player.
+
+A `playing: true` may still be refused by the client (browsers block
+unmuted playback before the user has interacted with the page); a
+refusal leaves the player paused and is the client's to report. The
+browser client declares the `video_control` feature; a client
+without it ignores the message the way every client ignores message
+types it does not know.
+
+The reporting direction -- the component telling the server its
+position and playing state -- is deliberately absent for now; it is
+input-shaped and wants designing as one.
 
 ### Client measurement
 
@@ -622,8 +662,9 @@ adapts the wire format in response.
 ```json
 {"type": "hello", "protocol": 3, "client": "glinty-js/0.5.0",
  "components": ["text_input", "select_input", "..."],
- "kinds": ["text", "table", "image", "audio", "ui", "html"],
- "features": ["upload", "download", "modal", "progress", "measure"]}
+ "kinds": ["text", "table", "image", "audio", "video", "ui", "html"],
+ "features": ["upload", "download", "modal", "progress", "measure",
+              "video_control"]}
 ```
 
 Three lists, not one: a client may render every component and still

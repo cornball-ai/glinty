@@ -162,6 +162,14 @@ function makeEl(doc, tag) {
         hasAttribute(k) { return k in this.attrs; },
         removeAttribute(k) { delete this.attrs[k]; },
 
+        /* Media element playback, enough for video_update: paused is
+           the state the client drives, play() is a promise the way
+           the real one is (autoplay policy makes refusing it the
+           browser's right, and the client must handle that). */
+        paused: true,
+        play() { this.paused = false; return Promise.resolve(); },
+        pause() { this.paused = true; },
+
         appendChild(c) {
             if (c.parentNode) c.remove && c.remove();
             this.children.push(c);
@@ -544,7 +552,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             download: "startDownload",
             modal: "showModal",
             progress: "applyProgress",
-            measure: "reportPlotDims"
+            measure: "reportPlotDims",
+            video_control: "applyVideoUpdate"
         };
         const src = CLIENT_SRC;
         check("every declared feature has a function behind it",
@@ -1681,6 +1690,55 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
            nothing here. */
         check("and the value carried its media type",
               grant.value.mime === "audio/wav");
+    }
+
+    /* ---------------------------------------------------------- */
+    section("a video plays from a URL, and the server drives it");
+    {
+        const hyd = transcript("hello-welcome-hydrated");
+        const rev = frames(hyd, "in")[0].prerendered;
+        const vt = transcript("video-output");
+        const grant = frames(vt, "out")[0];
+        const drive = frames(vt, "out")[1];
+        const page = freshPage({ metaRevision: rev, setup: prerenderDemo });
+        page.ws().open();
+        page.ws().deliver(frames(hyd, "out")[0]);
+
+        page.ws().deliver({
+            type: "output", id: "panel", kind: "ui",
+            value: { component: "video_output", id: "preview",
+                     controls: true, autoplay: false, muted: false,
+                     loop: false }
+        });
+        const player = page.document.getElementById("preview");
+        check("the video slot is a video element",
+              player !== null && player.tagName === "VIDEO");
+        check("that preloads only metadata: a seek range-requests the rest",
+              player.getAttribute("preload") === "metadata");
+
+        page.ws().deliver(grant);
+        check("the source lands as the URL it is",
+              player.getAttribute("src") === grant.value.src);
+        check("and carried its media type",
+              grant.value.mime === "video/mp4");
+
+        /* The playback message moves inside the player instead of
+           replacing it. */
+        page.ws().deliver(drive);
+        check("video_update seeks", player.currentTime === 1.5);
+        check("and plays", player.paused === false);
+
+        page.ws().deliver({ type: "video_update", id: "preview",
+                            playing: false });
+        check("a pause travels alone and leaves the position",
+              player.paused === true && player.currentTime === 1.5);
+
+        /* Aimed at a slot that is not a video, it is a server bug
+           worth ignoring per element, not a crash. */
+        page.ws().deliver({ type: "video_update", id: "panel",
+                            current_time: 9, playing: true });
+        check("a video_update at a non-video slot is ignored",
+              player.currentTime === 1.5);
     }
 
     /* ---------------------------------------------------------- */

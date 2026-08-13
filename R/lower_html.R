@@ -64,6 +64,7 @@ component_to_html <- function(x) {
            image_output = html_el("img", c(html_slot(x),
                 list(class = "g-image-output", alt = x$alt)), void = TRUE),
            audio_output = html_audio_output(x),
+           video_output = html_video_output(x),
            html_output = html_el("div", c(html_slot(x),
                 list(class = "g-html-output"))),
            ui_output = html_el("div", c(html_slot(x),
@@ -533,6 +534,19 @@ html_audio_output <- function(x) {
                 } else {
                     NULL
                 })))
+}
+
+html_video_output <- function(x) {
+    # preload="metadata" always: duration and dimensions arrive, the
+    # frames wait for play or a seek -- which range-requests exactly
+    # what it needs instead of pulling the file to show a first frame.
+    html_el("video", c(html_slot(x),
+                       list(class = "g-video-output",
+                            controls = if (isTRUE(x$controls)) "controls",
+                            autoplay = if (isTRUE(x$autoplay)) "autoplay",
+                            muted = if (isTRUE(x$muted)) "muted",
+                            loop = if (isTRUE(x$loop)) "loop",
+                            preload = "metadata")))
 }
 
 # --- composite layout ---

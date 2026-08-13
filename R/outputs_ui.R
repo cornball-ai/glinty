@@ -90,6 +90,33 @@ audio_output <- function(id, controls = TRUE, autoplay = FALSE) {
     component("audio_output", id = id, controls = controls, autoplay = autoplay)
 }
 
+#' Create a video output slot
+#'
+#' Pair with [render_video()]. The value's src wants to be a real URL
+#' -- a `/static/` path the app serves -- rather than embedded bytes:
+#' seeking works by byte-range requests against a URL, and a data URI
+#' has no ranges to ask for.
+#'
+#' The element fills its container's width on a dark letterbox and
+#' keeps the video's own aspect. Playback can also be driven from the
+#' server with [update_video()].
+#'
+#' @param id character output ID
+#' @param controls logical show the player's transport controls
+#' @param autoplay logical begin playing on arrival. Browsers block
+#'   autoplay with sound, so autoplay wants `muted = TRUE`
+#' @param muted logical start muted
+#' @param loop logical start over at the end
+#' @return A UI component
+#' @examples
+#' video_output("preview")
+#' @export
+video_output <- function(id, controls = TRUE, autoplay = FALSE,
+                         muted = FALSE, loop = FALSE) {
+    component("video_output", id = id, controls = controls,
+              autoplay = autoplay, muted = muted, loop = loop)
+}
+
 #' Create a dynamic UI slot
 #'
 #' The container for render_ui(): server-built component trees replace
