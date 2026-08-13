@@ -19,7 +19,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:web_socket/web_socket.dart';
 
-import 'render.dart' show GlintyAudioBuilder, GlintyUploadHandler;
+import 'render.dart'
+    show GlintyAudioBuilder, GlintyVideoBuilder, GlintyUploadHandler;
 import 'session.dart';
 
 /// Opens a socket to [url]. Injectable so tests drive the client
