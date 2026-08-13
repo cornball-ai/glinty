@@ -98,7 +98,7 @@ COMPONENT_SCHEMA <- list(
                                      # native frontend to padding, and neither
                                      # mapping survives the other's units.
                                      width = field("enum", default = "content",
-                                                   values = c("content", "full")),
+            values = c("content", "full")),
                                      id = field("string")
     ),
                          # `grow` and `width` say how a container takes space
@@ -112,8 +112,7 @@ COMPONENT_SCHEMA <- list(
                          row = list(
                                     children = field("children", required = TRUE),
                                     gap = field("int", min = 0, max = 128),
-                                    align = field("enum", values = c("start", "center", "end",
-                                                                     "stretch")),
+                                    align = field("enum", values = c("start", "center", "end", "stretch")),
                                     grow = field("int", min = 0, max = 32),
                                     width = field("int", min = 0, max = 4096),
                                     id = field("string")
@@ -287,8 +286,7 @@ COMPONENT_SCHEMA <- list(
                          text_output = list(
         id = field("string", required = TRUE),
         variant = field("enum", default = "normal",
-                        values = c("normal", "muted", "strong", "mono",
-                                   "small"))
+                        values = c("normal", "muted", "strong", "mono", "small"))
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),

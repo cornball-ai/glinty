@@ -9,6 +9,7 @@ panel(
   title = NULL,
   grow = NULL,
   width = NULL,
+  fill = FALSE,
   id = NULL
 )
 }
@@ -24,6 +25,10 @@ takes none}
 
 \item{width}{integer fixed width in pixels}
 
+\item{fill}{logical hand the panel's height to its children, so one
+of them can grow into it. Without it a panel is as tall as its
+content and a child's `grow` has nothing to take}
+
 \item{id}{character element ID}
 }
 \value{
@@ -34,4 +39,6 @@ Group children in a container
 }
 \examples{
 panel(txt("body"), variant = "card", title = "Results")
+panel(column(text_output("log"), grow = 1L, scroll = TRUE),
+      fill = TRUE)
 }

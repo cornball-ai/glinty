@@ -8,7 +8,9 @@ txt(value, variant = "normal", id = NULL)
 \arguments{
 \item{value}{character text to show}
 
-\item{variant}{character "normal", "muted", "strong" or "heading"}
+\item{variant}{character "normal", "muted", "strong", "heading",
+"mono" or "small". "mono" is for values that align by character:
+timecodes, file listings, hashes. "small" is fine print}
 
 \item{id}{character element ID}
 }

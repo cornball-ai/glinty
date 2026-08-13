@@ -3,7 +3,7 @@
 \alias{column}
 \title{Arrange children in a vertical column}
 \usage{
-column(..., gap = NULL, grow = NULL, width = NULL, id = NULL)
+column(..., gap = NULL, grow = NULL, width = NULL, scroll = FALSE, id = NULL)
 }
 \arguments{
 \item{...}{child components}
@@ -14,6 +14,11 @@ column(..., gap = NULL, grow = NULL, width = NULL, id = NULL)
 takes none}
 
 \item{width}{integer fixed width in pixels}
+
+\item{scroll}{logical scroll overflowing content instead of growing.
+A grown, scrolling column inside `panel(fill = TRUE)` is the
+message-list shape: it takes the panel's spare height and scrolls
+what does not fit}
 
 \item{id}{character element ID}
 }

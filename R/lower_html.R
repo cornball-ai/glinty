@@ -35,11 +35,11 @@ component_to_html <- function(x) {
            divider = html_divider(x),
            spacer = html_spacer(x),
            page = html_container(x, "div",
-                if (identical(x$width, "full")) {
-                    "g-page g-page-full"
-                } else {
-                    "g-page"
-                }),
+            if (identical(x$width, "full")) {
+                "g-page g-page-full"
+            } else {
+                "g-page"
+            }),
            row = html_layout(x, "g-layout-row"),
            column = html_layout(x, "g-layout-col"),
            panel = html_panel(x),

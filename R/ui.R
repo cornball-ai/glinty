@@ -28,8 +28,7 @@
 #' @export
 page <- function(..., title = "glinty app", width = "content", css = NULL,
                  js = NULL, favicon = NULL, head = NULL) {
-    x <- component("page", children = list(...), title = title,
-                   width = width)
+    x <- component("page", children = list(...), title = title, width = width)
     # Assets are a transport concern, not UI. Kept off the component so
     # they never reach a client that cannot use them.
     attr(x, "assets") <- page_head(css = css, js = js, favicon = favicon,
