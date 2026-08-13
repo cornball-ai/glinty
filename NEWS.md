@@ -1,5 +1,14 @@
 # glinty (development version)
 
+**A height-only plot tracks its container's width.** Responsive
+plots have filled their container since Protocol v3, but only when
+*both* dimensions were open; `plot_output(id, height = 340)` -- the
+timeline-strip shape -- rendered at a guessed fixed width instead.
+Now any plot without a declared width gets `width:100%`, the client
+reports the real box through `measure`, and `render_plot()` draws at
+it; the 4:3 aspect fallback rides only when the height is open too
+(#35).
+
 **The workspace vocabulary.** A workspace app -- an editor, a
 dashboard, anything built from side-by-side panels -- could not be
 said without a custom stylesheet. Now it can (#34):

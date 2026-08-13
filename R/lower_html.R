@@ -500,12 +500,19 @@ html_text_output <- function(x) {
 }
 
 html_plot_output <- function(x) {
-    # With no dimensions the element fills its container and the client
+    # With no width the element fills its container and the client
     # reports the box back through a `measure` message, which is how
-    # render_plot() sizes itself.
+    # render_plot() sizes itself. The aspect fallback only rides when
+    # the height is open too; a declared height -- the timeline-strip
+    # shape -- already answers the question the ratio was there to
+    # answer.
     style <- NULL
-    if (is.null(x$width) && is.null(x$height)) {
-        style <- "width:100%;aspect-ratio:4 / 3"
+    if (is.null(x$width)) {
+        style <- if (is.null(x$height)) {
+            "width:100%;aspect-ratio:4 / 3"
+        } else {
+            "width:100%"
+        }
     }
     html_el("img", c(html_slot(x),
                      list(class = "g-plot-output", alt = x$alt, width = x$width,

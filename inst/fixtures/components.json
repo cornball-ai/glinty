@@ -182,6 +182,16 @@
       }
     },
     {
+      "name": "plot-output-height-only",
+      "notes": "the timeline-strip shape: width tracks the container, height is declared",
+      "component": {
+        "component": "plot_output",
+        "id": "strip",
+        "height": 120,
+        "alt": ""
+      }
+    },
+    {
       "name": "audio-output",
       "notes": "browser has a player element; Flutter needs a package outside the SDK",
       "component": {
