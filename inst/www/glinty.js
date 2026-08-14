@@ -1177,9 +1177,18 @@
             if (v.height) el.setAttribute("height", v.height);
             break;
         }
-        case "audio":
-            el.src = (msg.value || {}).src || "";
+        case "audio": {
+            /* Remove rather than set "": a present-but-empty src
+               still counts as having a source, and the stylesheet
+               hides a sourceless player entirely. */
+            var av = (msg.value || {}).src;
+            if (av) {
+                el.src = av;
+            } else {
+                el.removeAttribute("src");
+            }
             break;
+        }
         case "video": {
             var vv = msg.value || {};
             /* Re-assigning even an identical src restarts the load

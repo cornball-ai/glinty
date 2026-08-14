@@ -320,6 +320,10 @@ h1, h2, h3, h4 {
 
 .g-slider {
     vertical-align: middle;
+    /* A range input's natural width (~130px) means nothing; every
+       framework stretches sliders to their container, and a slider
+       in a grown column stayed short without this. */
+    width: 100%;
     max-width: 100%;
     accent-color: var(--g-primary);
 }
@@ -415,15 +419,46 @@ h1, h2, h3, h4 {
 }
 
 /* Fill the container's width, keep the video's own aspect, letterbox
-   on black the way every playback surface does. Height stays the
-   video's business: constraining it is the layout's job (a filled
-   panel, a grown column), not a viewport guess made here. */
+   on black the way every playback surface does. The viewport cap is
+   the one guess made here: a video is the one element whose natural
+   height can exceed any screen while staying meaningful, and the
+   letterbox absorbs whatever the cap takes. A bounded container (a
+   filled panel) constrains it tighter below. */
 .g-video-output {
     display: block;
     width: 100%;
     height: auto;
+    max-height: 70vh;
     margin: 0.5rem 0;
     background: #000;
+}
+
+/* No value yet, no player. Every other slot renders nothing until
+   its value arrives; an empty player shell -- controls bar, 0:00 --
+   reads as a bug. The attribute goes missing again when a renderer
+   returns NULL, so this also empties a slot the server cleared. */
+.g-video-output:not([src]),
+.g-audio-output:not([src]) {
+    display: none;
+}
+
+/* Inside a filled panel the container is bounded, so fit within it:
+   the box shrinks below its natural height rather than blowing the
+   panel open, and the letterbox absorbs the difference. */
+.g-fill > .g-video-output {
+    min-height: 0;
+}
+
+/* Media in a filled panel keeps its own aspect and sits centered.
+   The flex column's default cross-axis stretch would otherwise force
+   full width onto a height-only image -- whose other dimension the
+   browser derives from the source aspect precisely when nothing
+   stretches it -- and a monitor surface reads better centered than
+   pinned to one edge. */
+.g-fill > .g-plot-output,
+.g-fill > .g-image-output,
+.g-fill > .g-video-output {
+    align-self: center;
 }
 
 /* Why a transfer was refused, beside the control that asked. A

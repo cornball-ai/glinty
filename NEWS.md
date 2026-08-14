@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**Findings from the first zero-stylesheet workspace port** (#42). A
+sourceless video or audio slot now renders nothing instead of an
+empty player shell -- the rule every other slot already followed. A
+video caps at 70vh with the letterbox absorbing the difference, and
+inside a filled panel it shrinks to fit the bounded height. Media in
+a filled panel keeps its own aspect (the flex column's cross-axis
+stretch was distorting height-only images) and sits centered, the
+way a monitor surface reads. Sliders fill their container: a range
+input's natural width means nothing.
+
 **Video is a component.** `video_output()` and `render_video()` are
 the pair audio already had (#37): the slot is a real `<video>`
 element, the value is `{src, mime, poster?, duration?}` under
