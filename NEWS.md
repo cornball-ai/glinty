@@ -1,6 +1,6 @@
 # glinty (development version)
 
-**Keyboard shortcuts**. `shortcut(id, key)` binds a key to an
+**Keyboard shortcuts** (#45). `shortcut(id, key)` binds a key to an
 event: a button you cannot see. It emits the same frame `button()`
 does, so `observe_event(input$id, ...)` serves the visible control and
 its accelerator under one id, and it renders nothing.
