@@ -38,6 +38,12 @@ const supportedComponents = <String>{
   // Same shape: the app picks the files and posts them, through
   // onUpload; glinty owns the ticket in between.
   'file_input',
+  // A key binding. Nothing to draw, so "render" here means "bind": a
+  // HardwareKeyboard handler that lives exactly as long as the widget
+  // does. Declared supported because the protocol asks what this
+  // client can do with a component, and it can do the whole of this
+  // one.
+  'shortcut',
 };
 
 /// Components the protocol defines that this client cannot render.
