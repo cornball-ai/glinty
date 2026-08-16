@@ -307,6 +307,91 @@
         }, DEBOUNCE_MS));
     }
 
+    /* ---------- keyboard ---------- */
+
+    /* Browser key names, by the token the protocol carries. A closed
+       set on both sides: a name the server can send is a name this map
+       answers for, so a shortcut can never bind to nothing. */
+    var KEY_CODES = {
+        space: "Space", enter: "Enter", escape: "Escape", tab: "Tab",
+        backspace: "Backspace", delete: "Delete", insert: "Insert",
+        home: "Home", end: "End", pageup: "PageUp", pagedown: "PageDown",
+        left: "ArrowLeft", right: "ArrowRight", up: "ArrowUp",
+        down: "ArrowDown", comma: "Comma", period: "Period",
+        slash: "Slash", backslash: "Backslash", semicolon: "Semicolon",
+        quote: "Quote", bracketleft: "BracketLeft",
+        bracketright: "BracketRight", minus: "Minus", equal: "Equal",
+        backquote: "Backquote"
+    };
+
+    /* The token for a keypress, or null for a key no shortcut can name.
+       KeyboardEvent.code is the PHYSICAL key, which is what a shortcut
+       means: shift+1 is that, not "exclam", and it survives a layout
+       where the character would not. */
+    function keyToken(ev) {
+        var code = ev.code || "";
+        if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+        if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+        if (/^F([1-9]|1[0-2])$/.test(code)) return code.toLowerCase();
+        for (var name in KEY_CODES) {
+            if (KEY_CODES[name] === code) return name;
+        }
+        return null;
+    }
+
+    /* Is focus somewhere that a bare letter belongs to? Editable
+       elements own their keystrokes, so "d" deletes a clip everywhere
+       except halfway through typing a filename. */
+    function isTyping() {
+        var a = document.activeElement;
+        if (!a) return false;
+        if (a.isContentEditable) return true;
+        var tag = a.tagName;
+        if (tag === "TEXTAREA") return true;
+        if (tag === "SELECT") return true;
+        if (tag !== "INPUT") return false;
+        /* A checkbox or a radio is focusable but types nothing, and
+           space is exactly the key it wants; a range slider wants the
+           arrows. Those keep their keys, but a letter shortcut is not
+           competing with them. */
+        return !/^(checkbox|radio|button|submit|range|file)$/i
+            .test(a.type || "text");
+    }
+
+    function bindKeys(root) {
+        document.addEventListener("keydown", function (ev) {
+            var token = keyToken(ev);
+            if (!token) return;
+            /* Autorepeat only reaches a binding that asked for it: a
+               held "space" must not fire play sixty times. */
+            var typing = isTyping();
+            var mods = {
+                ctrl: !!(ev.ctrlKey || ev.metaKey),
+                shift: !!ev.shiftKey,
+                alt: !!ev.altKey
+            };
+            var found = root.querySelectorAll(
+                '[data-g-key="' + token + '"]');
+            for (var i = 0; i < found.length; i++) {
+                var el = found[i];
+                if ((el.dataset.gCtrl === "1") !== mods.ctrl) continue;
+                if ((el.dataset.gShift === "1") !== mods.shift) continue;
+                if ((el.dataset.gAlt === "1") !== mods.alt) continue;
+                if (typing && el.dataset.gTyping !== "1") continue;
+                if (ev.repeat && el.dataset.gHold !== "1") continue;
+                /* A declared shortcut takes the keypress. Bind ctrl+s
+                   and it saves the project rather than also offering to
+                   save the page. */
+                ev.preventDefault();
+                var frame = { type: "event", id: el.dataset.gTarget };
+                if (el.dataset.gValue !== undefined) {
+                    frame.value = el.dataset.gValue;
+                }
+                send(frame);
+            }
+        });
+    }
+
     /* ---------- event delegation ---------- */
 
     /* Listeners attach to the root exactly once, at page load. That
@@ -1044,6 +1129,26 @@
             }
             node = document.createElement("div");
             node.innerHTML = c.html;
+            return node;
+        }
+        case "shortcut": {
+            /* A key binding has no element of its own, so it rides in
+               the DOM as data and one delegated listener reads it.
+               Keeping it in the tree means a rebuilt UI has exactly the
+               shortcuts the new tree declares -- there is no registry
+               beside the tree to fall out of step with it. */
+            node = el("span", { hidden: "hidden", "class": "g-shortcut" });
+            node.setAttribute("data-g-target", c.id);
+            node.setAttribute("data-g-message", "event");
+            node.setAttribute("data-g-key", c.key);
+            if (c.value !== null && c.value !== undefined) {
+                node.setAttribute("data-g-value", c.value);
+            }
+            if (c.ctrl) node.setAttribute("data-g-ctrl", "1");
+            if (c.shift) node.setAttribute("data-g-shift", "1");
+            if (c.alt) node.setAttribute("data-g-alt", "1");
+            if (c.typing) node.setAttribute("data-g-typing", "1");
+            if (c.hold) node.setAttribute("data-g-hold", "1");
             return node;
         }
         default:
@@ -1935,6 +2040,11 @@
         var meta = document.querySelector('meta[name="g-ui-revision"]');
         prerendered = meta ? meta.getAttribute("content") : null;
         bindEvents(root);
+        /* Keys listen on the document, not the root: a shortcut is a
+           page-wide accelerator, and a click that lands on the header
+           must not switch them off. Which bindings are live is still
+           the tree's answer -- the listener reads it every press. */
+        bindKeys(root);
         /* Seed inputValues and settle conditional panels before the
            socket work starts, so the page never flashes content that
            its condition says to hide. Local only; nothing is sent. */

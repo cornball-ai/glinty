@@ -226,3 +226,101 @@ button <- function(id, label, variant = "default", icon = NULL, value = NULL) {
     component("button", id = id, label = label, variant = variant,
               icon = icon, value = value)
 }
+
+# Modifier spellings a key spec may use, mapped onto the three the wire
+# carries. cmd/meta/super fold into ctrl on purpose: an app that means
+# "the platform's command modifier" should not have to say it twice, and
+# every frontend already knows which key that is locally.
+KEY_MODIFIERS <- c(ctrl = "ctrl", control = "ctrl", cmd = "ctrl",
+                   command = "ctrl", meta = "ctrl", super = "ctrl",
+                   shift = "shift", alt = "alt", option = "alt")
+
+# Spellings for keys whose obvious name is not the token. Everything
+# else has to BE a token, so a typo fails here rather than binding a
+# shortcut that can never fire.
+KEY_ALIASES <- c(esc = "escape", del = "delete", ins = "insert",
+                 spacebar = "space", `return` = "enter", pgup = "pageup",
+                 pgdn = "pagedown", pagedown = "pagedown",
+                 arrowleft = "left", arrowright = "right", arrowup = "up",
+                 arrowdown = "down", `,` = "comma", `.` = "period",
+                 `/` = "slash", `\\` = "backslash", `;` = "semicolon",
+                 `'` = "quote", `[` = "bracketleft", `]` = "bracketright",
+                 `-` = "minus", `=` = "equal", `\`` = "backquote")
+
+#' Parse a key spec into its wire fields
+#'
+#' @param spec character like "ctrl+shift+k", "space", "f5"
+#' @return list(key, ctrl, shift, alt)
+#' @keywords internal
+parse_key <- function(spec) {
+    if (!is.character(spec) || length(spec) != 1L || is.na(spec) ||
+        !nzchar(spec)) {
+        stop("shortcut(): key must be one non-empty string", call. = FALSE)
+    }
+    # "+" is the separator, so the key it would otherwise name is
+    # spelled by its own token: "ctrl+=" or "ctrl+equal", never "ctrl++".
+    parts <- strsplit(tolower(trimws(spec)), "+", fixed = TRUE)[[1]]
+    parts <- parts[nzchar(parts)]
+    if (length(parts) == 0L) {
+        stop("shortcut(): key '", spec, "' names no key", call. = FALSE)
+    }
+    mods <- parts[-length(parts)]
+    key <- parts[length(parts)]
+    key <- unname(if (key %in% names(KEY_ALIASES)) KEY_ALIASES[[key]] else key)
+    if (!key %in% KEY_NAMES) {
+        stop("shortcut(): '", key, "' is not a key name; see KEY_NAMES",
+             call. = FALSE)
+    }
+    bad <- setdiff(mods, names(KEY_MODIFIERS))
+    if (length(bad) > 0L) {
+        stop("shortcut(): unknown modifier(s): ",
+             paste(bad, collapse = ", "), call. = FALSE)
+    }
+    on <- unique(unname(KEY_MODIFIERS[mods]))
+    list(key = key, ctrl = "ctrl" %in% on, shift = "shift" %in% on,
+         alt = "alt" %in% on)
+}
+
+#' Bind a key to an event
+#'
+#' A shortcut is a button you cannot see. It emits the same event frame
+#' a `button()` does, so `observe_event(input$id, ...)` serves both and
+#' one id can carry the visible control and its accelerator together.
+#'
+#' It renders nothing. Put it anywhere in the tree; a client that has
+#' never heard of it says so where it sits, which is the point of
+#' putting it in the tree rather than smuggling it in as a script.
+#'
+#' `key` is a spec like `"ctrl+shift+k"`, `"space"` or `"f5"`, parsed
+#' here into the fields the wire carries. `ctrl` also means Command on a
+#' Mac: an app that means "the platform's command modifier" should not
+#' have to say it twice.
+#'
+#' By default a shortcut does NOT fire while a text field has focus,
+#' because the alternative is `d` deleting a clip halfway through typing
+#' a filename. Escape and the function keys usually want `typing = TRUE`.
+#'
+#' A shortcut takes the keypress: the browser's own binding for it does
+#' not also run. Bind `ctrl+s` and it saves the project rather than
+#' offering to save the page.
+#'
+#' @param id character event ID, as a `button()`'s would be
+#' @param key character key spec: an optional `ctrl`/`shift`/`alt`
+#'   (or `cmd`/`meta`/`option`) prefix joined by `+`, then one key
+#' @param value character carried on the event, exactly as a button's
+#'   is, so one handler can serve several bindings
+#' @param typing logical fire even while a text input has focus
+#' @param hold logical fire repeatedly while the key is held, for
+#'   shortcuts that nudge rather than toggle
+#' @return A UI component
+#' @examples
+#' shortcut("play", "space")
+#' shortcut("save_project", "ctrl+s", typing = TRUE)
+#' shortcut("nudge_left", "left", hold = TRUE)
+#' @export
+shortcut <- function(id, key, value = NULL, typing = FALSE, hold = FALSE) {
+    k <- parse_key(key)
+    component("shortcut", id = id, key = k$key, value = value,
+              ctrl = k$ctrl, shift = k$shift, alt = k$alt, typing = typing,
+              hold = hold)
+}

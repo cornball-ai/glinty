@@ -55,6 +55,27 @@ any addition that is not clearly in the "fails visibly" column bumps
 the version, or gates itself behind a declared capability. There is
 no third option where it is fine because the field is optional.
 
+### v3.2
+
+Protocol still 3. One addition, driven by an NLE: `shortcut`, a key
+binding, described under "The set" below.
+
+**Why this one is safe by the test at the top.** It is a new component,
+not a new field, and an unknown component renders `[unsupported
+component: shortcut]` in both lowerings — visible and named, never
+silent. That is the column an addition has to be in. It is also the
+mildest possible gap: a shortcut is an accelerator for something a
+button already does, so a client that cannot bind it loses the
+shortcut, not the action.
+
+The alternative was a page-level `keys =` argument beside `css` and
+`js`. Those live outside the component tree because they are
+browser-only transport — a Flutter client has no use for a stylesheet.
+A key binding is not that. Flutter has `HardwareKeyboard` and
+`PhysicalKeyboardKey`; a terminal frontend has its own key loop.
+Something every frontend must implement belongs in the vocabulary, and
+putting it there is what obliged the Dart lowering to answer for it.
+
 ### v3.1
 
 Protocol still 3. Additions, driven by porting two real apps onto the
@@ -272,7 +293,49 @@ them.
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
 `number_input`, `select_input`, `checkbox_input`, `radio_buttons`,
 `slider_input`, `date_input`, `file_input`, `button`,
-`download_button`
+`download_button`, `shortcut`
+
+`shortcut` is a button you cannot see: it emits the same `event` frame,
+so one server handler serves the visible control and its accelerator
+under one id. It renders nothing and occupies no space.
+
+```json
+{"component": "shortcut", "id": "play", "key": "space",
+ "ctrl": false, "shift": false, "alt": false,
+ "typing": false, "hold": false}
+```
+
+`key` is a token from a closed set — letters, digits, `f1`–`f12`, and
+the named keys an editor needs — for the same reason `icon.name` is. A
+browser calls one key `"Escape"` and Flutter calls it
+`LogicalKeyboardKey.escape`; a name each lowering guesses at produces a
+shortcut that never fires, which is invisible in a way a missing button
+is not. Both lowerings carry the whole set, asserted against it.
+
+Modifiers are three booleans rather than a packed `"ctrl+shift+k"`
+string. The alternative is every frontend parsing that spec for itself
+and two of them disagreeing about a case nobody wrote a test for; the R
+constructor parses once. `ctrl` also means Command: an app that means
+"the platform's command modifier" should say it once, and each frontend
+knows which key that is locally.
+
+The key named is the PHYSICAL key, so `shift`+`1` is that and never
+`"exclam"`, and a binding survives a layout where the character would
+not.
+
+Two fields exist because both defaults are traps. `typing` is false by
+default, so a bare `d` does not delete a clip halfway through typing a
+filename; `escape` and the function keys usually want it true. `hold`
+is false by default, so a held `space` does not fire play sixty times;
+a nudge wants it true.
+
+A declared shortcut takes the keypress — the frontend's own binding for
+it does not also run. Bind `ctrl+s` and it saves the project rather
+than offering to save the page.
+
+The binding lives in the tree, not in a registry beside it. A rebuilt
+UI then has exactly the shortcuts its new tree declares, with none left
+over from the old one — the drift a `bind_key()` call could not avoid.
 
 **Outputs**: `text_output`, `verbatim_output`, `table_output`,
 `plot_output`, `image_output`, `audio_output`, `video_output`,

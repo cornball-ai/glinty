@@ -133,6 +133,9 @@ for (nm in names(INPUT_META)) {
     if (identical(nm, "button")) {
         args$label <- "Go"
     }
+    if (identical(nm, "shortcut")) {
+        args$key <- "k"
+    }
     x <- do.call(component, args)
     out <- component_to_html(x)
 

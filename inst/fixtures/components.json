@@ -595,6 +595,49 @@
       }
     },
     {
+      "name": "shortcut",
+      "notes": "renders nothing and takes no space; a bare key waits for focus to leave a text field",
+      "component": {
+        "component": "shortcut",
+        "id": "play",
+        "key": "space",
+        "ctrl": false,
+        "shift": false,
+        "alt": false,
+        "typing": false,
+        "hold": false
+      }
+    },
+    {
+      "name": "shortcut-modified",
+      "notes": "modifiers are parsed once in R, never by a frontend; ctrl means cmd on a Mac",
+      "component": {
+        "component": "shortcut",
+        "id": "save_project",
+        "key": "s",
+        "ctrl": true,
+        "shift": true,
+        "alt": false,
+        "typing": true,
+        "hold": false
+      }
+    },
+    {
+      "name": "shortcut-held",
+      "notes": "autorepeat reaches only a binding that asked for it; value rides along as a button's does",
+      "component": {
+        "component": "shortcut",
+        "id": "nudge_left",
+        "key": "left",
+        "value": "-1",
+        "ctrl": false,
+        "shift": false,
+        "alt": false,
+        "typing": false,
+        "hold": true
+      }
+    },
+    {
       "name": "image",
       "notes": "a picture that is part of the UI, not an output a renderer produced",
       "component": {

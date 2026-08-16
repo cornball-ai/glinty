@@ -71,9 +71,33 @@ component_to_html <- function(x) {
                                         list(class = "g-ui-output"))),
            tabset = html_tabset(x),
            conditional_panel = html_conditional(x),
+           shortcut = html_shortcut(x),
            raw_html = x$html,
            html_unsupported(x$component)
     )
+}
+
+#' A key binding, lowered to a hidden marker the client binds from
+#'
+#' There is no keyboard element in HTML, so the binding rides in the
+#' DOM as data and one delegated listener reads it. That keeps the
+#' bindings in the tree rather than in a registry beside it: a rebuilt
+#' UI has exactly the shortcuts its new tree declares, with none left
+#' over from the old one.
+#'
+#' @param x the component
+#' @return character HTML
+#' @keywords internal
+html_shortcut <- function(x) {
+    flag <- function(v) if (isTRUE(v)) "1" else NULL
+    html_el("span", list(hidden = "hidden", class = "g-shortcut",
+                         "data-g-target" = x$id, "data-g-message" = "event",
+                         "data-g-key" = x$key, "data-g-value" = x$value,
+                         "data-g-ctrl" = flag(x$ctrl),
+                         "data-g-shift" = flag(x$shift),
+                         "data-g-alt" = flag(x$alt),
+                         "data-g-typing" = flag(x$typing),
+                         "data-g-hold" = flag(x$hold)))
 }
 
 #' Lower a list of children
