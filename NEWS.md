@@ -1,5 +1,41 @@
 # glinty (development version)
 
+**Keyboard shortcuts**. `shortcut(id, key)` binds a key to an
+event: a button you cannot see. It emits the same frame `button()`
+does, so `observe_event(input$id, ...)` serves the visible control and
+its accelerator under one id, and it renders nothing.
+
+```r
+shortcut("play", "space")
+shortcut("save_project", "ctrl+s", typing = TRUE)
+shortcut("nudge_left", "left", hold = TRUE)
+```
+
+Key names are a closed set, for the same reason icon names are: a
+browser calls one key `"Escape"` and Flutter calls it
+`LogicalKeyboardKey.escape`, and a name each lowering guesses at is a
+shortcut that never fires -- invisible in a way a missing button is
+not. Both lowerings carry the whole set, asserted against it.
+
+The spec is parsed once, in R, into the three booleans the wire
+carries, so no frontend parses it and no two can disagree. `ctrl` also
+means Command; an app that means "the platform command modifier" says
+it once. The key named is the physical key, so `shift+1` is that and
+never `exclam`.
+
+Two defaults are deliberate because both traps are common. A shortcut
+does not fire while a text field has focus, so a bare `d` cannot delete
+a clip halfway through typing a filename; `typing = TRUE` opts in.
+Autorepeat reaches only a binding that asked for it, so a held `space`
+does not fire play sixty times; `hold = TRUE` opts in. And a declared
+shortcut takes the keypress, so `ctrl+s` saves the project rather than
+offering to save the page.
+
+The browser half is driven under node against the shipped `glinty.js`
+(`inst/tinytest/keyboard_client.js`), because nothing in R can assert
+that pressing a key produces a frame.
+
+
 **Findings from the first zero-stylesheet workspace port** (#42). A
 sourceless video or audio slot now renders nothing instead of an
 empty player shell -- the rule every other slot already followed. A

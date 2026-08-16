@@ -21,6 +21,30 @@
 ICON_NAMES <- c("play", "stop", "rotate", "trash", "microphone",
                 "bookmark", "download", "upload")
 
+#' The key names every frontend must recognise
+#'
+#' Closed for the same reason the icon set is. A browser calls the
+#' escape key "Escape" and Flutter calls it `LogicalKeyboardKey.escape`;
+#' a name outside this set is one each lowering guesses at, and a
+#' shortcut that never fires is invisible in a way a missing button is
+#' not. Enumerated here so a bad name fails where it was written.
+#'
+#' Adding one means adding a case to the browser lowering's key map and
+#' to `_keyFor` in dart/glinty_flutter, and the fixtures make that
+#' obligation fail loudly if either is skipped.
+#'
+#' Letters are lowercase and digits are the top row: a shortcut names
+#' the key, not the character it would type, so "shift+1" is that and
+#' never "exclam".
+#'
+#' @keywords internal
+KEY_NAMES <- c(letters, as.character(0:9), paste0("f", 1:12), "space",
+               "enter", "escape", "tab", "backspace", "delete", "insert",
+               "home", "end", "pageup", "pagedown", "left", "right",
+               "up", "down", "comma", "period", "slash", "backslash",
+               "semicolon", "quote", "bracketleft", "bracketright",
+               "minus", "equal", "backquote")
+
 #' Declare one component field
 #'
 #' @param type character one of "string", "number", "int", "bool",
@@ -327,6 +351,25 @@ COMPONENT_SCHEMA <- list(
         children = field("children", required = TRUE)
     ),
 
+                         # keyboard
+                         #
+                         # Modifiers are three booleans rather than one packed
+                         # string, and the key is a token from a closed set,
+                         # because the alternative is every frontend parsing
+                         # "ctrl+shift+k" for itself and two of them
+                         # disagreeing about a case nobody wrote a test for.
+                         # The R constructor does the parsing once.
+                         shortcut = list(
+        id = field("string", required = TRUE),
+        key = field("enum", required = TRUE, values = KEY_NAMES),
+        value = field("string"),
+        ctrl = field("bool", default = FALSE),
+        shift = field("bool", default = FALSE),
+        alt = field("bool", default = FALSE),
+        typing = field("bool", default = FALSE),
+        hold = field("bool", default = FALSE)
+    ),
+
                          # escape hatch
                          raw_html = list(html = field("string", required = TRUE))
 )
@@ -379,7 +422,12 @@ INPUT_META <- list(
                    # exactly as with a select and `multiple`.
                    button = list(message = "event", value_type = NULL,
                                  value_type_valued = "string"),
-                   download_button = list(message = "event", value_type = NULL)
+                   download_button = list(message = "event", value_type = NULL),
+                   # A shortcut is a button you cannot see: it emits the
+                   # same frame, so the server observes it identically
+                   # and an app can bind one id to both.
+                   shortcut = list(message = "event", value_type = NULL,
+                                   value_type_valued = "string")
 )
 
 #' Is this component an input or event emitter?

@@ -311,6 +311,25 @@ component_fixtures <- function() {
                       notes = "browser renders; every other frontend must refuse by name"
         ),
                  list(
+                      name = "shortcut",
+                      component = shortcut("play", "space"),
+                      notes = paste("renders nothing and takes no space; a bare",
+                                    "key waits for focus to leave a text field")
+        ),
+                 list(
+                      name = "shortcut-modified",
+                      component = shortcut("save_project", "ctrl+shift+s", typing = TRUE),
+                      notes = paste("modifiers are parsed once in R, never by a",
+                                    "frontend; ctrl means cmd on a Mac")
+        ),
+                 list(
+                      name = "shortcut-held",
+                      component = shortcut("nudge_left", "left", value = "-1",
+                hold = TRUE),
+                      notes = paste("autorepeat reaches only a binding that asked",
+                                    "for it; value rides along as a button's does")
+        ),
+                 list(
                       name = "image",
                       component = component("image", src = "/static/logo.png",
                 alt = "cornball.ai", width = 32L, height = 32L),

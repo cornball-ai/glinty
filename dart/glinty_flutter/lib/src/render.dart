@@ -12,6 +12,7 @@ library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'component.dart';
 
@@ -524,9 +525,101 @@ class GlintyRenderer {
           offstage: !visible,
           child: _column(context, c),
         );
+      case 'shortcut':
+        return _shortcut(context, c);
       default:
         return _unsupported(c.type);
     }
+  }
+
+  // --- keyboard ---
+
+  /// Physical keys, by the token the protocol carries.
+  ///
+  /// Physical rather than logical: a shortcut names the KEY, so
+  /// "shift+1" is that and never "exclam", and the binding survives a
+  /// layout where the character would not. Closed on both sides -- a
+  /// token the server can send is a token this map answers for, so a
+  /// shortcut can never bind to nothing.
+  static const Map<String, PhysicalKeyboardKey> _keyFor = {
+    'a': PhysicalKeyboardKey.keyA, 'b': PhysicalKeyboardKey.keyB,
+    'c': PhysicalKeyboardKey.keyC, 'd': PhysicalKeyboardKey.keyD,
+    'e': PhysicalKeyboardKey.keyE, 'f': PhysicalKeyboardKey.keyF,
+    'g': PhysicalKeyboardKey.keyG, 'h': PhysicalKeyboardKey.keyH,
+    'i': PhysicalKeyboardKey.keyI, 'j': PhysicalKeyboardKey.keyJ,
+    'k': PhysicalKeyboardKey.keyK, 'l': PhysicalKeyboardKey.keyL,
+    'm': PhysicalKeyboardKey.keyM, 'n': PhysicalKeyboardKey.keyN,
+    'o': PhysicalKeyboardKey.keyO, 'p': PhysicalKeyboardKey.keyP,
+    'q': PhysicalKeyboardKey.keyQ, 'r': PhysicalKeyboardKey.keyR,
+    's': PhysicalKeyboardKey.keyS, 't': PhysicalKeyboardKey.keyT,
+    'u': PhysicalKeyboardKey.keyU, 'v': PhysicalKeyboardKey.keyV,
+    'w': PhysicalKeyboardKey.keyW, 'x': PhysicalKeyboardKey.keyX,
+    'y': PhysicalKeyboardKey.keyY, 'z': PhysicalKeyboardKey.keyZ,
+    '0': PhysicalKeyboardKey.digit0, '1': PhysicalKeyboardKey.digit1,
+    '2': PhysicalKeyboardKey.digit2, '3': PhysicalKeyboardKey.digit3,
+    '4': PhysicalKeyboardKey.digit4, '5': PhysicalKeyboardKey.digit5,
+    '6': PhysicalKeyboardKey.digit6, '7': PhysicalKeyboardKey.digit7,
+    '8': PhysicalKeyboardKey.digit8, '9': PhysicalKeyboardKey.digit9,
+    'f1': PhysicalKeyboardKey.f1, 'f2': PhysicalKeyboardKey.f2,
+    'f3': PhysicalKeyboardKey.f3, 'f4': PhysicalKeyboardKey.f4,
+    'f5': PhysicalKeyboardKey.f5, 'f6': PhysicalKeyboardKey.f6,
+    'f7': PhysicalKeyboardKey.f7, 'f8': PhysicalKeyboardKey.f8,
+    'f9': PhysicalKeyboardKey.f9, 'f10': PhysicalKeyboardKey.f10,
+    'f11': PhysicalKeyboardKey.f11, 'f12': PhysicalKeyboardKey.f12,
+    'space': PhysicalKeyboardKey.space,
+    'enter': PhysicalKeyboardKey.enter,
+    'escape': PhysicalKeyboardKey.escape,
+    'tab': PhysicalKeyboardKey.tab,
+    'backspace': PhysicalKeyboardKey.backspace,
+    'delete': PhysicalKeyboardKey.delete,
+    'insert': PhysicalKeyboardKey.insert,
+    'home': PhysicalKeyboardKey.home,
+    'end': PhysicalKeyboardKey.end,
+    'pageup': PhysicalKeyboardKey.pageUp,
+    'pagedown': PhysicalKeyboardKey.pageDown,
+    'left': PhysicalKeyboardKey.arrowLeft,
+    'right': PhysicalKeyboardKey.arrowRight,
+    'up': PhysicalKeyboardKey.arrowUp,
+    'down': PhysicalKeyboardKey.arrowDown,
+    'comma': PhysicalKeyboardKey.comma,
+    'period': PhysicalKeyboardKey.period,
+    'slash': PhysicalKeyboardKey.slash,
+    'backslash': PhysicalKeyboardKey.backslash,
+    'semicolon': PhysicalKeyboardKey.semicolon,
+    'quote': PhysicalKeyboardKey.quote,
+    'bracketleft': PhysicalKeyboardKey.bracketLeft,
+    'bracketright': PhysicalKeyboardKey.bracketRight,
+    'minus': PhysicalKeyboardKey.minus,
+    'equal': PhysicalKeyboardKey.equal,
+    'backquote': PhysicalKeyboardKey.backquote,
+  };
+
+  /// A key binding. Renders nothing and occupies no space.
+  ///
+  /// A handler on [HardwareKeyboard] rather than [Shortcuts]/[Actions]:
+  /// those route by focus, and a shortcut declared anywhere in the tree
+  /// is a page-wide accelerator whose owner may not be focusable at all
+  /// -- the surface a plot_output draws into is an image. The
+  /// suppression rules (typing, autorepeat) are the protocol's rather
+  /// than Flutter's traversal's, so they are applied where they can be
+  /// read next to the rest of the contract.
+  Widget _shortcut(BuildContext context, GlintyComponent c) {
+    final key = _keyFor[c.str('key')];
+    // A token with no physical key cannot happen -- the set is closed
+    // on both sides -- but rendering nothing beats crashing a whole
+    // page over one binding if a client ever runs ahead of a server.
+    if (key == null) return const SizedBox.shrink();
+    final id = c.str('id');
+    if (id == null) return const SizedBox.shrink();
+    return _GlintyShortcut(
+      physical: key,
+      ctrl: c.fields['ctrl'] == true,
+      shift: c.fields['shift'] == true,
+      alt: c.fields['alt'] == true,
+      typing: c.fields['typing'] == true,
+      hold: c.fields['hold'] == true,
+      fire: () => onEvent?.call(id, value: c.str('value')),
+    );
   }
 
   // --- static content ---
@@ -1880,4 +1973,95 @@ class _GlintyFileInputState extends State<_GlintyFileInput> {
       ],
     );
   }
+}
+
+/// One key binding, live for as long as it is in the tree.
+///
+/// Stateful because the handler has to be added and removed with the
+/// widget: a shortcut that outlives its tree is exactly the registry
+/// drift this component exists to avoid, and Flutter's own dispose is
+/// the only thing that knows when the tree changed.
+///
+/// It occupies no space. Put one anywhere.
+class _GlintyShortcut extends StatefulWidget {
+  const _GlintyShortcut({
+    required this.physical,
+    required this.ctrl,
+    required this.shift,
+    required this.alt,
+    required this.typing,
+    required this.hold,
+    required this.fire,
+  });
+
+  final PhysicalKeyboardKey physical;
+  final bool ctrl;
+  final bool shift;
+  final bool alt;
+  final bool typing;
+  final bool hold;
+  final VoidCallback fire;
+
+  @override
+  State<_GlintyShortcut> createState() => _GlintyShortcutState();
+}
+
+class _GlintyShortcutState extends State<_GlintyShortcut> {
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handle);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handle);
+    super.dispose();
+  }
+
+  /// Is focus in something that owns its own keystrokes?
+  ///
+  /// An editable field types letters, so a bare "d" belongs to it and
+  /// not to the shortcut that would delete a clip. Asked of the focus
+  /// tree rather than of a widget type, because a client embedding
+  /// glinty may put its own text fields on the page too.
+  bool get _typingNow {
+    final node = FocusManager.instance.primaryFocus;
+    if (node == null) return false;
+    final ctx = node.context;
+    if (ctx == null) return false;
+    return ctx.findAncestorWidgetOfExactType<EditableText>() != null ||
+        ctx.widget is EditableText;
+  }
+
+  bool _handle(KeyEvent event) {
+    final held = event is KeyRepeatEvent;
+    if (event is! KeyDownEvent && !held) return false;
+    if (event.physicalKey != widget.physical) return false;
+    // Autorepeat only reaches a binding that asked for it: a held
+    // "space" must not fire play sixty times.
+    if (held && !widget.hold) return false;
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    bool down(LogicalKeyboardKey a, LogicalKeyboardKey b) =>
+        keys.contains(a) || keys.contains(b);
+    // Meta is Ctrl's equal here, as it is in the R constructor: an app
+    // that means "the platform's command modifier" says it once.
+    final ctrl = down(LogicalKeyboardKey.controlLeft,
+            LogicalKeyboardKey.controlRight) ||
+        down(LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.metaRight);
+    final shift =
+        down(LogicalKeyboardKey.shiftLeft, LogicalKeyboardKey.shiftRight);
+    final alt = down(LogicalKeyboardKey.altLeft, LogicalKeyboardKey.altRight);
+    if (ctrl != widget.ctrl) return false;
+    if (shift != widget.shift) return false;
+    if (alt != widget.alt) return false;
+    if (_typingNow && !widget.typing) return false;
+    widget.fire();
+    // Handled: a declared shortcut takes the keypress, so nothing
+    // further up gets a second go at it.
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
