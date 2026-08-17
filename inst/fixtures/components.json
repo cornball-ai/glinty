@@ -311,6 +311,18 @@
       }
     },
     {
+      "name": "button-listing",
+      "notes": "one row of a list: start-aligned, body-coloured, quiet until hovered",
+      "component": {
+        "component": "button",
+        "value": "/media/clips",
+        "id": "open_row",
+        "label": "clips",
+        "variant": "listing",
+        "icon": "folder"
+      }
+    },
+    {
       "name": "password-input",
       "notes": "no value field exists, so no secret can reach the wire",
       "component": {
@@ -811,6 +823,24 @@
       "component": {
         "component": "icon",
         "name": "upload",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-folder",
+      "notes": "every frontend must draw folder -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "folder",
+        "size": 16
+      }
+    },
+    {
+      "name": "icon-file",
+      "notes": "every frontend must draw file -- the name is in the closed set, so there is no falling back to nothing",
+      "component": {
+        "component": "icon",
+        "name": "file",
         "size": 16
       }
     }

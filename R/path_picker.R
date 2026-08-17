@@ -322,19 +322,26 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
         d <- isolate(cwd())
         e <- picker_entries(d, kind = kind, pattern = pattern, hidden = hidden)
         cr <- picker_crumbs(d, root = root)
-        crumbs <- lapply(seq_len(nrow(cr)), function(i) {
-            button(nav_id, cr$name[[i]], variant = "ghost",
-                   value = cr$path[[i]])
-        })
+        # A separator between crumbs, so the row reads as one path
+        # rather than scattered words.
+        crumbs <- list()
+        for (i in seq_len(nrow(cr))) {
+            if (i > 1L) {
+                crumbs <- c(crumbs, list(txt(">", variant = "muted")))
+            }
+            crumbs <- c(crumbs,
+                        list(button(nav_id, cr$name[[i]], variant = "ghost",
+                                    value = cr$path[[i]])))
+        }
         shown_dirs <- utils::head(e$dirs, limit)
         shown_files <- utils::head(e$files, max(0L, limit - length(shown_dirs)))
         rows <- c(
                   lapply(shown_dirs, function(nm) {
-            button(nav_id, paste0(nm, "/"), variant = "ghost",
+            button(nav_id, nm, variant = "listing", icon = "folder",
                    value = file.path(d, nm))
         }),
                   lapply(shown_files, function(nm) {
-            button(choose_id, nm, variant = "secondary",
+            button(choose_id, nm, variant = "listing", icon = "file",
                    value = file.path(d, nm))
         })
         )
@@ -350,6 +357,7 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
         sc <- shortcuts_now()
         quick <- lapply(seq_along(sc), function(i) {
             button(choose_id, names(sc)[[i]], variant = "secondary",
+                   icon = if (identical(kind, "dir")) "folder" else "file",
                    value = sc[[i]])
         })
         footer <- c(list(modal_button("Cancel")),
@@ -364,11 +372,14 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
                     list(gap = 8L))
         body <- c(
             if (length(quick) > 0L) {
-                list(do.call(row, c(quick, list(gap = 2L))), divider())
+                list(do.call(row, c(quick, list(gap = 4L))), divider())
             },
-                  list(do.call(row, c(crumbs, list(gap = 2L))),
+                  list(do.call(row, c(crumbs, list(gap = 0L,
+                        align = "center"))),
                        divider(),
-                       do.call(column, c(rows, list(gap = 2L))))
+                       # gap 0: listing rows touch, and the hover
+                       # highlight is what separates them
+                       do.call(column, c(rows, list(gap = 0L))))
         )
         do.call(show_modal, c(list(session), body,
                               list(title = title, footer = do.call(row, footer))))

@@ -19,7 +19,7 @@
 #'
 #' @keywords internal
 ICON_NAMES <- c("play", "stop", "rotate", "trash", "microphone",
-                "bookmark", "download", "upload")
+                "bookmark", "download", "upload", "folder", "file")
 
 #' The key names every frontend must recognise
 #'
@@ -290,14 +290,16 @@ COMPONENT_SCHEMA <- list(
                                        id = field("string", required = TRUE),
                                        label = field("string", required = TRUE),
                                        variant = field("enum", default = "default",
-            values = c("default", "primary", "secondary", "danger", "ghost")),
+            values = c("default", "primary", "secondary", "danger", "ghost",
+                       "listing")),
                                        icon = field("string")
     ),
                          download_button = list(
         id = field("string", required = TRUE),
         label = field("string", default = "Download"),
         variant = field("enum", default = "default",
-                        values = c("default", "primary", "secondary", "danger", "ghost")),
+                        values = c("default", "primary", "secondary", "danger",
+                                   "ghost", "listing")),
         icon = field("string")
     ),
 
