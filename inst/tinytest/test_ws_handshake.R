@@ -60,3 +60,92 @@ plain <- parse_http_head(charToRaw(
     "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive"
 ))
 expect_false(ws_is_upgrade(plain))
+
+# --- origin: same-host default (#48) ---
+# Browsers exempt WebSockets from the same-origin policy, so the
+# handshake refuses pages this server did not serve. The comparison
+# is Origin against Host, never against a hardcoded localhost.
+
+hs_req <- function(origin = NULL, host = "localhost:8080") {
+    lines <- c("GET /ws HTTP/1.1",
+               if (!is.null(host)) paste0("Host: ", host),
+               "Upgrade: websocket",
+               "Connection: Upgrade",
+               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+               "Sec-WebSocket-Version: 13",
+               if (!is.null(origin)) paste0("Origin: ", origin))
+    parse_http_head(charToRaw(paste(lines, collapse = "\r\n")))
+}
+
+# absent Origin: a non-browser client, allowed
+expect_true(ws_handshake_result(hs_req())$ok)
+# the page this server served
+expect_true(ws_handshake_result(hs_req("http://localhost:8080"))$ok)
+# hosts compare case-insensitively
+expect_true(ws_handshake_result(hs_req("http://LOCALHOST:8080"))$ok)
+# implied ports match a portless Host, either scheme
+expect_true(ws_handshake_result(
+    hs_req("http://myapp.example", host = "myapp.example"))$ok)
+expect_true(ws_handshake_result(
+    hs_req("https://myapp.example", host = "myapp.example"))$ok)
+# a tailnet name matches itself
+expect_true(ws_handshake_result(
+    hs_req("http://troy-g5.tail.ts.net:8080",
+           host = "troy-g5.tail.ts.net:8080"))$ok)
+# bracketed IPv6
+expect_true(ws_handshake_result(
+    hs_req("http://[::1]:8080", host = "[::1]:8080"))$ok)
+
+# a different site: refused with 403
+hs <- ws_handshake_result(hs_req("https://evil.example"))
+expect_false(hs$ok)
+expect_true(startsWith(rawToChar(hs$response), "HTTP/1.1 403 Forbidden"))
+# a different port on the same host is a different origin
+expect_false(ws_handshake_result(hs_req("http://localhost:9999"))$ok)
+# implied origin ports (80, 443) against an explicit 8080
+expect_false(ws_handshake_result(hs_req("http://localhost"))$ok)
+expect_false(ws_handshake_result(hs_req("https://localhost"))$ok)
+# nonstandard origin port against a portless Host
+expect_false(ws_handshake_result(
+    hs_req("http://myapp.example:8080", host = "myapp.example"))$ok)
+# opaque origins ("null": sandboxed iframe, file://) refuse
+expect_false(ws_handshake_result(hs_req("null"))$ok)
+# an Origin with no Host to compare against refuses
+expect_false(ws_handshake_result(
+    hs_req("http://localhost:8080", host = NULL))$ok)
+
+# --- origin: allowlist and "*" ---
+allow <- "https://app.example.com"
+expect_true(ws_handshake_result(
+    hs_req("https://app.example.com"), origins = allow)$ok)
+# default port stripped on both sides of the comparison
+expect_true(ws_handshake_result(
+    hs_req("https://app.example.com:443"), origins = allow)$ok)
+expect_true(ws_handshake_result(
+    hs_req("https://APP.example.com"),
+    origins = "https://app.example.com:443")$ok)
+# same-host stays allowed alongside an allowlist
+expect_true(ws_handshake_result(
+    hs_req("http://localhost:8080"), origins = allow)$ok)
+expect_false(ws_handshake_result(
+    hs_req("https://other.example.com"), origins = allow)$ok)
+# "null" can be allowlisted, but only literally
+expect_true(ws_handshake_result(hs_req("null"), origins = "null")$ok)
+expect_false(ws_handshake_result(hs_req("null"), origins = allow)$ok)
+# "*" disables the check
+expect_true(ws_handshake_result(
+    hs_req("https://evil.example"), origins = "*")$ok)
+
+# --- origin: parsing helpers stay strict ---
+split_host_port <- glinty:::split_host_port
+normalize_origin <- glinty:::normalize_origin
+expect_equal(split_host_port("Example.COM:8080"),
+             list(host = "example.com", port = 8080L))
+expect_equal(split_host_port("example.com")$port, NA_integer_)
+expect_null(split_host_port("exa mple.com"))
+expect_null(split_host_port("example.com/path"))
+expect_equal(normalize_origin("HTTPS://App.Example.com:443"),
+             "https://app.example.com")
+expect_equal(normalize_origin("http://app.example.com:8080"),
+             "http://app.example.com:8080")
+expect_null(normalize_origin("null"))
