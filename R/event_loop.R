@@ -172,7 +172,7 @@ handle_http_bytes <- function(key, handlers) {
 
     if (identical(req$method, "GET") && identical(req$path, "/ws") &&
         ws_is_upgrade(req)) {
-        hs <- ws_handshake_result(req)
+        hs <- ws_handshake_result(req, .globals$origins)
         write_ok <- tryCatch({
             suppressWarnings(writeBin(hs$response, entry$con))
             TRUE

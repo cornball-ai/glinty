@@ -13,6 +13,7 @@
     .globals$welcome_ui <- NULL
     .globals$welcome_revision <- NULL
     .globals$welcome_theme <- NULL
+    .globals$origins <- NULL
     .globals$tickets <- new.env(parent = emptyenv())
     .globals$jobs <- new.env(parent = emptyenv())
     .globals$job_queues <- list()
