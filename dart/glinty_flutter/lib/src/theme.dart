@@ -43,8 +43,26 @@ double glintySpacing(Map<String, dynamic>? theme) {
 /// which is what keeps body: "monospace" mono and mono: "serif"
 /// serif instead of collapsing every generic to the default sans.
 const _roleStacks = <String, List<String>>{
-  'system-ui': ['sans-serif'],
-  'ui-sans-serif': ['sans-serif'],
+  // The platform UI faces are one cluster of neutral grotesques;
+  // naming each platform's member gives the same face the browser's
+  // `system-ui` picks, so both frontends match on any one machine.
+  // Flutter tries names in order and each platform ships exactly
+  // one. CanvasKit can't reach system fonts and keeps its bundled
+  // Roboto -- also a member of the cluster, so it stays a cousin.
+  'system-ui': [
+    '.AppleSystemUIFont',
+    'Segoe UI',
+    'Ubuntu',
+    'Cantarell',
+    'sans-serif'
+  ],
+  'ui-sans-serif': [
+    '.AppleSystemUIFont',
+    'Segoe UI',
+    'Ubuntu',
+    'Cantarell',
+    'sans-serif'
+  ],
   'sans-serif': ['sans-serif'],
   'serif': ['serif', 'Georgia', 'Times New Roman'],
   'ui-serif': ['serif', 'Georgia', 'Times New Roman'],

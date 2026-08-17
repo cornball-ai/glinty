@@ -170,8 +170,13 @@ void main() {
       expect(glintyMonoStack({'font': {'mono': 'serif'}}),
           ['serif', 'Georgia', 'Times New Roman']);
 
-      // sans roles ARE the platform default; ui-monospace keeps mono
-      expect(glintyFontStack('system-ui'), ['sans-serif']);
+      // sans roles name each platform's UI face -- the same one the
+      // browser's system-ui resolves to -- and end at the generic;
+      // ui-monospace keeps mono
+      final sys = glintyFontStack('system-ui');
+      expect(sys, contains('Segoe UI'));
+      expect(sys, contains('Ubuntu'));
+      expect(sys.last, 'sans-serif');
       expect(glintyMonoStack({'font': {'mono': 'ui-monospace'}}),
           glintyMonoRole);
       final sansBody = glintyThemeData({
