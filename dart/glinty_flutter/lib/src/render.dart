@@ -463,7 +463,20 @@ class GlintyRenderer {
       // page is never a flex child -- it is the root -- so it skips
       // the sizing wrapper the other three take.
       case 'page':
-        return _column(context, c);
+        {
+          if (c.str('width') == 'full') return _column(context, c);
+          // The browser's reading column (.g-page: 760px, centered,
+          // padded, the page is what scrolls). Width is tightened to
+          // the cap so the column fills it the way the CSS box does,
+          // rather than shrink-wrapping its widest child.
+          return SingleChildScrollView(
+              child: Center(
+                  child: Container(
+                      constraints: const BoxConstraints(maxWidth: 760),
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 48),
+                      child: _column(context, c))));
+        }
       case 'column':
         // scroll: overflow scrolls instead of growing the page. Grown
         // children inside stop growing, which _spaced documents -- a
@@ -1039,11 +1052,21 @@ class GlintyRenderer {
 
   Widget _checkbox(GlintyComponent c) {
     final id = c.str('id')!;
-    return CheckboxListTile(
+    final checked = _value(id, c.boolean('value')) == true;
+    // Box then word at natural width, the browser's shape. A
+    // CheckboxListTile is a full-width row with a trailing box --
+    // a settings screen, not a form control -- and the same tree
+    // must read the same way in both lowerings.
+    return InkWell(
       key: Key(id),
-      value: _value(id, c.boolean('value')) == true,
-      title: Text(_label(c) ?? ""),
-      onChanged: (v) => onInput?.call(id, v ?? false),
+      onTap: () => onInput?.call(id, !checked),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Checkbox(
+            value: checked,
+            visualDensity: VisualDensity.compact,
+            onChanged: (v) => onInput?.call(id, v ?? false)),
+        Text(_label(c) ?? ""),
+      ]),
     );
   }
 
@@ -1079,28 +1102,64 @@ class GlintyRenderer {
     final raw = _value(id, c.number('value'));
     final current = raw is num ? raw.toDouble() : min;
     final settle = GlintyEmit.parse(c.str('emit')) == GlintyEmit.settle;
+    final theme = Theme.of(context);
+    final endStyle = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    // min --thumb-- max [value], mirroring the browser's
+    // .g-slider-row: the numbers that make a slider an input rather
+    // than decoration. Local edits already rebuild this subtree, so
+    // the readout tracks the finger under `settle` too.
     return _labelled(
         context,
         c,
-        Slider(
-          key: Key(id),
-          min: min,
-          max: max,
-          // Flutter wants a division count where the protocol says
-          // step size. Derivable because step is a number.
-          divisions:
-              step != null && step > 0 ? ((max - min) / step).round() : null,
-          value: current.clamp(min, max),
-          // Where `emit` is spent for a slider. A drag is one
-          // gesture producing hundreds of onChanged calls; under
-          // `settle` the server wants the number the user landed on,
-          // not the sweep. Local edits keep the thumb (and any panel
-          // keyed on it) tracking the finger in the meantime.
-          onChanged: settle
-              ? (v) => (onLocalInput ?? onInput)?.call(id, v)
-              : (v) => onInput?.call(id, v),
-          onChangeEnd: settle ? (v) => onInput?.call(id, v) : null,
-        ));
+        Row(children: [
+          Text(_numLabel(min), style: endStyle),
+          Expanded(
+              child: Slider(
+            key: Key(id),
+            min: min,
+            max: max,
+            // Flutter wants a division count where the protocol says
+            // step size. Derivable because step is a number.
+            divisions:
+                step != null && step > 0 ? ((max - min) / step).round() : null,
+            value: current.clamp(min, max),
+            // Where `emit` is spent for a slider. A drag is one
+            // gesture producing hundreds of onChanged calls; under
+            // `settle` the server wants the number the user landed on,
+            // not the sweep. Local edits keep the thumb (and any panel
+            // keyed on it) tracking the finger in the meantime.
+            onChanged: settle
+                ? (v) => (onLocalInput ?? onInput)?.call(id, v)
+                : (v) => onInput?.call(id, v),
+            onChangeEnd: settle ? (v) => onInput?.call(id, v) : null,
+          )),
+          Text(_numLabel(max), style: endStyle),
+          ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 40),
+              child: Text(_numLabel(current.clamp(min, max)),
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(fontFeatures: const [
+                    FontFeature.tabularFigures()
+                  ]))),
+        ]));
+  }
+
+  /// The shortest plain rendering of a number: strip float noise
+  /// (0.6000000000000001 from division stepping), no trailing zeros.
+  /// Agrees with the browser's numLabel() and R's num_label().
+  static String _numLabel(num v) {
+    final d = v.toDouble();
+    if (d == d.roundToDouble() && d.abs() < 1e15) {
+      return d.round().toString();
+    }
+    var s = d.toStringAsPrecision(12);
+    if (s.contains('.') && !s.contains('e')) {
+      s = s.replaceAll(RegExp(r'0+$'), '');
+      s = s.replaceAll(RegExp(r'\.$'), '');
+    }
+    return s;
   }
 
   Widget _button(BuildContext context, GlintyComponent c) {

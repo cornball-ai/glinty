@@ -176,6 +176,10 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
 
     start_session <- function(sid, resumed = NULL, principal = NULL) {
         s <- new_session(sid, send_fn = function(msg) {
+            if (isTRUE(getOption("glinty.trace"))) {
+                message(sprintf("[trace %s] %s", substr(sid, 1, 6),
+                                substr(msg, 1, 70)))
+            }
             send_to_session(sid, msg)
         })
         s$principal <- principal

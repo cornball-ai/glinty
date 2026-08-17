@@ -453,7 +453,48 @@ html_slider <- function(x) {
     attrs <- c(html_bind(x),
                list(type = "range", class = "g-slider", min = x$min, max = x$max,
                     value = x$value, step = x$step))
-    html_field_group(x, html_el("input", attrs, void = TRUE))
+    # Tick marks, the native way: a datalist of step positions makes
+    # the browser draw ticks on the track, the twin of the division
+    # dots Flutter derives from the same step. Capped because a
+    # 500-tick track is noise, not a scale.
+    ticks <- ""
+    if (!is.null(x$step) && x$step > 0) {
+        n <- (x$max - x$min) / x$step
+        if (is.finite(n) && n >= 1 && n <= 24) {
+            tick_id <- paste0(x$id, "-ticks")
+            attrs$list <- tick_id
+            marks <- vapply(0L:as.integer(round(n)), function(i) {
+                html_el("option",
+                        list(value = num_label(x$min + i * x$step)),
+                        inner = "")
+            }, character(1L))
+            ticks <- html_el("datalist", list(id = tick_id),
+                             paste0(marks, collapse = ""))
+        }
+    }
+    # A slider without numbers answers "roughly how far along?" and
+    # nothing else. Min and max name the scale, the readout names the
+    # value -- the client keeps the readout tracking the thumb.
+    shown <- if (is.null(x$value)) x$min else x$value
+    row <- html_el("div", list(class = "g-slider-row"),
+        paste0(
+            html_el("span", list(class = "g-slider-min"),
+                    num_label(x$min)),
+            html_el("input", attrs, void = TRUE),
+            ticks,
+            html_el("span", list(class = "g-slider-max"),
+                    num_label(x$max)),
+            html_el("output", list(class = "g-slider-value", "for" = x$id),
+                    num_label(shown))
+        ))
+    html_field_group(x, row)
+}
+
+# The shortest plain rendering of a number, matching what the browser
+# client prints for the same JSON value (String() of the parsed
+# number): no scientific notation, no trailing zeros.
+num_label <- function(v) {
+    format(v, scientific = FALSE, trim = TRUE, drop0trailing = TRUE)
 }
 
 html_file <- function(x) {

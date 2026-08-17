@@ -112,8 +112,9 @@ void main() {
     expect(find.text('extra bit'), findsOneWidget,
         reason: 'a local edit that does not notify leaves the UI '
             'showing yesterday until some later frame lands');
-    final box =
-        tester.widget<CheckboxListTile>(find.byKey(const Key('more')));
+    final box = tester.widget<Checkbox>(find.descendant(
+        of: find.byKey(const Key('more')),
+        matching: find.byType(Checkbox)));
     expect(box.value, isTrue);
     expect(socket.sent.where((m) => m['type'] == 'input').length, 1);
   });

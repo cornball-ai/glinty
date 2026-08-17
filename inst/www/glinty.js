@@ -454,6 +454,9 @@
 
         root.addEventListener("input", function (ev) {
             var el = ev.target;
+            /* the readout tracks the thumb regardless of emit: a
+               settle slider still shows where the finger is */
+            if (el.type === "range") syncSliderLabels(el);
             if (el.dataset.gEvent !== "input") return;
             sendInputDebounced(el);
         });
@@ -601,6 +604,28 @@
         html_output: "html",
         ui_output: "ui"
     };
+
+    /* The shortest plain rendering of a number: parse, strip float
+       noise (0.6000000000000001 from range stepping), print. Must
+       agree with num_label() in lower_html.R for tree values. */
+    function numLabel(v) {
+        var n = parseFloat(Number(v).toPrecision(12));
+        return String(n);
+    }
+
+    /* A slider's flanking numbers live in its row; the thumb moves
+       client-side, so the readout is client-kept too. */
+    function syncSliderLabels(el) {
+        var row = el.closest(".g-slider-row");
+        if (!row) return;
+        var pick = function (cls, v) {
+            var node = row.querySelector(cls);
+            if (node) node.textContent = numLabel(v);
+        };
+        pick(".g-slider-value", el.value);
+        pick(".g-slider-min", el.min);
+        pick(".g-slider-max", el.max);
+    }
 
     function el(tag, attrs) {
         var node = document.createElement(tag);
@@ -1039,15 +1064,50 @@
             return buildCheckbox(c);
         case "radio_buttons":
             return buildRadio(c);
-        case "slider_input":
-            return fieldGroup(c, el("input", assign(bindAttrs(c, "input"), {
+        case "slider_input": {
+            /* Numbers or it is decoration: min and max name the
+               scale, the readout names the value. Mirrors
+               html_slider() in lower_html.R -- the two must agree. */
+            var srow = el("div", { "class": "g-slider-row" });
+            var smin = el("span", { "class": "g-slider-min" });
+            smin.textContent = numLabel(c.min);
+            srow.appendChild(smin);
+            var sattrs = assign(bindAttrs(c, "input"), {
                 type: "range",
                 "class": "g-slider",
                 min: c.min,
                 max: c.max,
                 value: c.value,
                 step: c.step
-            })));
+            });
+            /* Tick marks via datalist, the twin of Flutter's
+               division dots; capped like html_slider() in R. */
+            var ticksEl = null;
+            if (c.step > 0) {
+                var n = (c.max - c.min) / c.step;
+                if (isFinite(n) && n >= 1 && n <= 24) {
+                    var tickId = c.id + "-ticks";
+                    sattrs.list = tickId;
+                    ticksEl = el("datalist", { id: tickId });
+                    for (var ti = 0; ti <= Math.round(n); ti++) {
+                        ticksEl.appendChild(el("option", {
+                            value: numLabel(c.min + ti * c.step)
+                        }));
+                    }
+                }
+            }
+            srow.appendChild(el("input", sattrs));
+            if (ticksEl) srow.appendChild(ticksEl);
+            var smax = el("span", { "class": "g-slider-max" });
+            smax.textContent = numLabel(c.max);
+            srow.appendChild(smax);
+            var sout = el("output", { "class": "g-slider-value",
+                                      "for": c.id });
+            sout.textContent = numLabel(
+                c.value === null || c.value === undefined ? c.min : c.value);
+            srow.appendChild(sout);
+            return fieldGroup(c, srow);
+        }
         case "file_input":
             return buildFile(c);
         case "button":
@@ -1486,6 +1546,7 @@
             }
         }
         /* deliberately no synthetic events: the server already knows */
+        if (el.type === "range") syncSliderLabels(el);
     }
 
     function applyError(msg) {

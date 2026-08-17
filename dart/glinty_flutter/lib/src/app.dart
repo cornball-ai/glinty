@@ -345,15 +345,14 @@ class GlintyView extends StatelessWidget {
         ),
     ]);
 
-    // Not conditional in the same way: the theme arrives with the
-    // welcome, and the tree does not render before one.
-    final tokens = s.theme;
-    return tokens == null
-        ? stacked
-        : Theme(
-            data: glintyThemeDataFor(
-                tokens, MediaQuery.maybePlatformBrightnessOf(context)),
-            child: stacked);
+    // The theme arrives with the welcome; an app that sent none gets
+    // glinty's stock tokens, the same fallback the browser's
+    // stylesheet applies -- never Material's own defaults.
+    final tokens = s.theme ?? glintyStockTheme;
+    return Theme(
+        data: glintyThemeDataFor(
+            tokens, MediaQuery.maybePlatformBrightnessOf(context)),
+        child: stacked);
   }
 }
 

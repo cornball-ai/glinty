@@ -83,6 +83,37 @@ List<String> glintyMonoStack(Map<String, dynamic>? theme) {
 /// dark base scheme from the dark background on its own. Without
 /// `dark` the supplied tokens are exact in both schemes, which is
 /// the pre-`dark` contract unchanged.
+/// glinty's stock look, in the welcome's wire shape: the values the
+/// browser stylesheet falls back to when an app sets no theme
+/// (R theme_defaults() light tokens, DARK_COLOR_DEFAULTS for dark).
+/// An unthemed app must be the same product in both lowerings --
+/// falling back to Material's seed purple made it two.
+const Map<String, dynamic> glintyStockTheme = {
+  'colors': {
+    'primary': '#2456d6',
+    'on_primary': '#ffffff',
+    'surface': '#ffffff',
+    'background': '#ffffff',
+    'text': '#1a1a1a',
+    'muted': '#6a6a6a',
+    'border': '#d0d0d5',
+    'danger': '#b3261e',
+  },
+  'dark': {
+    'primary': '#6f95f5',
+    'on_primary': '#10131a',
+    'surface': '#1e2128',
+    'background': '#16181d',
+    'text': '#e6e6e6',
+    'muted': '#9a9aa2',
+    'border': '#3a3d45',
+    'danger': '#e5484d',
+  },
+  'spacing': 4,
+  'radius': 6,
+  'font': {'body': 'system-ui', 'mono': 'ui-monospace', 'size': 16},
+};
+
 ThemeData glintyThemeDataFor(
     Map<String, dynamic> theme, Brightness? brightness) {
   final dark = theme['dark'];

@@ -919,9 +919,14 @@ void main() {
       socket.deliver(welcomeOf(buttonTree, 'rfill'));
       await tester.pumpAndSettle();
 
+      // The content page is now a centered reading column inside a
+      // scroll view; the scroll view is what fills the app's box.
       expect(
-          tester.getSize(find.descendant(
-              of: find.byType(GlintyView), matching: find.byType(Column))),
+          tester.getSize(find
+              .descendant(
+                  of: find.byType(GlintyView),
+                  matching: find.byType(SingleChildScrollView))
+              .first),
           const Size(800, 600),
           reason: "the page sizes to the box, as a direct child would");
     });

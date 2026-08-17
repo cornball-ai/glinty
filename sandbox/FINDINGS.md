@@ -50,6 +50,35 @@ browser can't see, per #53).
    a hover/checked row highlight); the browser inlines box-then-label.
    Same tree, structurally different control.
 
+## Fixed on this branch (worktree, pending PR)
+
+- **Sliders show their numbers** in both lowerings: min / max flank
+  the track, a client-tracked readout follows the thumb, and the
+  browser gets native tick marks via a step-derived `datalist`
+  (capped at 24), the twin of Flutter's division dots. Finding 4
+  closed.
+- **Flutter boot-blank root-caused and fixed.** session.dart
+  measure() recorded its dedup key BEFORE handing the frame to the
+  transport and ignored the result; a frame dropped mid-handshake
+  poisoned the dedup, the plot never measured, and the first paint
+  stayed empty until any input round trip. Server tracing
+  (`options(glinty.trace = TRUE)`, added to run_app) proved the
+  server always sends welcome + boot output. Fix: record only when
+  the wire took the frame. 3/4 loads broke before; 0/4 after.
+  Regression test: test/boot_output_probe_test.dart. Finding 5
+  closed.
+- **Parity pass** (findings 1, 2, 6 closed):
+  - dart falls back to glinty's stock tokens (`glintyStockTheme`,
+    mirroring theme_defaults() + DARK_COLOR_DEFAULTS) instead of
+    Material purple when welcome carries no theme;
+  - content pages render as the browser's reading column (centered,
+    760 max, padded, page scrolls); `width = "full"` unchanged;
+  - checkboxes are box-then-word at natural width (InkWell + Row),
+    not a full-width CheckboxListTile.
+- Still open from the reconciliation ask: **font**. `system-ui` has
+  no Flutter equivalent; the dart side keeps Roboto. Closest move is
+  fontFamilyFallback per platform -- imperfect by construction.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**

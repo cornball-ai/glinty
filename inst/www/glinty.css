@@ -338,6 +338,34 @@ h1, h2, h3, h4 {
     accent-color: var(--g-primary);
 }
 
+/* min --thumb-- max [value]: the numbers that make a slider an
+   input rather than decoration. The readout is client-tracked. */
+.g-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.g-slider-row .g-slider {
+    flex: 1;
+    min-width: 0;
+}
+
+.g-slider-min,
+.g-slider-max {
+    flex: none;
+    color: var(--g-muted);
+    font-size: 0.8rem;
+}
+
+.g-slider-value {
+    flex: none;
+    min-width: 2.5rem;
+    text-align: right;
+    font-family: var(--g-font-mono);
+    font-size: 0.9rem;
+}
+
 /* ---------- buttons ---------- */
 
 .g-btn {
