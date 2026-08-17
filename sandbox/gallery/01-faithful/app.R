@@ -19,7 +19,7 @@ app(
         ),
         title = "Faithful"
     ),
-    server = function(session, input, output) {
+    server = function(input, output, session) {
         output$dist <- render_plot(function() {
             x <- faithful$waiting
             bins <- seq(min(x), max(x), length.out = input$bins() + 1)

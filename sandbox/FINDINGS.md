@@ -11,7 +11,35 @@ browser can't see, per #53).
 
 | App | Port | Web | In-process | Flutter | Notes |
 |---|---|---|---|---|---|
-| 001-hello (faithful) | clean | layout OK | OK: measure->raster, slider->new raster, 0 errors | pending | headless `--screenshot` can't see measured plots (Chrome virtual time never delivers the ws round trip) — not a glinty bug; in-process drive covers it |
+| 001-hello (faithful) | clean | OK live: plot renders, slider round trip | OK: measure->raster, slider->new raster, 0 errors | OK live via web build: plot + slider round trip | headless `--screenshot` can't see measured plots (Chrome virtual time never delivers the ws round trip) — not a glinty bug; in-process drive covers it |
+
+## Parity gaps found live (both frontends, same app, same server)
+
+1. **Unthemed apps diverge completely.** welcome carries `theme` only
+   when the app set one (protocol.R welcome_msg). Browser falls back
+   to the stylesheet's stock tokens (blue on white, centered content
+   column); Flutter falls back to the embedder's MaterialApp defaults
+   (Material 3 purple, tinted surfaces). Same app, two products.
+   Fix direction: GlintyApp/the renderer should carry glinty's stock
+   tokens as its own fallback ThemeData — or welcome always sends the
+   resolved theme, defaults included, one source of truth.
+2. **Dart content page has no reading column.** Browser: centered
+   max-width column with padding. Flutter: flush top-left, full
+   width, no padding (page renders as a bare Column). Known from the
+   #44 review; now confirmed side by side on 001-hello.
+
+## Framework DX finding
+
+3. **A server function with the wrong argument order fails silently.**
+   glinty's contract is Shiny's: `function(input, output[, session])`,
+   dispatched positionally (run_app.R start_session). Declaring
+   `function(session, input, output)` binds `output` to the session
+   env, so `output$x <- render_*()` writes an inert field: no
+   renderer, no observer, no error, welcome works, everything else is
+   silence. Cost a full live-debug session to find. Cheap guard: when
+   the server function's formals are NAMED input/output/session but
+   in non-contract positions, stop with a clear error at run_app()
+   time. Worth filing.
 
 ## API gap table (data-driven)
 

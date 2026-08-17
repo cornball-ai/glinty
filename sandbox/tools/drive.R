@@ -6,11 +6,19 @@
 drive_boot <- function(app_path, name = "drv") {
     a <- source(app_path, local = new.env())$value
     s <- glinty:::new_session(name)
-    input <- glinty:::make_input_proxy(s)
     glinty:::seed_session_inputs(s, a$ui)
-    glinty:::with_session(s, a$server(s, input, s$output))
+    # Mirror run_app()'s dispatch exactly: server(input, output[, session]),
+    # Shiny's order. A driver that invents its own order agrees with a
+    # wrongly-declared app and hides the bug (learned on 01-faithful).
+    glinty:::with_session(s, {
+        if (length(formals(a$server)) >= 3L) {
+            a$server(s$input, s$output, s)
+        } else {
+            a$server(s$input, s$output)
+        }
+    })
     glinty::flush_reactions()
-    list(app = a, session = s, input = input)
+    list(app = a, session = s, input = s$input)
 }
 
 drive_measure <- function(d, id, width, height, dpr = 1) {
