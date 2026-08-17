@@ -1057,14 +1057,19 @@ class GlintyRenderer {
     // CheckboxListTile is a full-width row with a trailing box --
     // a settings screen, not a form control -- and the same tree
     // must read the same way in both lowerings.
+    // One gesture path: the box is display-only under IgnorePointer
+    // and every tap -- box or label -- lands on the InkWell. Nesting
+    // two live tap targets put box-clicks into a gesture arena that
+    // could fizzle with neither firing (seen live on CanvasKit).
     return InkWell(
       key: Key(id),
       onTap: () => onInput?.call(id, !checked),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Checkbox(
-            value: checked,
-            visualDensity: VisualDensity.compact,
-            onChanged: (v) => onInput?.call(id, v ?? false)),
+        IgnorePointer(
+            child: Checkbox(
+                value: checked,
+                visualDensity: VisualDensity.compact,
+                onChanged: (_) {})),
         Text(_label(c) ?? ""),
       ]),
     );
@@ -1103,19 +1108,73 @@ class GlintyRenderer {
     final current = raw is num ? raw.toDouble() : min;
     final settle = GlintyEmit.parse(c.str('emit')) == GlintyEmit.settle;
     final theme = Theme.of(context);
-    final endStyle = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    // min --thumb-- max [value], mirroring the browser's
-    // .g-slider-row: the numbers that make a slider an input rather
-    // than decoration. Local edits already rebuild this subtree, so
-    // the readout tracks the finger under `settle` too.
+    final value = current.clamp(min, max);
+    final pct = max > min ? ((value - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
+    // The browser's three number layers, mirrored: a value bubble
+    // riding the thumb, min/max chips at the ends that yield when
+    // the bubble reaches them, and a graded scale below the track.
+    // Local edits rebuild this subtree, so every layer tracks the
+    // finger under `settle` too.
+    Widget chip(String text, {required bool primary}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+            color: primary
+                ? theme.colorScheme.primary
+                : theme.colorScheme.outline.withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(4)),
+        child: Text(text,
+            style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: primary
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurface)));
+    final chipRow = SizedBox(
+        height: 22,
+        child: LayoutBuilder(
+            builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
+                  if (pct >= 0.1)
+                    Positioned(left: 0, top: 0,
+                        child: chip(_numLabel(min), primary: false)),
+                  if (pct <= 0.9)
+                    Positioned(right: 0, top: 0,
+                        child: chip(_numLabel(max), primary: false)),
+                  Positioned(
+                      left: pct * box.maxWidth, top: 0,
+                      child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: chip(_numLabel(value), primary: true))),
+                ])));
+    final scale = SizedBox(
+        height: 20,
+        child: LayoutBuilder(builder: (context, box) {
+          final marks = <Widget>[];
+          for (final tk in _sliderTicks(min, max, step)) {
+            marks.add(Positioned(
+                left: tk.f * box.maxWidth, top: 0,
+                child: Container(
+                    width: 1,
+                    height: tk.major ? 7 : 4,
+                    color: tk.major
+                        ? theme.colorScheme.onSurfaceVariant
+                        : theme.colorScheme.outlineVariant)));
+            if (tk.major) {
+              marks.add(Positioned(
+                  left: tk.f * box.maxWidth, top: 8,
+                  child: FractionalTranslation(
+                      translation: const Offset(-0.5, 0),
+                      child: Text(tk.label,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant)))));
+            }
+          }
+          return Stack(clipBehavior: Clip.none, children: marks);
+        }));
     return _labelled(
         context,
         c,
-        Row(children: [
-          Text(_numLabel(min), style: endStyle),
-          Expanded(
-              child: Slider(
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          chipRow,
+          Slider(
             key: Key(id),
             min: min,
             max: max,
@@ -1123,7 +1182,7 @@ class GlintyRenderer {
             // step size. Derivable because step is a number.
             divisions:
                 step != null && step > 0 ? ((max - min) / step).round() : null,
-            value: current.clamp(min, max),
+            value: value,
             // Where `emit` is spent for a slider. A drag is one
             // gesture producing hundreds of onChanged calls; under
             // `settle` the server wants the number the user landed on,
@@ -1133,17 +1192,68 @@ class GlintyRenderer {
                 ? (v) => (onLocalInput ?? onInput)?.call(id, v)
                 : (v) => onInput?.call(id, v),
             onChangeEnd: settle ? (v) => onInput?.call(id, v) : null,
-          )),
-          Text(_numLabel(max), style: endStyle),
-          ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 40),
-              child: Text(_numLabel(current.clamp(min, max)),
-                  textAlign: TextAlign.right,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontFeatures: const [
-                    FontFeature.tabularFigures()
-                  ]))),
+          ),
+          scale,
         ]));
+  }
+
+  /// A scale label at fraction f, snapped to the step grid when
+  /// there is one -- scale numbers should be values the thumb can
+  /// actually take. Mirrors slider_snap() in R.
+  static double _sliderSnap(double f, double min, double max, double? step) {
+    var v = min + f * (max - min);
+    if (step != null && step > 0) {
+      v = min + ((v - min) / step).round() * step;
+      v = v.clamp(min, max);
+    }
+    return v;
+  }
+
+  /// The scale as (fraction, major, label) ticks: on the stops when
+  /// the step grid is coarse enough to see (ticks must sit where the
+  /// thumb can rest), a fixed tenths grid when the slider reads as
+  /// continuous. Mirrors slider_ticks() in R and sliderTicks() in
+  /// glinty.js; the three must agree.
+  static List<({double f, bool major, String label})> _sliderTicks(
+      double min, double max, double? step) {
+    final ticks = <({double f, bool major, String label})>[];
+    final n = step != null && step > 0 ? ((max - min) / step).round() : 0;
+    if (n >= 1 &&
+        n <= 20 &&
+        (min + n * step! - max).abs() <
+            1e-9 * (max.abs() > 1 ? max.abs() : 1)) {
+      final every = n <= 10 ? 1 : 2;
+      for (var i = 0; i <= n; i++) {
+        final major = i % every == 0 || i == n;
+        ticks.add((
+          f: i * step / (max - min),
+          major: major,
+          label: major ? _numLabel(min + i * step) : ''
+        ));
+        if (i < n && n <= 10) {
+          ticks.add((f: (i + 0.5) * step / (max - min), major: false,
+                     label: ''));
+        }
+      }
+      return ticks;
+    }
+    var prevLabel = '';
+    for (var j = 0; j <= 40; j++) {
+      final major = j % 4 == 0;
+      var lab = '';
+      if (major) {
+        lab = _numLabel(_sliderSnap(j / 40, min, max, step));
+        // a snap can land two majors on one value; a number printed
+        // twice is the tick without the label
+        if (lab == prevLabel) {
+          lab = '';
+        } else {
+          prevLabel = lab;
+        }
+      }
+      ticks.add((f: j / 40, major: major, label: lab));
+    }
+    return ticks;
   }
 
   /// The shortest plain rendering of a number: strip float noise
