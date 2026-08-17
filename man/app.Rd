@@ -15,7 +15,9 @@ session-scoped state}
 
 \item{theme}{an app_theme(), or NULL for each frontend's own
 defaults (in the browser that includes automatic dark mode,
-which a supplied theme replaces with exactly its tokens)}
+which a supplied theme replaces with exactly its tokens --
+unless it carries a `dark` palette of its own, which keeps the
+schemes switching)}
 }
 \value{
 A glinty_app object

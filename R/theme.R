@@ -6,6 +6,15 @@
 THEME_COLOR_NAMES <- c("primary", "on_primary", "surface", "background",
                        "text", "muted", "border", "danger")
 
+# The stylesheet's dark palette (inst/www/glinty.css), as tokens:
+# what app_theme(dark = ) merges over, so a partial dark list starts
+# from the same look an unthemed app gets in dark mode. Kept in step
+# with the stylesheet by test_theme.R.
+DARK_COLOR_DEFAULTS <- list(primary = "#6f95f5", on_primary = "#10131a",
+                            surface = "#1e2128", background = "#16181d",
+                            text = "#e6e6e6", muted = "#9a9aa2",
+                            border = "#3a3d45", danger = "#e5484d")
+
 #' glinty's default look, as explicit tokens
 #'
 #' @return named list of token defaults
@@ -34,7 +43,13 @@ theme_defaults <- function() {
 #'
 #' An app with no theme gets each frontend's own defaults instead --
 #' in the browser that includes the stylesheet's automatic dark mode,
-#' which a supplied theme replaces with exactly its tokens.
+#' which a supplied theme without `dark` replaces with exactly its
+#' tokens, in both schemes. Supplying `dark` keeps automatic dark
+#' mode: the frontend applies `colors` normally and `dark` when the
+#' system prefers a dark scheme. There is no third state -- the
+#' choice follows the system setting, and an app that supplies only
+#' one palette renders it everywhere, which is today's behaviour and
+#' stays available on purpose.
 #'
 #' Named app_theme() rather than theme() for the same reason text()
 #' became txt(): theme() would mask ggplot2::theme() the moment an
@@ -49,24 +64,26 @@ theme_defaults <- function() {
 #' @param radius numeric corner radius in logical pixels
 #' @param font named list over body, mono (font family names) and
 #'   size (numeric, logical pixels)
+#' @param dark named list like `colors`, applied when the system
+#'   prefers a dark scheme; partial values merge over glinty's dark
+#'   defaults, so `dark = list()` is exactly the stock dark palette.
+#'   Merging never reaches across schemes: a light `primary` says
+#'   nothing about the dark one, because a colour tuned for a white
+#'   surface is not a preference about black -- brand colour in dark
+#'   means setting `dark$primary`. NULL (the default) keeps the
+#'   supplied theme exact in both schemes
 #' @return a glinty_theme
 #' @examples
 #' app_theme(colors = list(primary = "#7c3aed"), radius = 10)
+#' app_theme(colors = list(primary = "#7c3aed"),
+#'           dark = list(primary = "#a78bfa"))
 #' @export
 app_theme <- function(colors = list(), spacing = NULL, radius = NULL,
-                      font = list()) {
+                      font = list(), dark = NULL) {
     base <- theme_defaults()
-
-    check_named_subset(colors, THEME_COLOR_NAMES, "colors")
-    for (nm in names(colors)) {
-        val <- colors[[nm]]
-        if (!is.character(val) || length(val) != 1L ||
-            !grepl("^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$", val)) {
-            stop("app_theme() colors$", nm,
-                 " must be a \"#rrggbb\" or \"#rrggbbaa\" string",
-                 call. = FALSE)
-        }
-        base$colors[[nm]] <- tolower(val)
+    base$colors <- merge_theme_colors(base$colors, colors, "colors")
+    if (!is.null(dark)) {
+        base$dark <- merge_theme_colors(DARK_COLOR_DEFAULTS, dark, "dark")
     }
 
     if (!is.null(spacing)) {
@@ -99,6 +116,32 @@ app_theme <- function(colors = list(), spacing = NULL, radius = NULL,
     }
 
     structure(base, class = "glinty_theme")
+}
+
+#' Validate colour tokens and merge them over a base palette
+#'
+#' The one loop both palettes go through, so `colors` and `dark` are
+#' held to the same names and the same "#rrggbb(aa)" rule and can
+#' never drift apart.
+#'
+#' @param base named list of complete default colours
+#' @param colors named list of supplied colours
+#' @param what character argument name for errors
+#' @return the merged palette, values lowercased
+#' @keywords internal
+merge_theme_colors <- function(base, colors, what) {
+    check_named_subset(colors, THEME_COLOR_NAMES, what)
+    for (nm in names(colors)) {
+        val <- colors[[nm]]
+        if (!is.character(val) || length(val) != 1L ||
+            !grepl("^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$", val)) {
+            stop("app_theme() ", what, "$", nm,
+                 " must be a \"#rrggbb\" or \"#rrggbbaa\" string",
+                 call. = FALSE)
+        }
+        base[[nm]] <- tolower(val)
+    }
+    base
 }
 
 #' Require names to come from a closed set
@@ -162,24 +205,42 @@ theme_var <- function(name) {
     paste0("--g-", gsub("_", "-", name, fixed = TRUE))
 }
 
-#' Serialize a theme as a :root CSS block
+#' Colour tokens as CSS custom property declarations
+#'
+#' @param colors named list of colour tokens
+#' @return character vector of "--g-name:value" declarations
+#' @keywords internal
+theme_color_parts <- function(colors) {
+    vapply(names(colors), function(nm) {
+        paste0(theme_var(nm), ":", colors[[nm]])
+    }, character(1L), USE.NAMES = FALSE)
+}
+
+#' Serialize a theme as CSS
 #'
 #' Emitted into the served document so the first paint is themed
 #' before any socket work; welcome repeats the same tokens and the
-#' client re-applies them, so a cached page self-heals.
+#' client re-applies them, so a cached page self-heals. A theme with
+#' a dark palette adds a prefers-color-scheme block after the :root
+#' block -- the same shape the stylesheet's own dark mode has, in the
+#' same style element, so precedence over the stylesheet and under
+#' app CSS is unchanged.
 #'
 #' @param th a glinty_theme
 #' @return character CSS
 #' @keywords internal
 theme_css <- function(th) {
-    parts <- character(0L)
-    for (nm in names(th$colors)) {
-        parts <- c(parts, paste0(theme_var(nm), ":", th$colors[[nm]]))
-    }
-    parts <- c(parts, paste0("--g-space:", th$spacing, "px"),
+    parts <- c(theme_color_parts(th$colors),
+               paste0("--g-space:", th$spacing, "px"),
                paste0("--g-radius:", th$radius, "px"),
                paste0("--g-font-body:", th$font$body),
                paste0("--g-font-mono:", th$font$mono),
                paste0("--g-font-size:", th$font$size, "px"))
-    paste0(":root{", paste(parts, collapse = ";"), "}")
+    css <- paste0(":root{", paste(parts, collapse = ";"), "}")
+    if (!is.null(th$dark)) {
+        css <- paste0(css, "@media (prefers-color-scheme: dark){:root{",
+                      paste(theme_color_parts(th$dark), collapse = ";"),
+                      "}}")
+    }
+    css
 }

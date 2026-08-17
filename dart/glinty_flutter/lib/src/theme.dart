@@ -75,6 +75,25 @@ List<String> glintyMonoStack(Map<String, dynamic>? theme) {
       fallback: glintyMonoRole);
 }
 
+/// ThemeData for the platform's brightness.
+///
+/// A theme carrying a `dark` palette follows the system setting: the
+/// dark colors replace `colors` wholesale when the platform asks for
+/// dark, and [glintyThemeData]'s brightness estimate then picks the
+/// dark base scheme from the dark background on its own. Without
+/// `dark` the supplied tokens are exact in both schemes, which is
+/// the pre-`dark` contract unchanged.
+ThemeData glintyThemeDataFor(
+    Map<String, dynamic> theme, Brightness? brightness) {
+  final dark = theme['dark'];
+  if (brightness == Brightness.dark && dark is Map) {
+    final swapped = Map<String, dynamic>.from(theme);
+    swapped['colors'] = dark.cast<String, dynamic>();
+    return glintyThemeData(swapped);
+  }
+  return glintyThemeData(theme);
+}
+
 /// Build ThemeData from a welcome's theme tokens.
 ThemeData glintyThemeData(Map<String, dynamic> theme) {
   final colors =

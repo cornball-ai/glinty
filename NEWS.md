@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**Themes carry a dark palette** (#46). `app_theme(dark = )` is a
+second colour set, applied when the system prefers a dark scheme, so
+an app no longer chooses between its own identity and automatic dark
+mode. Partial values merge over the stylesheet's dark defaults
+(`dark = list()` is exactly the stock dark palette), merging never
+reaches across schemes, and omitting `dark` keeps a supplied theme
+exact in both schemes, as before. The browser lowers it to a
+`prefers-color-scheme` block, Flutter to the dark `ColorScheme`;
+there is no third state -- the choice follows the system setting.
+
 **The WebSocket handshake checks Origin** (#48). Browsers exempt
 WebSockets from the same-origin policy, so any page a user visited
 could open a socket to a running app and drive it. The handshake now
