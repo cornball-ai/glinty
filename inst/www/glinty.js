@@ -613,18 +613,113 @@
         return String(n);
     }
 
-    /* A slider's flanking numbers live in its row; the thumb moves
-       client-side, so the readout is client-kept too. */
-    function syncSliderLabels(el) {
-        var row = el.closest(".g-slider-row");
-        if (!row) return;
-        var pick = function (cls, v) {
-            var node = row.querySelector(cls);
-            if (node) node.textContent = numLabel(v);
-        };
-        pick(".g-slider-value", el.value);
-        pick(".g-slider-min", el.min);
-        pick(".g-slider-max", el.max);
+    /* A scale label at fraction f, snapped to the step grid when
+       there is one -- scale numbers should be values the thumb can
+       actually take. Mirrors slider_snap() in R. */
+    function sliderSnap(f, min, max, step) {
+        var v = min + f * (max - min);
+        if (step > 0) {
+            v = min + Math.round((v - min) / step) * step;
+            v = Math.min(Math.max(v, min), max);
+        }
+        return v;
+    }
+
+    /* The scale as {f, major, label} ticks: on the stops when the
+       step grid is coarse enough to see, a fixed tenths grid when
+       the slider reads as continuous. Mirrors slider_ticks() in R;
+       the two must agree. */
+    function sliderTicks(min, max, step) {
+        var ticks = [];
+        var n = step > 0 ? Math.round((max - min) / step) : 0;
+        if (n >= 1 && n <= 20 &&
+                Math.abs(min + n * step - max) < 1e-9 * Math.max(1, Math.abs(max))) {
+            var every = n <= 10 ? 1 : 2;
+            for (var i = 0; i <= n; i++) {
+                var major = i % every === 0 || i === n;
+                ticks.push({ f: i * step / (max - min), major: major,
+                             label: major ? numLabel(min + i * step) : "" });
+                if (i < n && n <= 10) {
+                    ticks.push({ f: (i + 0.5) * step / (max - min),
+                                 major: false, label: "" });
+                }
+            }
+            return ticks;
+        }
+        var prevLabel = "";
+        for (var j = 0; j <= 40; j++) {
+            var isMajor = j % 4 === 0;
+            var lab = "";
+            if (isMajor) {
+                lab = numLabel(sliderSnap(j / 40, min, max, step));
+                /* a snap can land two majors on one value */
+                if (lab === prevLabel) {
+                    lab = "";
+                } else {
+                    prevLabel = lab;
+                }
+            }
+            ticks.push({ f: j / 40, major: isMajor, label: lab });
+        }
+        return ticks;
+    }
+
+    /* (Re)draw a slider's scale. Cheap enough to run on build and
+       whenever min/max/step change; the drag path never lands here
+       because the signature is unchanged. */
+    function buildSliderScale(scale, min, max, step) {
+        var sig = min + ":" + max + ":" + step;
+        if (scale.dataset.gScaleSig === sig) return;
+        scale.dataset.gScaleSig = sig;
+        scale.textContent = "";
+        sliderTicks(min, max, step).forEach(function (tk) {
+            var left = "left:" +
+                numLabel(Math.round(tk.f * 1000000) / 10000) + "%";
+            scale.appendChild(el("span", {
+                "class": tk.major ? "g-tick g-tick-major" : "g-tick",
+                style: left
+            }));
+            if (tk.major) {
+                var lab = el("span",
+                             { "class": "g-tick-label", style: left });
+                lab.textContent = tk.label;
+                scale.appendChild(lab);
+            }
+        });
+    }
+
+    /* The thumb moves client-side, so every number layer is
+       client-kept: bubble text and position, end chips yielding to
+       the bubble, scale labels tracking min/max/step. */
+    function syncSliderLabels(input, box) {
+        box = box || input.closest(".g-slider-box");
+        if (!box) return;
+        var min = parseFloat(input.min) || 0;
+        var max = parseFloat(input.max);
+        max = isFinite(max) ? max : 1;
+        var step = parseFloat(input.step) || 0;
+        var v = parseFloat(input.value);
+        v = isFinite(v) ? v : min;
+        var pct = max > min
+            ? Math.min(1, Math.max(0, (v - min) / (max - min)))
+            : 0;
+        var bub = box.querySelector(".g-slider-bubble");
+        if (bub) {
+            bub.textContent = numLabel(v);
+            bub.style.left = numLabel(Math.round(pct * 100000) / 1000) + "%";
+        }
+        var chipMin = box.querySelector(".g-slider-chip-min");
+        if (chipMin) {
+            chipMin.textContent = numLabel(min);
+            chipMin.style.visibility = pct < 0.1 ? "hidden" : "";
+        }
+        var chipMax = box.querySelector(".g-slider-chip-max");
+        if (chipMax) {
+            chipMax.textContent = numLabel(max);
+            chipMax.style.visibility = pct > 0.9 ? "hidden" : "";
+        }
+        var scale = box.querySelector(".g-slider-scale");
+        if (scale) buildSliderScale(scale, min, max, step);
     }
 
     function el(tag, attrs) {
@@ -1065,48 +1160,35 @@
         case "radio_buttons":
             return buildRadio(c);
         case "slider_input": {
-            /* Numbers or it is decoration: min and max name the
-               scale, the readout names the value. Mirrors
-               html_slider() in lower_html.R -- the two must agree. */
-            var srow = el("div", { "class": "g-slider-row" });
-            var smin = el("span", { "class": "g-slider-min" });
-            smin.textContent = numLabel(c.min);
-            srow.appendChild(smin);
-            var sattrs = assign(bindAttrs(c, "input"), {
+            /* Three number layers, mirroring html_slider() in R --
+               the two must agree: a bubble above the thumb, min/max
+               chips at the ends, a graded scale below. The sync in
+               syncSliderLabels() keeps every layer current. */
+            var sbox = el("div", { "class": "g-slider-box" });
+            var stop = el("div", { "class": "g-slider-top" });
+            var mkChip = function (cls) {
+                var s = el("span", { "class": "g-slider-chip " + cls });
+                stop.appendChild(s);
+                return s;
+            };
+            var chipMin = mkChip("g-slider-chip-min");
+            var bub = el("output", { "class":
+                "g-slider-chip g-slider-bubble", "for": c.id });
+            stop.appendChild(bub);
+            var chipMax = mkChip("g-slider-chip-max");
+            sbox.appendChild(stop);
+            var input = el("input", assign(bindAttrs(c, "input"), {
                 type: "range",
                 "class": "g-slider",
                 min: c.min,
                 max: c.max,
                 value: c.value,
                 step: c.step
-            });
-            /* Tick marks via datalist, the twin of Flutter's
-               division dots; capped like html_slider() in R. */
-            var ticksEl = null;
-            if (c.step > 0) {
-                var n = (c.max - c.min) / c.step;
-                if (isFinite(n) && n >= 1 && n <= 24) {
-                    var tickId = c.id + "-ticks";
-                    sattrs.list = tickId;
-                    ticksEl = el("datalist", { id: tickId });
-                    for (var ti = 0; ti <= Math.round(n); ti++) {
-                        ticksEl.appendChild(el("option", {
-                            value: numLabel(c.min + ti * c.step)
-                        }));
-                    }
-                }
-            }
-            srow.appendChild(el("input", sattrs));
-            if (ticksEl) srow.appendChild(ticksEl);
-            var smax = el("span", { "class": "g-slider-max" });
-            smax.textContent = numLabel(c.max);
-            srow.appendChild(smax);
-            var sout = el("output", { "class": "g-slider-value",
-                                      "for": c.id });
-            sout.textContent = numLabel(
-                c.value === null || c.value === undefined ? c.min : c.value);
-            srow.appendChild(sout);
-            return fieldGroup(c, srow);
+            }));
+            sbox.appendChild(input);
+            sbox.appendChild(el("div", { "class": "g-slider-scale" }));
+            syncSliderLabels(input, sbox);
+            return fieldGroup(c, sbox);
         }
         case "file_input":
             return buildFile(c);

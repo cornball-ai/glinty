@@ -338,32 +338,75 @@ h1, h2, h3, h4 {
     accent-color: var(--g-primary);
 }
 
-/* min --thumb-- max [value]: the numbers that make a slider an
-   input rather than decoration. The readout is client-tracked. */
-.g-slider-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+/* The slider's three number layers (ionRangeSlider is the
+   reference): a value bubble riding the thumb, min/max chips at the
+   ends that yield when the bubble reaches them, and a graded scale
+   below -- minor ticks, major ticks every tenth with light numbers.
+   All client-tracked; the server renders the same DOM for first
+   paint. */
+.g-slider-box {
+    position: relative;
+    padding-top: 1.5rem;
+    padding-bottom: 1.45rem;
 }
 
-.g-slider-row .g-slider {
-    flex: 1;
-    min-width: 0;
+.g-slider-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1.3rem;
 }
 
-.g-slider-min,
-.g-slider-max {
-    flex: none;
+.g-slider-chip {
+    position: absolute;
+    top: 0;
+    padding: 0.05rem 0.4rem;
+    border-radius: var(--g-radius);
+    background: color-mix(in srgb, var(--g-border) 45%, var(--g-surface));
+    color: var(--g-text);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2rem;
+}
+
+.g-slider-chip-min { left: 0; }
+.g-slider-chip-max { right: 0; }
+
+.g-slider-bubble {
+    transform: translateX(-50%);
+    background: var(--g-primary);
+    color: var(--g-on-primary);
+}
+
+.g-slider-scale {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1.35rem;
+    pointer-events: none;
+}
+
+.g-tick {
+    position: absolute;
+    top: 0;
+    height: 0.28rem;
+    border-left: 1px solid var(--g-border);
+    transform: translateX(-50%);
+}
+
+.g-tick-major {
+    height: 0.45rem;
+    border-left-color: var(--g-muted);
+}
+
+.g-tick-label {
+    position: absolute;
+    top: 0.5rem;
+    transform: translateX(-50%);
     color: var(--g-muted);
-    font-size: 0.8rem;
-}
-
-.g-slider-value {
-    flex: none;
-    min-width: 2.5rem;
-    text-align: right;
-    font-family: var(--g-font-mono);
-    font-size: 0.9rem;
+    font-size: 0.7rem;
 }
 
 /* ---------- buttons ---------- */

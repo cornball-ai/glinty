@@ -449,45 +449,53 @@ html_radio <- function(x) {
                            html_escape(x$label)), items))
 }
 
+# The slider's three number layers, the shape every real slider
+# control has (ionRangeSlider is the reference): a value bubble that
+# rides above the thumb, bold min/max chips at the ends that yield
+# when the bubble reaches them, and a graded scale below the track --
+# minor ticks, major ticks every tenth with light numbers. Major
+# label values snap to the step so a 1..50 scale reads 1, 6, 11
+# rather than 5.9, 10.8. The client keeps the bubble, chips and
+# labels current; this renders the same DOM for first paint.
 html_slider <- function(x) {
     attrs <- c(html_bind(x),
                list(type = "range", class = "g-slider", min = x$min, max = x$max,
                     value = x$value, step = x$step))
-    # Tick marks, the native way: a datalist of step positions makes
-    # the browser draw ticks on the track, the twin of the division
-    # dots Flutter derives from the same step. Capped because a
-    # 500-tick track is noise, not a scale.
-    ticks <- ""
-    if (!is.null(x$step) && x$step > 0) {
-        n <- (x$max - x$min) / x$step
-        if (is.finite(n) && n >= 1 && n <= 24) {
-            tick_id <- paste0(x$id, "-ticks")
-            attrs$list <- tick_id
-            marks <- vapply(0L:as.integer(round(n)), function(i) {
-                html_el("option",
-                        list(value = num_label(x$min + i * x$step)),
-                        inner = "")
-            }, character(1L))
-            ticks <- html_el("datalist", list(id = tick_id),
-                             paste0(marks, collapse = ""))
+    shown <- if (is.null(x$value)) x$min else x$value
+    pct <- slider_pct(shown, x$min, x$max)
+
+    chip <- function(cls, v, hidden) {
+        html_el("span",
+                list(class = paste0("g-slider-chip ", cls),
+                     style = if (hidden) "visibility:hidden" else NULL),
+                num_label(v))
+    }
+    bubble <- html_el("output",
+        list(class = "g-slider-chip g-slider-bubble", "for" = x$id,
+             style = sprintf("left:%s%%", num_label(round(pct * 100, 3)))),
+        num_label(shown))
+    top <- html_el("div", list(class = "g-slider-top"),
+        paste0(chip("g-slider-chip-min", x$min, pct < 0.1),
+               bubble,
+               chip("g-slider-chip-max", x$max, pct > 0.9)))
+
+    marks <- character(0L)
+    for (tk in slider_ticks(x$min, x$max, x$step)) {
+        left <- sprintf("left:%s%%", num_label(round(tk$f * 100, 4)))
+        marks[[length(marks) + 1L]] <- html_el("span",
+            list(class = if (tk$major) "g-tick g-tick-major" else "g-tick",
+                 style = left), "")
+        if (tk$major) {
+            marks[[length(marks) + 1L]] <- html_el("span",
+                list(class = "g-tick-label", style = left), tk$label)
         }
     }
-    # A slider without numbers answers "roughly how far along?" and
-    # nothing else. Min and max name the scale, the readout names the
-    # value -- the client keeps the readout tracking the thumb.
-    shown <- if (is.null(x$value)) x$min else x$value
-    row <- html_el("div", list(class = "g-slider-row"),
-        paste0(
-            html_el("span", list(class = "g-slider-min"),
-                    num_label(x$min)),
-            html_el("input", attrs, void = TRUE),
-            ticks,
-            html_el("span", list(class = "g-slider-max"),
-                    num_label(x$max)),
-            html_el("output", list(class = "g-slider-value", "for" = x$id),
-                    num_label(shown))
-        ))
-    html_field_group(x, row)
+    scale <- html_el("div", list(class = "g-slider-scale"),
+                     paste0(marks, collapse = ""))
+
+    box <- html_el("div", list(class = "g-slider-box"),
+                   paste0(top, html_el("input", attrs, void = TRUE), scale))
+    html_field_group(x, box)
 }
 
 # The shortest plain rendering of a number, matching what the browser
@@ -495,6 +503,76 @@ html_slider <- function(x) {
 # number): no scientific notation, no trailing zeros.
 num_label <- function(v) {
     format(v, scientific = FALSE, trim = TRUE, drop0trailing = TRUE)
+}
+
+# Where a value sits on its track, 0..1.
+slider_pct <- function(v, min, max) {
+    if (!is.numeric(v) || max <= min) {
+        return(0)
+    }
+    min(1, max(0, (v - min) / (max - min)))
+}
+
+# A scale label at fraction f, snapped to the step grid when there is
+# one -- scale numbers should be values the thumb can actually take.
+slider_snap <- function(f, min, max, step) {
+    v <- min + f * (max - min)
+    if (!is.null(step) && is.numeric(step) && step > 0) {
+        v <- min + round((v - min) / step) * step
+        v <- base::min(base::max(v, min), max)
+    }
+    v
+}
+
+# The slider's scale, as (fraction, major, label) ticks. When the
+# step grid is coarse enough to see (up to 20 stops), ticks sit ON
+# the stops -- the places the thumb can actually rest -- with labels
+# on every stop (or every other past 10), and unlabeled half-ticks
+# between. Finer or stepless sliders read as continuous, so they get
+# a fixed grid: majors every tenth, labels snapped and deduped.
+# Mirrored by sliderTicks() in glinty.js and _sliderTicks() in the
+# Flutter renderer; the three must agree.
+slider_ticks <- function(min, max, step) {
+    ticks <- list()
+    add <- function(f, major, label = "") {
+        ticks[[length(ticks) + 1L]] <<- list(f = f, major = major,
+                                             label = label)
+    }
+    n <- if (!is.null(step) && is.numeric(step) && step > 0) {
+        round((max - min) / step)
+    } else {
+        0
+    }
+    if (n >= 1 && n <= 20 && isTRUE(all.equal(min + n * step, max))) {
+        every <- if (n <= 10) 1L else 2L
+        for (i in 0L:n) {
+            f <- i * step / (max - min)
+            major <- i %% every == 0L || i == n
+            add(f, major,
+                if (major) num_label(min + i * step) else "")
+            if (i < n && n <= 10) {
+                add((i + 0.5) * step / (max - min), FALSE)
+            }
+        }
+        return(ticks)
+    }
+    prev_label <- ""
+    for (i in 0L:40L) {
+        major <- i %% 4L == 0L
+        lab <- ""
+        if (major) {
+            lab <- num_label(slider_snap(i / 40, min, max, step))
+            # a snap can land two majors on one value; a number
+            # printed twice is the tick without the label
+            if (identical(lab, prev_label)) {
+                lab <- ""
+            } else {
+                prev_label <- lab
+            }
+        }
+        add(i / 40, major, lab)
+    }
+    ticks
 }
 
 html_file <- function(x) {
