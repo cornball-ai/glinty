@@ -618,9 +618,10 @@
     var KNOWN_VARIANTS = {
         text: ["normal", "muted", "strong", "heading", "mono", "small"],
         text_output: ["normal", "muted", "strong", "mono", "small"],
-        button: ["default", "primary", "secondary", "danger", "ghost"],
+        button: ["default", "primary", "secondary", "danger", "ghost",
+                 "listing"],
         download_button: ["default", "primary", "secondary", "danger",
-                          "ghost"],
+                          "ghost", "listing"],
         panel: ["plain", "card", "sidebar"],
         divider: ["line", "labelled"]
     };

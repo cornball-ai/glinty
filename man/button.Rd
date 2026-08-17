@@ -17,7 +17,10 @@ button(id, label, variant = "default", icon = NULL, value = NULL)
 
 \item{value}{character carried on the event this button emits, so
 one `observe_event()` can serve a whole list: the press says which
-row. `input$id()` is then that value rather than a press count}
+row. `input$id()` is then that value rather than a press count.
+An id is valued everywhere or nowhere: give every button sharing
+it a value, or none of them, since one observer cannot serve an
+`input$id()` that is sometimes a value and sometimes a count}
 }
 \value{
 A UI component

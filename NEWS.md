@@ -1,5 +1,18 @@
 # glinty (development version)
 
+**`path_picker()`: a served file browser** (#47). Picks a directory
+or file on the machine running R, the job `file_input()` cannot do.
+The dialog is ordinary components in a modal -- breadcrumbs and one
+row per entry, one observer for the whole listing -- so every
+frontend already renders it. `open()` always shows the dialog
+(`start =` says where to open, never what to return), `value` is a
+reactive_val written only by an explicit selection, and every
+navigation step is canonicalized, bounded by `root` when one is set.
+App-supplied shortcuts render above the tree (`shortcuts =`, labels
+to paths or a function returning them, asked at each show so a
+recents list stays current) and resolve exactly as a tree choice
+does. `run_example("gallery")` has a live one.
+
 **Themes carry a dark palette** (#46). `app_theme(dark = )` is a
 second colour set, applied when the system prefers a dark scheme, so
 an app no longer chooses between its own identity and automatic dark

@@ -360,7 +360,7 @@ same as safe to add.
 | `text` | `value: string` | `variant`, `id` |
 | `heading` | `value: string` | `level: 1..4` (2), `id` |
 | `link` | `href: string`, and one of `value: string` or `children: []` | `external: bool` (false) |
-| `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload` | `size: int` (16) |
+| `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload`, `folder`, `file` | `size: int` (16) |
 | `divider` | — | `label: string`, `variant` |
 | `spacer` | — | `size: int` (1, in theme spacing units) |
 | `page` | `children: []` | `title` ("glinty app"), `width`: `content` \| `full` (`content`), `id` |
@@ -724,7 +724,7 @@ client is free to render `danger` however it likes.
 
 | component | variants |
 |---|---|
-| `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost` |
+| `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost`, `listing` |
 | `panel` | `plain`, `card`, `sidebar` |
 | `text` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
 | `text_output` | `normal`, `muted`, `strong`, `mono`, `small` |

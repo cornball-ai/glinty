@@ -22,6 +22,11 @@ app(
         date_input("when", "Date:", value = "2026-07-07"),
         file_input("upload", "File:", multiple = TRUE),
         button("randomize", "Randomize from server"),
+        row(
+            button("browse", "Browse folders on the server"),
+            text_output("picked", variant = "mono"),
+            align = "center", gap = 12L
+        ),
         checkbox_input("more", "Show dynamic panel"),
         ui_output("panel"),
         heading(level = 3L, value = "Current values"),
@@ -62,6 +67,16 @@ app(
         output$echo_extra <- render_text(function() {
             v <- input$extra()
             if (is.null(v)) "" else paste("you typed:", v)
+        })
+        # The served file browser: a dialog built from ordinary
+        # components, walking the server's own disk, with app-supplied
+        # shortcuts above the tree.
+        picker <- path_picker(session, input, "proj", kind = "dir",
+                              shortcuts = c("this app's folder" = getwd()))
+        observe_event(input$browse, function() picker$open())
+        output$picked <- render_text(function() {
+            v <- picker$value()
+            if (is.null(v)) "nothing picked yet" else v
         })
         observe_event(input$randomize, function() {
             update_text_input(session, "txt",

@@ -167,6 +167,13 @@ component_fixtures <- function() {
                       notes = "emits an event, not an input: there is no value to keep"
         ),
                  list(
+                      name = "button-listing",
+                      component = component("button", id = "open_row",
+                label = "clips", variant = "listing", icon = "folder",
+                value = "/media/clips"),
+                      notes = "one row of a list: start-aligned, body-coloured, quiet until hovered"
+        ),
+                 list(
                       name = "password-input",
                       component = component("password_input", id = "key",
                 label = "API Key"),

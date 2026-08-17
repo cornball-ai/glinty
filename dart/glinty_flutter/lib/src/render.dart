@@ -324,8 +324,10 @@ class GlintyRenderer {
   static const _knownVariants = <String, List<String>>{
     'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
     'text_output': ['normal', 'muted', 'strong', 'mono', 'small'],
-    'button': ['default', 'primary', 'secondary', 'danger', 'ghost'],
-    'download_button': ['default', 'primary', 'secondary', 'danger', 'ghost'],
+    'button': ['default', 'primary', 'secondary', 'danger', 'ghost', 'listing'],
+    'download_button': [
+      'default', 'primary', 'secondary', 'danger', 'ghost', 'listing'
+    ],
     'panel': ['plain', 'card', 'sidebar'],
     'divider': ['line', 'labelled'],
   };
@@ -723,6 +725,8 @@ class GlintyRenderer {
         'bookmark' => Icons.bookmark_border,
         'download' => Icons.download,
         'upload' => Icons.upload,
+        'folder' => Icons.folder_outlined,
+        'file' => Icons.insert_drive_file_outlined,
         _ => Icons.help_outline,
       };
 
@@ -1194,6 +1198,14 @@ class GlintyRenderer {
           child: child),
       'ghost' =>
         TextButton(onPressed: dead ? null : fire, child: child),
+      // one row of a list: start-aligned and body-coloured, so a
+      // stack of them reads as a listing rather than a wall of pills
+      'listing' => TextButton(
+          onPressed: dead ? null : fire,
+          style: TextButton.styleFrom(
+              alignment: Alignment.centerLeft,
+              foregroundColor: scheme.onSurface),
+          child: child),
       _ =>
         ElevatedButton(onPressed: dead ? null : fire, child: child),
     };

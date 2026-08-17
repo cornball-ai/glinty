@@ -15,7 +15,7 @@
    Four of them do, and a component lowers to both, as in
    class="g-btn g-btn-ghost":
 
-       .g-btn      -default -primary -secondary -danger -ghost
+       .g-btn      -default -primary -secondary -danger -ghost -listing
        .g-panel    -plain -card -sidebar
        .g-text     -normal -muted -strong -heading
        .g-divider  -line -labelled
@@ -183,6 +183,16 @@ h1, h2, h3, h4 {
 .g-icon-upload {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='21' x2='12' y2='9'/%3E%3Cpolyline points='7 14 12 9 17 14'/%3E%3Cpath d='M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'/%3E%3C/g%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='21' x2='12' y2='9'/%3E%3Cpolyline points='7 14 12 9 17 14'/%3E%3Cpath d='M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.g-icon-folder {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/g%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.g-icon-file {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/%3E%3Cpolyline points='13 2 13 9 20 9'/%3E%3C/g%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'/%3E%3Cpolyline points='13 2 13 9 20 9'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* A folded section. The browser gets <details>, which brings its own
@@ -375,6 +385,33 @@ h1, h2, h3, h4 {
     border-color: transparent;
     background: transparent;
     color: var(--g-primary);
+}
+
+/* button(variant = "listing"): one row of a list -- a file-browser
+   entry, a menu item. Full width, start-aligned, body-coloured, and
+   quiet until hovered: a stack of these has to read as a listing,
+   not as a wall of pill buttons. */
+.g-btn-listing {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.3rem 0.6rem;
+    border-color: transparent;
+    background: transparent;
+    color: var(--g-text);
+    text-align: left;
+}
+
+.g-btn-listing:hover {
+    background: color-mix(in srgb, var(--g-border) 35%, var(--g-surface));
+    filter: none;
+}
+
+.g-btn-listing .g-icon {
+    color: var(--g-muted);
+    flex: none;
 }
 
 /* ---------- outputs ---------- */
