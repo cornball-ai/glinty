@@ -113,6 +113,36 @@ browser can't see, per #53).
   bundling one font in both frontends (Inter is the natural pick);
   candidate for a follow-up round.
 
+## Round 3: Reactivity (shiny-examples 003, 2026-08-17)
+
+Port went up clean on the first in-process run -- the emission graph
+(dataset -> summary+view via one shared reactive; caption -> heading
+only; obs -> table only) held exactly. Three framework gaps surfaced
+by holding the frontends against the running original, all fixed on
+this branch:
+
+- **verbatim_output soft-wrapped** (`white-space: pre-wrap`),
+  shattering summary()'s column alignment the moment content
+  exceeded the box; the `overflow-x: auto` beneath it was dead code.
+  Now `pre` + scroll; Flutter mirrors with softWrap: false in a
+  horizontal scroller.
+- **Tables had no numeric alignment**: values travel as strings, so
+  the wire now carries `align` ("num"/"text" per column, from
+  is.numeric before formatting) and both frontends right-align
+  number columns. Shiny right-aligns via column class server-side;
+  same idea, structural instead of markup.
+- **The browser row wrapped; Flutter's cannot.** `flex-wrap: wrap`
+  (from #8, no stated rationale) silently restacked the sidebar
+  shape when content pressed, in one frontend only. Now nowrap +
+  `min-width: 0` on row children (the horizontal twin of g-fill's
+  min-height: 0) so inner scroll containers absorb the pressure.
+  CHANGED A #8 DEFAULT -- flag in the PR for review.
+
+Parity note, not yet a gap: Shiny's renderTable rounds (xtable
+digits, shape shows 0.09) where render_table() sends full precision
+(0.0903296). A digits/format control on render_table() would close
+it; deferred.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
