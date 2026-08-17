@@ -83,7 +83,11 @@ split_host_port <- function(value) {
     if (length(m) == 0L) {
         return(NULL)
     }
-    port <- if (nzchar(m[[3L]])) as.integer(m[[3L]]) else NA_integer_
+    if (nzchar(m[[3L]])) {
+        port <- as.integer(m[[3L]])
+    } else {
+        port <- NA_integer_
+    }
     list(host = m[[2L]], port = port)
 }
 
@@ -100,8 +104,7 @@ origin_parts <- function(origin) {
     }
     origin <- tolower(trimws(origin))
     m <- regmatches(origin,
-                    regexec("^([a-z][a-z0-9+.-]*)://(.+)$", origin,
-                            perl = TRUE))[[1L]]
+                    regexec("^([a-z][a-z0-9+.-]*)://(.+)$", origin, perl = TRUE))[[1L]]
     if (length(m) == 0L) {
         return(NULL)
     }
@@ -118,8 +121,7 @@ origin_parts <- function(origin) {
 #' @return integer port, or NA_integer_ for schemes with none
 #' @keywords internal
 scheme_default_port <- function(scheme) {
-    switch(scheme, http = 80L, ws = 80L, https = 443L, wss = 443L,
-           NA_integer_)
+    switch(scheme, http = 80L, ws = 80L, https = 443L, wss = 443L, NA_integer_)
 }
 
 #' Normalize an origin for allowlist comparison
@@ -140,8 +142,7 @@ normalize_origin <- function(origin) {
     if (!is.na(port) && identical(port, scheme_default_port(p$scheme))) {
         port <- NA_integer_
     }
-    paste0(p$scheme, "://", p$host,
-           if (!is.na(port)) paste0(":", port) else "")
+    paste0(p$scheme, "://", p$host, if (!is.na(port)) paste0(":", port) else "")
 }
 
 #' Decide whether an upgrade's Origin is acceptable
@@ -184,11 +185,19 @@ ws_origin_allowed <- function(origin, host, origins = NULL) {
             return(TRUE)
         }
     }
-    hp <- if (is.null(host)) NULL else split_host_port(host)
+    if (is.null(host)) {
+        hp <- NULL
+    } else {
+        hp <- split_host_port(host)
+    }
     if (is.null(hp) || !identical(op$host, hp$host)) {
         return(FALSE)
     }
-    o_port <- if (is.na(op$port)) scheme_default_port(op$scheme) else op$port
+    if (is.na(op$port)) {
+        o_port <- scheme_default_port(op$scheme)
+    } else {
+        o_port <- op$port
+    }
     if (is.na(hp$port)) {
         # A portless Host is a default-port deployment; either
         # scheme's default is the same place.
@@ -211,8 +220,8 @@ ws_origin_allowed <- function(origin, host, origins = NULL) {
 ws_handshake_result <- function(req, origins = NULL) {
     # Authorization before negotiation: a page this server would not
     # serve gets a refusal, not a protocol conversation.
-    if (!ws_origin_allowed(get_header(req, "origin"),
-                           get_header(req, "host"), origins)) {
+    if (!ws_origin_allowed(get_header(req, "origin"), get_header(req, "host"),
+                           origins)) {
         return(list(ok = FALSE, response = http_response_raw(
                     403L, "text/plain", "Forbidden"
                 )))

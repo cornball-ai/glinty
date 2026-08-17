@@ -106,7 +106,7 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
              call. = FALSE)
     }
     if (!is.null(origins) && (!is.character(origins) ||
-        length(origins) == 0L || anyNA(origins) || any(!nzchar(origins)))) {
+            length(origins) == 0L || anyNA(origins) || any(!nzchar(origins)))) {
         stop("origins must be a character vector of allowed origins ",
              "(or \"*\"), or NULL for same-host only", call. = FALSE)
     }
