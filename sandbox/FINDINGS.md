@@ -11,7 +11,8 @@ browser can't see, per #53).
 
 | App | Port | Web | In-process | Flutter | Notes |
 |---|---|---|---|---|---|
-| 001-hello (faithful) | clean | OK live: plot renders, slider round trip | OK: measure->raster, slider->new raster, 0 errors | OK live via web build: plot + slider round trip | headless `--screenshot` can't see measured plots (Chrome virtual time never delivers the ws round trip) — not a glinty bug; in-process drive covers it |
+| 001-hello | clean | OK live: plot renders, slider round trip | OK: measure->raster, slider->new raster, 0 errors | OK live via web build: plot + slider round trip | headless `--screenshot` can't see measured plots (Chrome virtual time never delivers the ws round trip) — not a glinty bug; in-process drive covers it |
+| gallery Faithful | clean | OK live: dropdown, both checkboxes, density line, conditional bw slider reveal, bw drag reshapes | OK: all four controls change the raster, 0 errors | plot MISSING at first paint; appears (with conditional slider) after first input round trip — see finding 6 | conditional_panel works in both lowerings |
 
 ## Parity gaps found live (both frontends, same app, same server)
 
@@ -27,6 +28,27 @@ browser can't see, per #53).
    max-width column with padding. Flutter: flush top-left, full
    width, no padding (page renders as a bare Column). Known from the
    #44 review; now confirmed side by side on 001-hello.
+
+## More live findings (gallery Faithful, 2026-08-17)
+
+4. **Sliders show no numbers, either lowering.** Shiny's slider
+   displays its current value on the handle plus min/max labels;
+   glinty's browser slider is a bare `<input type=range>` and the
+   Flutter one a bare Material Slider (it does get division ticks
+   from `step`). A user cannot tell what value they picked. Wants:
+   current value readout (and probably min/max) as part of
+   slider_input in both lowerings. (Troy called this out on sight.)
+5. **Flutter drops boot-time outputs.** The server sends initial
+   render output right after welcome; the dart client shows nothing
+   until the first input round trip, after which the output (and its
+   remeasure) appear. Repro: gallery-Faithful port, plot area empty
+   at first paint, click any checkbox and everything appears. The
+   browser's version of this is the welcome-time measure race
+   (reportPlotDims called directly at welcome, once, no retry —
+   works today only because layout beats the socket).
+6. **Flutter checkbox is a full-width row with a trailing box** (and
+   a hover/checked row highlight); the browser inlines box-then-label.
+   Same tree, structurally different control.
 
 ## Framework DX finding
 
