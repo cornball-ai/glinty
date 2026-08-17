@@ -1373,13 +1373,17 @@
 
     function buildTable(el, data) {
         el.textContent = "";
+        /* align marks numeric columns; values travel as strings so
+           the wire carries the type the layout needs */
+        var align = data.align || [];
         var tbl = document.createElement("table");
         tbl.className = "g-table";
         var thead = document.createElement("thead");
         var hr = document.createElement("tr");
-        (data.header || []).forEach(function (h) {
+        (data.header || []).forEach(function (h, i) {
             var th = document.createElement("th");
             th.textContent = h;
+            if (align[i] === "num") th.className = "g-num";
             hr.appendChild(th);
         });
         thead.appendChild(hr);
@@ -1387,9 +1391,10 @@
         var tbody = document.createElement("tbody");
         (data.rows || []).forEach(function (r) {
             var tr = document.createElement("tr");
-            r.forEach(function (c) {
+            r.forEach(function (c, i) {
                 var td = document.createElement("td");
                 td.textContent = c; /* structural escaping */
+                if (align[i] === "num") td.className = "g-num";
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);

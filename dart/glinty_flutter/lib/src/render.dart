@@ -1411,22 +1411,35 @@ class GlintyRenderer {
         width: double.infinity,
         padding: const EdgeInsets.all(8),
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Text(_outputText(c),
-            style: TextStyle(
-                fontFamily: monoStack.first,
-                fontFamilyFallback: monoStack.sublist(1))),
+        // no soft wrap: wrapping shatters the column alignment this
+        // component exists to preserve; wide content scrolls
+        child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Text(_outputText(c),
+                softWrap: false,
+                style: TextStyle(
+                    fontFamily: monoStack.first,
+                    fontFamilyFallback: monoStack.sublist(1)))),
       );
 
   Widget _table(GlintyComponent c) {
     final v = values[c.str('id')];
     if (v is! Map || v['header'] is! List) return const SizedBox.shrink();
     final header = (v['header'] as List).map((h) => h.toString()).toList();
+    // align marks numeric columns; DataColumn(numeric:) is
+    // Material's own right-alignment for them
+    final align =
+        (v['align'] as List? ?? const []).map((a) => a.toString()).toList();
+    bool numAt(int i) => i < align.length && align[i] == 'num';
     final rows = (v['rows'] as List? ?? const []).map((r) {
       final cells = (r as List).map((cell) => cell.toString()).toList();
       return DataRow(cells: cells.map((s) => DataCell(Text(s))).toList());
     }).toList();
     return DataTable(
-      columns: header.map((h) => DataColumn(label: Text(h))).toList(),
+      columns: [
+        for (var i = 0; i < header.length; i++)
+          DataColumn(label: Text(header[i]), numeric: numAt(i))
+      ],
       rows: rows,
     );
   }

@@ -527,7 +527,7 @@ side does not know is a button that renders and does nothing.
 | kind | value | from |
 |---|---|---|
 | `text` | string | `render_text()` |
-| `table` | `{header, rows}` | `render_table()` |
+| `table` | `{header, rows, align}` | `render_table()` |
 | `image` | `{src, width, height}` | `render_plot()` |
 | `audio` | `{src, mime, duration?}` | `render_audio()` |
 | `video` | `{src, mime, poster?, duration?}` | `render_video()` |
@@ -536,6 +536,11 @@ side does not know is a button that renders and does nothing.
 
 `kind` describes **the value**, and comes from the renderer. How it is
 displayed belongs to the receiving component.
+
+A table's `align` marks each column `"num"` or `"text"`: values
+travel as strings, so numeric-ness must ride alongside for the
+frontends to right-align number columns. A client that sees no
+`align` treats every column as text.
 
 So there is no `verbatim` kind. `render_text()` always produces
 `text`; `verbatim_output` is the component that chooses to display a
