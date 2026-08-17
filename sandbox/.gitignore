@@ -1,0 +1,4 @@
+sandbox/shiny-examples/
+sandbox/shiny/
+sandbox/**/server.log
+sandbox/**/*.png
