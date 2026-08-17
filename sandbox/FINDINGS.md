@@ -75,9 +75,43 @@ browser can't see, per #53).
     760 max, padded, page scrolls); `width = "full"` unchanged;
   - checkboxes are box-then-word at natural width (InkWell + Row),
     not a full-width CheckboxListTile.
+- **Three-layer slider, matched to the ionRangeSlider reference**
+  (superseding the first numbers pass, at Troy's direction): a value
+  bubble riding the thumb, min/max chips at the ends that yield when
+  the bubble reaches them, and a graded scale below the track --
+  half-size minor ticks, numbered majors. When the step grid has
+  1-20 stops the scale sits ON the stops (labels every stop up to
+  10, every 2nd for 11-20, midpoint half-ticks up to 10), so tick
+  marks align exactly with where the thumb can rest; otherwise a
+  41-tick tenths grid with step-snapped, consecutive-deduped labels.
+  One rule, three implementations that must agree: R slider_ticks()
+  (lower_html.R), JS sliderTicks() (glinty.js), dart _sliderTicks()
+  (render.dart). Verified live in Chrome against the running Shiny
+  original.
+- **CanvasKit checkbox box-clicks fizzled** -- label clicks sent the
+  input, clicks on the box itself sent nothing (server trace showed
+  no frame). Nested live tap targets (InkWell wrapping an enabled
+  Checkbox) put box-taps into a gesture arena that resolved to
+  neither. Fix: the box is display-only under IgnorePointer; the
+  InkWell is the single tap path. Verified live: box-click drew the
+  density curve and summoned the conditional slider.
+- **A checked box paints primary + white check** -- proven at the
+  raster level (test/checkbox_paint_probe_test.dart samples the
+  painted pixels: fill exactly #2456d6). The grey glyph in earlier
+  screenshots was capture mush: a 16px box through the extension's
+  ~0.82x resample plus JPEG 4:2:0 chroma subsampling.
+- **The app paints its own ground**: GlintyView wraps content in
+  `Material(color: scaffoldBackgroundColor)` (Material, not
+  ColoredBox -- list tiles and ink need a Material ancestor to
+  paint on). Embedders must still hand it real constraints:
+  a Scaffold body's loose constraints shrink-wrap the app and show
+  the embedder's surface through every margin -- the viewer wraps
+  in SizedBox.expand.
 - Still open from the reconciliation ask: **font**. `system-ui` has
-  no Flutter equivalent; the dart side keeps Roboto. Closest move is
-  fontFamilyFallback per platform -- imperfect by construction.
+  no Flutter equivalent; the dart side keeps Roboto, and the native
+  build takes the platform's fontconfig default. True parity means
+  bundling one font in both frontends (Inter is the natural pick);
+  candidate for a follow-up round.
 
 ## Framework DX finding
 
@@ -160,3 +194,15 @@ radioButtons, textAreaInput (3), passwordInput -> see gaps.
 - `tools/drive.R` boots an app exactly like the live loop
   (seed_session_inputs -> server fn -> flush) and scripts
   measure/input/event frames against it.
+- The flutter-viewer web build carries no service worker
+  (`--pwa-strategy=none`) and busybox httpd sends Last-Modified, so
+  Chrome heuristically caches main.dart.js: after a rebuild, plain
+  navigation shows the OLD build. Hard reload (or a fresh tab) after
+  every rebuild, then confirm against the server trace log that a
+  new welcome actually happened before judging behavior.
+- A CDP zoom/device-metrics override sticks to the tab across
+  reloads (dpr silently 2x, screenshots freeze or mislead). A fresh
+  tab gets a clean CDP session; recreate rather than diagnose.
+- For lossless pixels (JPEG screenshots smear a 16px glyph):
+  `ffmpeg -f x11grab -i :1 -frames:v 1 out.png` for native windows;
+  a RepaintBoundary.toImage() widget test for the flutter engine.

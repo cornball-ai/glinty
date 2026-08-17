@@ -10,6 +10,9 @@ void main() {
   runApp(MaterialApp(
     title: 'glinty flutter viewer',
     debugShowCheckedModeBanner: false,
-    home: Scaffold(body: GlintyApp(url: url)),
+    // SizedBox.expand: a Scaffold body hands its child loose
+    // constraints, and a shrink-wrapped app shows the embedder's
+    // Material surface through every margin below the content.
+    home: Scaffold(body: SizedBox.expand(child: GlintyApp(url: url))),
   ));
 }
