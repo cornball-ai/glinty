@@ -32,8 +32,10 @@ full_page_html <- function(body_html, title = "glinty app", head = NULL,
         ""
     } else {
         # After the stylesheet link, so token values win over the
-        # stylesheet's :root defaults (and its dark-mode block: a
-        # supplied theme is exact).
+        # stylesheet's :root defaults and its dark-mode block. A
+        # theme's own dark palette rides in this same element as its
+        # own media query (see theme_css()); without one, a supplied
+        # theme is exact in both schemes.
         paste0("<style id=\"g-theme\">", theme_css, "</style>\n")
     }
     paste0(
