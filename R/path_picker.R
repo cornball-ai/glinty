@@ -30,8 +30,7 @@
 #' @param hidden logical include dotfiles
 #' @return list(dirs, files) of bare names
 #' @keywords internal
-picker_entries <- function(dir, kind = "dir", pattern = NULL,
-                           hidden = FALSE) {
+picker_entries <- function(dir, kind = "dir", pattern = NULL, hidden = FALSE) {
     empty <- list(dirs = character(0L), files = character(0L))
     if (is.null(dir) || !nzchar(dir) || !dir.exists(dir)) {
         return(empty)
@@ -101,7 +100,11 @@ path_within <- function(path, root) {
     if (identical(path, root)) {
         return(TRUE)
     }
-    prefix <- if (endsWith(root, "/")) root else paste0(root, "/")
+    if (endsWith(root, "/")) {
+        prefix <- root
+    } else {
+        prefix <- paste0(root, "/")
+    }
     startsWith(path, prefix)
 }
 
@@ -197,8 +200,7 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
         stop("session must be a glinty_session", call. = FALSE)
     }
     if (!inherits(input, "glinty_input")) {
-        stop("input must be the server function's input proxy",
-             call. = FALSE)
+        stop("input must be the server function's input proxy", call. = FALSE)
     }
     if (!is.character(id) || length(id) != 1L || !nzchar(id)) {
         stop("id must be a non-empty string", call. = FALSE)
@@ -206,8 +208,7 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
     kind <- match.arg(kind)
     if (!is.null(root)) {
         if (!is.character(root) || length(root) != 1L || !dir.exists(root)) {
-            stop("root must be an existing directory, or NULL",
-                 call. = FALSE)
+            stop("root must be an existing directory, or NULL", call. = FALSE)
         }
         root <- normalizePath(root, winslash = "/")
     }
@@ -242,7 +243,11 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
                 return(d)
             }
         }
-        if (is.null(root)) "/" else root
+        if (is.null(root)) {
+            "/"
+        } else {
+            root
+        }
     }
 
     # The dialog, rebuilt on every show and every step, because its
@@ -250,40 +255,37 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
     # open dialog, so a step is one call.
     show <- function() {
         d <- isolate(cwd())
-        e <- picker_entries(d, kind = kind, pattern = pattern,
-                            hidden = hidden)
+        e <- picker_entries(d, kind = kind, pattern = pattern, hidden = hidden)
         cr <- picker_crumbs(d, root = root)
         crumbs <- lapply(seq_len(nrow(cr)), function(i) {
             button(nav_id, cr$name[[i]], variant = "ghost",
                    value = cr$path[[i]])
         })
         shown_dirs <- utils::head(e$dirs, limit)
-        shown_files <- utils::head(e$files,
-                                   max(0L, limit - length(shown_dirs)))
+        shown_files <- utils::head(e$files, max(0L, limit - length(shown_dirs)))
         rows <- c(
                   lapply(shown_dirs, function(nm) {
             button(nav_id, paste0(nm, "/"), variant = "ghost",
                    value = file.path(d, nm))
         }),
                   lapply(shown_files, function(nm) {
-            button(nav_id, nm, variant = "secondary",
-                   value = file.path(d, nm))
+            button(nav_id, nm, variant = "secondary", value = file.path(d, nm))
         })
         )
         left_out <- (length(e$dirs) - length(shown_dirs)) +
-            (length(e$files) - length(shown_files))
+        (length(e$files) - length(shown_files))
         if (length(rows) == 0L) {
             rows <- list(txt("nothing in here", variant = "muted"))
         } else if (left_out > 0L) {
             rows <- c(rows, list(txt(
-                        sprintf("%d more not shown -- step into a folder to narrow down",
-                                left_out), variant = "small")))
+                                     sprintf("%d more not shown -- step into a folder to narrow down",
+                            left_out), variant = "small")))
         }
         footer <- c(list(modal_button("Cancel")),
-                    if (identical(kind, "dir")) {
-                        list(button(choose_id, "Choose this folder",
-                                    variant = "primary"))
-                    },
+            if (identical(kind, "dir")) {
+                list(button(choose_id, "Choose this folder",
+                            variant = "primary"))
+            },
                     list(gap = 8L))
         show_modal(
                    session,
@@ -312,8 +314,8 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
             return(invisible(NULL))
         }
         if (identical(kind, "file") && is.character(target) &&
-            length(target) == 1L && nzchar(target) &&
-            file.exists(target) && !dir.exists(target)) {
+                  length(target) == 1L && nzchar(target) &&
+                  file.exists(target) && !dir.exists(target)) {
             picked <- normalizePath(target, winslash = "/")
             if (is.null(root) || path_within(picked, root)) {
                 chosen(picked)
