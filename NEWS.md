@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**`path_picker()`: a served file browser** (#47). Picks a directory
+or file on the machine running R, the job `file_input()` cannot do.
+The dialog is ordinary components in a modal -- breadcrumbs and one
+row per entry, one observer for the whole listing -- so every
+frontend already renders it. `open()` always shows the dialog
+(`start =` says where to open, never what to return), `value` is a
+reactive_val written only by an explicit selection, and every
+navigation step is canonicalized, bounded by `root` when one is set.
+`run_example("gallery")` has a live one.
+
 **Keyboard shortcuts** (#45). `shortcut(id, key)` binds a key to an
 event: a button you cannot see. It emits the same frame `button()`
 does, so `observe_event(input$id, ...)` serves the visible control and
