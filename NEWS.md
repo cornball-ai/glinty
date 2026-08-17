@@ -1,5 +1,14 @@
 # glinty (development version)
 
+**The WebSocket handshake checks Origin** (#48). Browsers exempt
+WebSockets from the same-origin policy, so any page a user visited
+could open a socket to a running app and drive it. The handshake now
+refuses cross-origin pages: same-host pages are allowed by default
+(Origin matched against the request's Host), `run_app(origins = )`
+names additional allowed origins or `"*"` to disable the check, and
+clients that send no Origin header -- native shells, CLI tools,
+tests -- connect as before.
+
 **Keyboard shortcuts** (#45). `shortcut(id, key)` binds a key to an
 event: a button you cannot see. It emits the same frame `button()`
 does, so `observe_event(input$id, ...)` serves the visible control and

@@ -7,6 +7,7 @@ run_app(
   app_obj,
   port = NULL,
   auth = NULL,
+  origins = NULL,
   static_dir = "www",
   job_lanes = NULL,
   max_upload = 10485760L,
@@ -26,6 +27,18 @@ sends in hello: NULL from the function refuses the connection,
 anything else becomes session$principal. NULL (the default)
 accepts every connection with no principal. See jwt_auth() for
 the JWT case.}
+
+\item{origins}{character vector of page origins allowed to open
+the WebSocket, e.g. "https://app.example.com" (compared with
+default ports stripped), or "*" to disable the check. NULL (the
+default) allows pages served by this host only: the Origin
+header must match the request's Host. Requests without an
+Origin header -- native shells, CLI clients, tests -- are always
+allowed. The check exists because browsers exempt WebSockets
+from the same-origin policy, so without it any page a user
+visits can open a socket to a running app and drive it. A
+deployment behind a TLS proxy that forwards a nonstandard
+Host:port should list its public origin here.}
 
 \item{static_dir}{character directory served under /static/
 (default "www" in the working directory; skipped if absent)}

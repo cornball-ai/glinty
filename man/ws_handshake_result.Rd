@@ -3,10 +3,13 @@
 \alias{ws_handshake_result}
 \title{Validate an upgrade request and build the response}
 \usage{
-ws_handshake_result(req)
+ws_handshake_result(req, origins = NULL)
 }
 \arguments{
 \item{req}{a parsed request from parse_http_head()}
+
+\item{origins}{character vector of allowed origins beyond
+same-host (see ws_origin_allowed()), or NULL}
 }
 \value{
 list(ok = logical, response = raw)
