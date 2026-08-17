@@ -1,12 +1,18 @@
 // Minimal glinty Flutter client for watching gallery ports live.
-// Connects to the glinty app server on port 8490 of whatever host
-// serves this page, so localhost and tailnet names both work.
+// Connects to the glinty app server on whatever host serves this
+// page, so localhost and tailnet names both work. The app port is
+// selectable so one viewer build follows the loop from app to app:
+// web picks it from the page URL (?port=8496), native from the
+// first command-line argument; both fall back to 8490.
 import 'package:flutter/material.dart';
 import 'package:glinty_flutter/glinty_flutter.dart';
 
-void main() {
+void main(List<String> args) {
   final host = Uri.base.host.isEmpty ? 'localhost' : Uri.base.host;
-  final url = Uri.parse('ws://$host:8490/ws');
+  final port = int.tryParse(Uri.base.queryParameters['port'] ??
+          (args.isNotEmpty ? args.first : '')) ??
+      8490;
+  final url = Uri.parse('ws://$host:$port/ws');
   runApp(MaterialApp(
     title: 'glinty flutter viewer',
     debugShowCheckedModeBanner: false,
