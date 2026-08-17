@@ -1580,9 +1580,8 @@
     var HEX_COLOR = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
     var FONT_FAMILY = /^[A-Za-z0-9][A-Za-z0-9 _-]*$/;
 
-    function themeCssText(theme) {
+    function themeColorParts(colors) {
         var parts = [];
-        var colors = theme.colors || {};
         THEME_COLOR_NAMES.forEach(function (name) {
             if (typeof colors[name] === "string" &&
                     HEX_COLOR.test(colors[name])) {
@@ -1590,6 +1589,11 @@
                            colors[name]);
             }
         });
+        return parts;
+    }
+
+    function themeCssText(theme) {
+        var parts = themeColorParts(theme.colors || {});
         if (typeof theme.spacing === "number" && isFinite(theme.spacing)) {
             parts.push("--g-space:" + theme.spacing + "px");
         }
@@ -1606,7 +1610,17 @@
         if (typeof font.size === "number" && isFinite(font.size)) {
             parts.push("--g-font-size:" + font.size + "px");
         }
-        return ":root{" + parts.join(";") + "}";
+        var css = ":root{" + parts.join(";") + "}";
+        /* A dark palette rides as a prefers-color-scheme block after
+           the :root block -- the same shape the stylesheet's own dark
+           mode has, so the media query keeps switching and precedence
+           is unchanged. Absent, the :root tokens are exact in both
+           schemes, as ever. */
+        if (theme.dark && typeof theme.dark === "object") {
+            css += "@media (prefers-color-scheme: dark){:root{" +
+                   themeColorParts(theme.dark).join(";") + "}}";
+        }
+        return css;
     }
 
     function applyTheme(theme) {

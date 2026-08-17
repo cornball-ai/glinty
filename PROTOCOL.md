@@ -667,7 +667,13 @@ Sent once in `welcome`. A closed set of tokens, not a stylesheet.
   },
   "spacing": 4,
   "radius": 8,
-  "font": {"body": "Inter", "mono": "JetBrains Mono", "size": 14}
+  "font": {"body": "Inter", "mono": "JetBrains Mono", "size": 14},
+  "dark": {
+    "primary": "#a5b4fc", "on_primary": "#111827",
+    "surface": "#1f2937", "background": "#111827",
+    "text": "#e5e7eb", "muted": "#9ca3af",
+    "border": "#374151", "danger": "#f87171"
+  }
 }
 ```
 
@@ -679,10 +685,20 @@ just only affects the browser.
 
 `theme` is omitted when the app never set one, and each frontend's
 own defaults apply — in the browser that includes the stylesheet's
-automatic dark mode. A supplied theme is exact: one token set, no
-automatic dark variant, because the server cannot know which the
-user prefers and silently restyling a declared palette would be
-inference magic.
+automatic dark mode.
+
+`dark` is a second, complete colour palette (colours only — spacing,
+radius and font do not vary by scheme). When present, the client
+follows the system setting: the browser emits it as a
+`prefers-color-scheme: dark` block after the `:root` tokens, Flutter
+swaps it in as the ColorScheme when the platform brightness is dark.
+There is no third state; the choice is the system's. When `dark` is
+absent, a supplied theme is exact: one token set in both schemes,
+because the server cannot know which the user prefers and silently
+restyling a declared palette would be inference magic. The server
+always sends `dark` complete (partial `app_theme(dark = )` values
+merge over glinty's dark defaults server-side), so no client invents
+a colour.
 
 Each font token names **one family**, or a CSS generic (`system-ui`,
 `ui-monospace`, `monospace`, ...) meaning the platform's own face

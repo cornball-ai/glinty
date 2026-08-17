@@ -350,7 +350,10 @@ class GlintyView extends StatelessWidget {
     final tokens = s.theme;
     return tokens == null
         ? stacked
-        : Theme(data: glintyThemeData(tokens), child: stacked);
+        : Theme(
+            data: glintyThemeDataFor(
+                tokens, MediaQuery.maybePlatformBrightnessOf(context)),
+            child: stacked);
   }
 }
 

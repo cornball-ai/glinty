@@ -13,6 +13,25 @@ to paths or a function returning them, asked at each show so a
 recents list stays current) and resolve exactly as a tree choice
 does. `run_example("gallery")` has a live one.
 
+**Themes carry a dark palette** (#46). `app_theme(dark = )` is a
+second colour set, applied when the system prefers a dark scheme, so
+an app no longer chooses between its own identity and automatic dark
+mode. Partial values merge over the stylesheet's dark defaults
+(`dark = list()` is exactly the stock dark palette), merging never
+reaches across schemes, and omitting `dark` keeps a supplied theme
+exact in both schemes, as before. The browser lowers it to a
+`prefers-color-scheme` block, Flutter to the dark `ColorScheme`;
+there is no third state -- the choice follows the system setting.
+
+**The WebSocket handshake checks Origin** (#48). Browsers exempt
+WebSockets from the same-origin policy, so any page a user visited
+could open a socket to a running app and drive it. The handshake now
+refuses cross-origin pages: same-host pages are allowed by default
+(Origin matched against the request's Host), `run_app(origins = )`
+names additional allowed origins or `"*"` to disable the check, and
+clients that send no Origin header -- native shells, CLI tools,
+tests -- connect as before.
+
 **Keyboard shortcuts** (#45). `shortcut(id, key)` binds a key to an
 event: a button you cannot see. It emits the same frame `button()`
 does, so `observe_event(input$id, ...)` serves the visible control and
