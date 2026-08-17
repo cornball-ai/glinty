@@ -374,8 +374,7 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
             if (length(quick) > 0L) {
                 list(do.call(row, c(quick, list(gap = 4L))), divider())
             },
-                  list(do.call(row, c(crumbs, list(gap = 0L,
-                        align = "center"))),
+                  list(do.call(row, c(crumbs, list(gap = 0L, align = "center"))),
                        divider(),
                        # gap 0: listing rows touch, and the hover
                        # highlight is what separates them
