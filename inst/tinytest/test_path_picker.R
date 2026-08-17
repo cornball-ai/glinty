@@ -84,14 +84,16 @@ last_modal <- function(s) {
     m <- modals(s)
     m[[length(m)]]
 }
-# every button value in a frame, flattened out of the component trees
-frame_values <- function(m) {
+# every button value in a frame, flattened out of the component
+# trees; `id` narrows to one event id (nav rows vs commit rows)
+frame_values <- function(m, id = NULL) {
     out <- character(0L)
     walk <- function(x) {
         if (!is.list(x)) {
             return(invisible(NULL))
         }
-        if (identical(x$component, "button") && !is.null(x$value)) {
+        if (identical(x$component, "button") && !is.null(x$value) &&
+            (is.null(id) || identical(x$id, id))) {
             out[[length(out) + 1L]] <<- x$value
         }
         for (ch in x) walk(ch)
@@ -107,10 +109,14 @@ input <- glinty:::make_input_proxy(s)
 pk <- path_picker(s, input, "proj", kind = "dir", root = base)
 expect_null(pk$value())
 
-# a stray nav event before the first open() conjures nothing
+# stray nav and choose events before the first open() conjure and
+# commit nothing
 handle_event(s, "proj_go", alpha)
 flush_reactions()
+handle_event(s, "proj_choose", alpha)
+flush_reactions()
 expect_equal(length(s$outgoing), 0L)
+expect_null(pk$value())
 
 pk$open()
 m <- last_modal(s)
@@ -134,13 +140,28 @@ handle_event(s, "proj_go", dirname(base))
 flush_reactions()
 expect_equal(length(s$outgoing), n_frames)
 
-# crumb back up, then choose the folder on screen
+# crumb back up, then the footer press, which carries the on-screen
+# directory as its value
 handle_event(s, "proj_go", base)
 flush_reactions()
+# valueless choose first -- a forged frame -- commits nothing
 handle_event(s, "proj_choose")
+flush_reactions()
+expect_null(pk$value())
+handle_event(s, "proj_choose", base)
 flush_reactions()
 expect_equal(pk$value(), base)
 expect_equal(last_modal(s)$action, "hide")
+# valueless AFTER valued: handle_event's counter restarts from the
+# string instead of erroring on "path" + 1L, which would have closed
+# the connection over one stray click
+handle_event(s, "proj_choose")
+flush_reactions()
+expect_equal(pk$value(), base)
+# a file's path on the dir picker's choose id commits nothing
+handle_event(s, "proj_choose", file.path(base, "notes.txt"))
+flush_reactions()
+expect_equal(pk$value(), base)
 
 # the two-press case: choosing must not disable the picker, so a
 # second open() shows a second dialog
@@ -164,7 +185,13 @@ expect_equal(last_modal(s2)$title, "Choose a file")
 notes <- normalizePath(file.path(base, "notes.txt"), winslash = "/")
 expect_true(notes %in% frame_values(last_modal(s2)))
 
+# a file target on the nav id no longer picks: navigation is
+# directories only
 handle_event(s2, "med_go", notes)
+flush_reactions()
+expect_null(pk2$value())
+# the file row rides the choose id, and picks
+handle_event(s2, "med_choose", notes)
 flush_reactions()
 expect_equal(pk2$value(), notes)
 expect_equal(last_modal(s2)$action, "hide")
@@ -172,11 +199,11 @@ expect_equal(last_modal(s2)$action, "hide")
 # a forged file outside root is refused
 outside <- file.path(dirname(base), "outside.txt")
 writeLines("x", outside)
-handle_event(s2, "med_go", outside)
+handle_event(s2, "med_choose", outside)
 flush_reactions()
 expect_equal(pk2$value(), notes)
-# a forged choose event on a file picker sets nothing
-handle_event(s2, "med_choose")
+# a directory on a file picker's choose id commits nothing
+handle_event(s2, "med_choose", base)
 flush_reactions()
 expect_equal(pk2$value(), notes)
 
@@ -191,7 +218,62 @@ expect_null(pk3$value())
 pk3$open(start = dirname(base))
 expect_true(alpha %in% frame_values(last_modal(s3)))
 
+# --- shortcuts: app-supplied places above the tree ---
+s4 <- new_session("pk4")
+input4 <- glinty:::make_input_proxy(s4)
+gone <- file.path(base, "gone-away")
+pk4 <- path_picker(s4, input4, "sc", kind = "dir", root = base,
+                   shortcuts = c("Alpha" = alpha,
+                                 "Gone" = gone,
+                                 "Outside" = dirname(base)))
+pk4$open()
+vals <- frame_values(last_modal(s4))
+expect_true(alpha %in% vals)
+# entries that no longer exist or sit outside root are left out of
+# the dialog, never rendered dead
+expect_false(gone %in% vals)
+expect_false(dirname(base) %in% vals)
+# selecting a shortcut resolves the picker like a tree choice
+handle_event(s4, "sc_choose", alpha)
+flush_reactions()
+expect_equal(pk4$value(), alpha)
+expect_equal(last_modal(s4)$action, "hide")
+
+# a function is asked at each show, so a recents list stays current
+s5 <- new_session("pk5")
+input5 <- glinty:::make_input_proxy(s5)
+recents <- new.env(parent = emptyenv())
+recents$v <- c("first" = alpha)
+pk5 <- path_picker(s5, input5, "rc", kind = "dir", root = base,
+                   shortcuts = function() recents$v)
+pk5$open()
+beta <- normalizePath(file.path(base, "Beta"), winslash = "/")
+expect_true(alpha %in% frame_values(last_modal(s5), id = "rc_choose"))
+expect_false(beta %in% frame_values(last_modal(s5), id = "rc_choose"))
+recents$v <- c("newest" = beta, "first" = alpha)
+pk5$open()
+expect_true(beta %in% frame_values(last_modal(s5), id = "rc_choose"))
+
+# file kind: only file entries survive the filter
+s6 <- new_session("pk6")
+input6 <- glinty:::make_input_proxy(s6)
+pk6 <- path_picker(s6, input6, "fs", kind = "file", root = base,
+                   shortcuts = c("notes" = file.path(base, "notes.txt"),
+                                 "a folder" = alpha))
+pk6$open()
+# narrowed to the commit id: alpha still shows in the TREE (as a nav
+# row), but must not be offered as a pickable shortcut
+v6 <- frame_values(last_modal(s6), id = "fs_choose")
+expect_true(file.path(base, "notes.txt") %in% v6)
+expect_false(alpha %in% v6)
+handle_event(s6, "fs_choose", file.path(base, "notes.txt"))
+flush_reactions()
+expect_equal(pk6$value(), notes)
+
 # --- construction refuses what it cannot honor ---
+expect_error(path_picker(s, input, "y", shortcuts = c("/no/label")),
+             "shortcuts")
+expect_error(path_picker(s, input, "y", shortcuts = 42), "shortcuts")
 expect_error(path_picker(s, input, ""), "id")
 expect_error(path_picker(s, input, "x", root = file.path(base, "gone")),
              "root")

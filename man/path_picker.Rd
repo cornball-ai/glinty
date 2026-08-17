@@ -10,6 +10,7 @@ path_picker(
   kind = c("dir", "file"),
   root = NULL,
   start = NULL,
+  shortcuts = NULL,
   title = NULL,
   pattern = NULL,
   hidden = FALSE,
@@ -31,6 +32,10 @@ whole filesystem}
 \item{start}{character directory to open in; defaults to `root`,
 else the working directory}
 
+\item{shortcuts}{named character vector of labels to paths shown
+above the tree, or a zero-arg function returning one, called at
+each show; selecting one resolves the picker}
+
 \item{title}{character dialog title, or NULL for a default named
 by kind}
 
@@ -51,10 +56,10 @@ job \code{file_input()} cannot do, since a browser dialog browses
 the client's disk and uploads contents rather than naming a server
 path. The dialog is ordinary components in a modal: breadcrumbs
 and one row per entry, every one a \code{button()} carrying its
-target path as the value, so one observer serves the whole
-listing. Directories navigate; with \code{kind = "file"} a file
-row picks it; with \code{kind = "dir"} the footer's confirm button
-picks the directory on screen.
+target path as the value. Two observers serve all of it, split by
+meaning: one id navigates (crumbs and directory rows), the other
+commits a result (file rows, shortcuts, and the footer's confirm
+button, which carries the on-screen directory).
 }
 \details{
 Call once in the server function and keep the handle:
@@ -66,6 +71,18 @@ only writer. (Both halves are deliberate: a typed-path field that
 short-circuits the dialog, combined with a picker that writes that
 field back, is how a picker quietly disables itself after one
 use.)
+
+\code{shortcuts} are the places every real file dialog offers
+beside the tree -- GTK calls them Places, macOS Favorites, editors
+Recent. A named character vector of labels to paths, or a zero-arg
+function returning one, called at each show so a recents list
+stays current. Selecting one resolves the picker exactly as
+choosing in the tree does: a shortcut names a \emph{result}, not a
+place to browse (where to browse is \code{start}). Entries that do
+not exist, do not match \code{kind}, or sit outside \code{root}
+are left out of the dialog rather than rendered dead. A shortcut
+is a visible control naming exactly what it opens; app state may
+feed the list, but the picker never writes app state back.
 
 Button values arrive from the client, so navigation trusts none of
 them: every step is canonicalized and, when \code{root} is set,

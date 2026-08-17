@@ -69,8 +69,10 @@ app(
             if (is.null(v)) "" else paste("you typed:", v)
         })
         # The served file browser: a dialog built from ordinary
-        # components, walking the server's own disk.
-        picker <- path_picker(session, input, "proj", kind = "dir")
+        # components, walking the server's own disk, with app-supplied
+        # shortcuts above the tree.
+        picker <- path_picker(session, input, "proj", kind = "dir",
+                              shortcuts = c("this app's folder" = getwd()))
         observe_event(input$browse, function() picker$open())
         output$picked <- render_text(function() {
             v <- picker$value()

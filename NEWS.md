@@ -8,7 +8,10 @@ frontend already renders it. `open()` always shows the dialog
 (`start =` says where to open, never what to return), `value` is a
 reactive_val written only by an explicit selection, and every
 navigation step is canonicalized, bounded by `root` when one is set.
-`run_example("gallery")` has a live one.
+App-supplied shortcuts render above the tree (`shortcuts =`, labels
+to paths or a function returning them, asked at each show so a
+recents list stays current) and resolve exactly as a tree choice
+does. `run_example("gallery")` has a live one.
 
 **Keyboard shortcuts** (#45). `shortcut(id, key)` binds a key to an
 event: a button you cannot see. It emits the same frame `button()`

@@ -84,7 +84,13 @@ handle_event <- function(session, id, value = NULL) {
         env[[id]] <- reactive_val(1L)
     } else {
         cur <- isolate(env[[id]]())
-        if (is.null(cur)) {
+        # An id can legally see a valued press and then a valueless
+        # one (buttons sharing an id, or a forged frame). The counter
+        # restarts from the non-number rather than erroring -- an
+        # error here propagates to the event loop and closes the
+        # connection over one stray click.
+        if (is.null(cur) || !is.numeric(cur) || length(cur) != 1L ||
+            is.na(cur)) {
             cur <- 0L
         }
         env[[id]](cur + 1L)
