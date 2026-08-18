@@ -2732,4 +2732,129 @@ void _ticketRefusals() {
       expect(find.text('Selected'), findsOneWidget);
     });
   });
+
+  group('leaf widgets under intrinsics measurement (#62)', () {
+    // The slider's chip and scale rows and the plot's measuring box
+    // are LayoutBuilders, and an intrinsics pass that reaches one
+    // throws -- the same blank-window class #53 fixed for the flex
+    // gate. The two passes that reach them: a stretch row measuring
+    // height (which queries non-flex children's width first), and
+    // the IntrinsicWidth a collapse takes as the non-grown child of
+    // a row. Any uncaught exception fails these tests, so the
+    // controls being on screen is the whole claim.
+
+    testWidgets('a slider inside a collapse inside a row',
+        (tester) async {
+      // The shortest repro from the issue.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Zoomable',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Zoom',
+                'open': true,
+                'children': [
+                  {'component': 'slider_input', 'id': 'z',
+                    'min': 0, 'max': 10, 'value': 5},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g8');
+      expect(find.text('Zoom'), findsOneWidget);
+      expect(find.byType(Slider), findsOneWidget);
+    });
+
+    testWidgets('a slider in a column under a stretch row',
+        (tester) async {
+      // IntrinsicHeight asks a non-flex child its width before its
+      // height, so the stretch shell reached the chip row's
+      // LayoutBuilder through the width query.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Shell',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'slider_input', 'id': 's',
+                    'min': 0, 'max': 1, 'value': 0.5, 'step': 0.1},
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'side',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g9');
+      expect(find.byType(Slider), findsOneWidget);
+      expect(find.text('side'), findsOneWidget);
+    });
+
+    testWidgets('a range slider inside a collapse inside a row',
+        (tester) async {
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Ranged',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Trim',
+                'open': true,
+                'children': [
+                  {'component': 'range_slider', 'id': 'r',
+                    'min': 0, 'max': 10},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g10');
+      expect(find.byType(RangeSlider), findsOneWidget);
+    });
+
+    testWidgets('a plot with a declared height, same spot',
+        (tester) async {
+      // The declared dimension is the honest intrinsics answer -- it
+      // is the size the plot will take -- so the shell measures with
+      // it rather than with zero.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Plotted',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Canvas',
+                'open': true,
+                'children': [
+                  {'component': 'plot_output', 'id': 'p', 'height': 100},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g11');
+      expect(find.text('Canvas'), findsOneWidget);
+    });
+  });
 }

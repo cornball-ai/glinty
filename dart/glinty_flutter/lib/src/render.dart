@@ -13,6 +13,7 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/services.dart';
 
 import 'component.dart';
@@ -460,20 +461,11 @@ class GlintyRenderer {
       case 'image':
         return _staticImage(c);
       case 'collapse':
-        // An ExpansionTile's ListTile must have a width to lay its
-        // title against, and a row hands non-grown children unbounded
-        // width. The browser shrink-wraps a collapse there;
-        // IntrinsicWidth is that -- and only there, because where
-        // width is bounded the tile fills it, which is also what the
-        // block-level div does. Sizing by intrinsics means the
-        // subtree gets the same no-LayoutBuilder mark a stretch row
-        // imposes, and the tight width it resolves to is recorded.
-        return Builder(builder: (context) {
-          final tile = _collapse(context, c);
-          if (_Bounds.maybeOf(context)?.width ?? true) return tile;
-          return IntrinsicWidth(
-              child: _UnderIntrinsics(child: _bounded(tile, width: true)));
-        });
+        // Where width is bounded the tile fills it, which is also
+        // what the block-level div does; where it is not, the tile's
+        // ListTile has nothing to lay its title against and
+        // _widthBounded shrink-wraps it.
+        return _widthBounded(_collapse(context, c));
       // page is never a flex child -- it is the root -- so it skips
       // the sizing wrapper the other three take.
       case 'page':
@@ -1235,9 +1227,13 @@ class GlintyRenderer {
     // the bubble reaches them, and a graded scale below the track.
     // Local edits rebuild this subtree, so every layer tracks the
     // finger under `settle` too.
+    // _IntrinsicAnswer: the tight height answers height intrinsics at
+    // the SizedBox; a width query would otherwise reach the
+    // LayoutBuilder and throw. Chips contribute nothing to measured
+    // width, which is the track's business anyway.
     final chipRow = SizedBox(
         height: 22,
-        child: LayoutBuilder(
+        child: _IntrinsicAnswer(child: LayoutBuilder(
             builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
                   if (pct >= 0.1)
                     Positioned(left: 0, top: 0,
@@ -1253,14 +1249,16 @@ class GlintyRenderer {
                           translation: const Offset(-0.5, 0),
                           child: _sliderChip(theme, _numLabel(value),
                               primary: true))),
-                ])));
+                ]))));
     // ticks take the materialized step: they sit where the thumb can
     // actually rest, and the thumb rests on the implied grid
     final effStep = step != null && step > 0
         ? step
         : (max > min ? _sliderImpliedStep(min, max) : null);
     final scale = _sliderScale(theme, min, max, effStep);
-    return _labelled(
+    // _widthBounded: the stretch column below forces its width onto
+    // every layer, which in an unbounded-width spot is infinity.
+    return _widthBounded(_labelled(
         context,
         c,
         Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1293,7 +1291,7 @@ class GlintyRenderer {
                 : null,
           ),
           scale,
-        ]));
+        ])));
   }
 
   /// Material's track is inset by max(overlay, thumb)/2 = 24 on each
@@ -1328,7 +1326,9 @@ class GlintyRenderer {
           ThemeData theme, double min, double max, double? effStep) =>
       SizedBox(
           height: 20,
-          child: LayoutBuilder(builder: (context, box) {
+          // Same shield as the chip rows: width intrinsics must not
+          // reach the LayoutBuilder.
+          child: _IntrinsicAnswer(child: LayoutBuilder(builder: (context, box) {
             // the label budget comes from the measured track width,
             // the same floor(width / 70) the browser client uses
             final maxLab = box.maxWidth.isFinite
@@ -1356,7 +1356,7 @@ class GlintyRenderer {
               }
             }
             return Stack(clipBehavior: Clip.none, children: marks);
-          }));
+          })));
 
   /// One component, two thumbs: Material's RangeSlider under the
   /// same three number layers as _slider, emitting the pair
@@ -1381,9 +1381,10 @@ class GlintyRenderer {
     final span = max > min ? max - min : 1;
     final p1 = ((lo - min) / span).clamp(0.0, 1.0);
     final p2 = ((hi - min) / span).clamp(0.0, 1.0);
+    // Shielded like _slider's: see _IntrinsicAnswer.
     final chipRow = SizedBox(
         height: 22,
-        child: LayoutBuilder(
+        child: _IntrinsicAnswer(child: LayoutBuilder(
             builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
                   if (p1 >= 0.1)
                     Positioned(left: 0, top: 0,
@@ -1405,7 +1406,7 @@ class GlintyRenderer {
                           translation: const Offset(-0.5, 0),
                           child: _sliderChip(theme, _numLabel(hi),
                               primary: true))),
-                ])));
+                ]))));
     final effStep = step != null && step > 0
         ? step
         : (max > min ? _sliderImpliedStep(min, max) : null);
@@ -1415,7 +1416,8 @@ class GlintyRenderer {
       return a <= b ? [a, b] : [b, a];
     }
 
-    return _labelled(
+    // _widthBounded for the same reason as _slider's.
+    return _widthBounded(_labelled(
         context,
         c,
         Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1434,7 +1436,7 @@ class GlintyRenderer {
                 settle ? (v) => onInput?.call(id, quantized(v)) : null,
           ),
           _sliderScale(theme, min, max, effStep),
-        ]));
+        ])));
   }
 
   /// A dragged value quantized to the slider's real granularity:
@@ -1818,6 +1820,22 @@ class GlintyRenderer {
         width: width.toDouble(), child: _bounded(child, width: true));
   }
 
+  /// Shrink-wraps [child] where the width record says unbounded, and
+  /// leaves it alone where width is real.
+  ///
+  /// For widgets that need a width to lay against -- a collapse's
+  /// ListTile, a slider's stretch column -- an unbounded-width spot
+  /// (the non-grown child of a row) is otherwise a layout error. The
+  /// browser shrink-wraps a block element there; IntrinsicWidth is
+  /// that. Sizing by intrinsics means the subtree gets the same
+  /// no-LayoutBuilder mark a stretch row imposes, and the tight width
+  /// it resolves to is recorded.
+  Widget _widthBounded(Widget child) => Builder(builder: (context) {
+        if (_Bounds.maybeOf(context)?.width ?? true) return child;
+        return IntrinsicWidth(
+            child: _UnderIntrinsics(child: _bounded(child, width: true)));
+      });
+
   /// A picture that is part of the UI, not an output.
   ///
   /// Same decoding as an `image` output value -- data: and http(s),
@@ -2042,7 +2060,15 @@ class GlintyRenderer {
     final id = c.str('id')!;
     final declaredW = c.integer('width')?.toDouble();
     final declaredH = c.integer('height')?.toDouble();
-    return LayoutBuilder(builder: (context, box) {
+    // _IntrinsicAnswer: measurement stops here with the declared
+    // dimensions -- the honest answer, since that is the size the
+    // plot will take -- or zero when the axis is the box's to
+    // decide. The LayoutBuilder below must never see an intrinsics
+    // query; see #62.
+    return _IntrinsicAnswer(
+        width: declaredW,
+        height: declaredH,
+        child: LayoutBuilder(builder: (context, box) {
       final width = declaredW ??
           (box.maxWidth.isFinite
               ? box.maxWidth
@@ -2069,7 +2095,7 @@ class GlintyRenderer {
       onMeasure?.call(
           id, width, height, MediaQuery.devicePixelRatioOf(context));
       return SizedBox(width: width, height: height, child: _image(c));
-    });
+    }));
   }
 
   /// An `image` kind value: `{src, width, height, alt}`.
@@ -2198,6 +2224,60 @@ Widget _bounded(Widget child, {bool? width, bool? height}) =>
           height: height ?? b?.height ?? false,
           child: child);
     });
+
+/// Answers intrinsics itself instead of asking its child.
+///
+/// The leaf LayoutBuilders -- a slider's chip and scale rows, a
+/// plot's measuring box -- size overlays from the box they are given,
+/// which no intrinsics answer can know. Asked anyway (a stretch row's
+/// IntrinsicHeight, the IntrinsicWidth a collapse takes in an
+/// unbounded row), a LayoutBuilder throws and the whole subtree
+/// paints nothing. This proxy stops the question at the boundary:
+/// declared dimensions when the component has them, zero when it does
+/// not. Zero under-measures -- a shell sized purely by such a leaf
+/// comes out too small -- and under-measuring beats a blank window.
+/// Layout itself passes straight through; only measurement is
+/// answered here.
+class _IntrinsicAnswer extends SingleChildRenderObjectWidget {
+  const _IntrinsicAnswer({this.width, this.height, required super.child});
+
+  /// The answer for that axis, or null for zero.
+  final double? width;
+  final double? height;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderIntrinsicAnswer(width: width, height: height);
+
+  @override
+  void updateRenderObject(
+      BuildContext context, _RenderIntrinsicAnswer renderObject) {
+    renderObject
+      ..answerWidth = width
+      ..answerHeight = height;
+  }
+}
+
+class _RenderIntrinsicAnswer extends RenderProxyBox {
+  _RenderIntrinsicAnswer({double? width, double? height})
+      : answerWidth = width,
+        answerHeight = height;
+
+  double? answerWidth;
+  double? answerHeight;
+
+  @override
+  double computeMinIntrinsicWidth(double height) => answerWidth ?? 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => answerWidth ?? 0;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => answerHeight ?? 0;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => answerHeight ?? 0;
+}
 
 /// The renderer is stateless by design -- it turns a tree into
 /// widgets and holds nothing. A text field cannot be: it owns a
