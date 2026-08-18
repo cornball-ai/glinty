@@ -18,7 +18,28 @@ drive_boot <- function(app_path, name = "drv") {
         }
     })
     glinty::flush_reactions()
+    # deliberately stops here: this is the queued state of the first
+    # flush, before the loop's post-drain steps. drive_settle() is
+    # the explicit "let the event loop spin" that fires on_flushed
+    # and runs due timers, so a check can look at both phases.
     list(app = a, session = s, input = s$input)
+}
+
+# Run timers, flushes and on_flushed rounds until nothing moves --
+# the in-process equivalent of letting the event loop spin until
+# quiet. Deferred work (invalidate_later, on_flushed chains) lands
+# here.
+drive_settle <- function(d, max_spins = 20L) {
+    repeat {
+        n <- glinty:::run_due_timers()
+        glinty::flush_reactions()
+        f <- glinty:::fire_on_flushed()
+        max_spins <- max_spins - 1L
+        if ((n == 0L && f == 0L) || max_spins <= 0L) {
+            break
+        }
+    }
+    invisible(d)
 }
 
 drive_measure <- function(d, id, width, height, dpr = 1) {

@@ -516,6 +516,43 @@ Flutter: headless only this round (281 tests, incl. DropdownMenu
 value-vs-label reporting); the viewer tab's compositor wedge now
 blocks semantics entirely, not just capture.
 
+## Round 14: onFlushed (shiny-examples 014, 2026-08-17)
+
+The deferred-expensive-render pattern: paint placeholders, start the
+real work only after they reached the client. glinty had no seam for
+"after the flush" — an observer flips the flag inside the same flush
+and the slow work then blocks the first paint, which is precisely
+what the pattern exists to prevent. Added `session$on_flushed(fn)`,
+sibling of the existing `on_ended`: fires once, from the event loop,
+**after `drain_all_sessions()`** — so "flushed" means the messages
+left for the client, not merely got computed. A fired callback zeroes
+the next select timeout, so state it changed flushes immediately
+instead of waiting out the tick.
+
+Semantics pinned by tests: once per registration (re-register inside
+the callback for every-flush, and a callback registering another
+defers it to the *next* fire, so the idiom terminates each round);
+one failing callback warns without eating its neighbors; an ended
+session's callbacks never fire. The port then drops the original's
+`invalidateLater(0)` — Shiny's 2013 example needs it, here flipping
+the reactive_val already invalidates every render that read it.
+
+Numbers from the in-process check: boot flush 0.04s carrying
+placeholders, settle 5.4s doing the deferred work — and the live
+trace shows the same order per fresh session (Please wait → This
+happens later). A browser reload mid-work resumes and replays the
+finished outputs instantly, which is the resume machinery composing
+with the new hook for free.
+
+drive.R grew the matching seam: drive_boot() now stops at the queued
+first flush, and `drive_settle()` is the explicit "let the loop
+spin" (timers → flush → fire, until quiet) so a check can look at
+both phases.
+
+DX note for later: session methods (`on_ended`, now `on_flushed`,
+`flush_now`) are documented only in source comments — there is no
+?glinty_session for app authors to find them.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
