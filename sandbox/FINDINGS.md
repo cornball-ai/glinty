@@ -177,6 +177,13 @@ Framework yield, all fixed on this branch:
   hidden tab bodies in the DOM the same way), a 300px plot in a tab
   keeps its height. No swipe, matching the browser.
 
+- **A stepless slider dragged in floats on flutter** (Troy: "you
+  can't have 394.326 samples"). The implied step now materializes
+  as the drag granularity everywhere: the HTML step attribute in
+  both the R lowering and the JS builder (which also fixes a 0..1
+  stepless slider having two positions from the browser's default
+  step of 1), and _sliderQuantize on every emitted flutter value.
+  A drag test pins whole-number emission for 1..1000.
 - **Flutter's slider layers only aligned with the thumb at the
   midpoint** (Troy caught it live): Material insets the track by
   max(overlay, thumb)/2 = 24 per side, while bubble and scale
