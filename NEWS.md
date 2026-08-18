@@ -12,6 +12,38 @@ Out-of-subset syntax degrades to literal text -- a transcript
 renders whatever a model emitted. `javascript:` and friends are
 refused in the schema, so no client defends itself.
 
+**`run_app(api = )`: mount an application JSON API on the same
+origin** (#72). One pure function --
+`(method, path, body, query, principal) -> list(status, body | file,
+headers)` -- and glinty owns the wire: JSON decode/encode, the query
+string, binary file answers, extra headers (Set-Cookie, Location),
+and a per-request `principal` from the same `auth` verifier that
+gates WebSocket sessions. NULL falls through to glinty's own
+routing, so path ownership stays with the app and existing clients
+keep their bare roots. An app whose domain layer also serves
+non-glinty clients no longer needs a second hand-rolled HTTP server
+on a second port.
+
+**`update_text_input(focus =)`: the server can hand focus to a
+field** (#71). A one-shot verb riding `input_update`: spent on
+arrival, never re-applied, and honored even when another control is
+focused -- moving the caret is not the hazard the never-stomp guard
+refuses. Exists for the composer that should be ready to type into
+after the server swaps its region; sequence it with
+`session$on_flushed()` so the verb follows the tree it aims at.
+feed()'s docs now state the same on_flushed pattern for history
+loads inside `render_ui`.
+
+**Cookie-visible auth: a verifier can see the upgrade request** (#73).
+`run_app(auth = )` still takes a `function(token)`; a verifier that
+declares a second parameter is now called as `auth(token, req)`,
+where `req` is the parsed WebSocket upgrade request (method, path,
+query, lower-cased headers). That request is where an HttpOnly
+session cookie actually travels, so a deployment that deliberately
+keeps its session where page script cannot read it can authenticate
+the socket from the same verifier instead of downgrading to a
+script-readable token.
+
 **`panel(max_height =)`: the vertical bound a monitor panel needs**
 (#44). A cap, not a fixed size: shorter content keeps its height,
 taller content scrolls -- except media inside `fill = TRUE`, which

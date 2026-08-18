@@ -494,6 +494,19 @@ event frame for the same reason. The composer spelling this exists
 for: `textarea_input("draft", clear_on = "send")` beside
 `shortcut("send", "enter", typing = TRUE)`.
 
+`focus: true` on an `input_update` moves keyboard focus to that text
+field on arrival. A one-shot verb, not state: focus lives in no
+tree, so the frame says "focus it now" and is spent — a client
+re-rendering later must not re-apply it. It applies **even when
+another field is focused**, which reads like a never-stomp violation
+and is not one: the guard refuses rewriting a draft mid-word, and
+moving the caret rewrites nothing — the app asking to move the
+user's attention is the point. The case it exists for: a composer
+that should be ready to type into after the server swaps its region,
+where the rebuilt tree dropped focus. The swap and the focus
+routinely arrive in one drain, so a client must honor a focus aimed
+at a control born in the same batch.
+
 `range_slider` is array-valued unconditionally: its `value` is the
 pair `[lo, hi]` in the tree, in every `input` frame, and in the
 server's seeded state — ordered, inside `[min, max]`, both ends on
@@ -632,6 +645,14 @@ history arrives by `feed_reset()` at session start, and booting and
 resuming are the same path: on resume the server replays a single
 `reset` carrying the current window right behind the welcome. A
 client that was away missed the appends but never the state.
+
+A feed inside a **dynamically rendered slot** (`render_ui`) loads
+its history from `on_flushed`, not from the render: the shell must
+reach the client before a `feed_reset()` aimed at it means anything,
+and `on_flushed` fires exactly after the flush that carried the
+slot's tree has drained. Reset from the render itself and the
+history races the shell it fills. One reset per slot render, appends
+between — the same discipline as boot.
 
 The scroll belongs to the client, under one contract: **pinned while
 at the bottom, released the moment the reader scrolls up.** A pinned

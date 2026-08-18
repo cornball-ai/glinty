@@ -33,6 +33,26 @@ n <- length(s$outgoing)
 update_text_input(s, "name")
 expect_equal(length(s$outgoing), n)
 
+# --- focus: a one-shot verb, on the wire only when asked ---
+update_text_input(s, "name", focus = TRUE)
+m <- last_msg()
+expect_true(isTRUE(m$focus))
+# the verb alone touches no value, on the wire or in the store
+expect_false("value" %in% names(m))
+expect_equal(isolate(s$input$name()), "troy")
+# focus = FALSE is the default and carries nothing: absent, not false
+update_text_input(s, "name", value = "t2")
+expect_false("focus" %in% names(last_msg()))
+# focus alone is a real message, not an all-NULL no-op
+n <- length(s$outgoing)
+update_text_input(s, "name", focus = FALSE)
+expect_equal(length(s$outgoing), n)
+# and it rides beside a value when both are asked
+update_text_input(s, "name", value = "t3", focus = TRUE)
+m <- last_msg()
+expect_equal(m$value, "t3")
+expect_true(isTRUE(m$focus))
+
 # --- select: choices become {value, label} pairs ---
 update_select_input(s, "engine", choices = c(Fast = "fast", Slow = "slow"))
 m <- last_msg()

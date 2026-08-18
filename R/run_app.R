@@ -58,7 +58,11 @@ app <- function(ui, server, theme = NULL) {
 #'   sends in hello: NULL from the function refuses the connection,
 #'   anything else becomes session$principal. NULL (the default)
 #'   accepts every connection with no principal. See jwt_auth() for
-#'   the JWT case.
+#'   the JWT case. A verifier declaring a second parameter is called
+#'   as auth(token, req), where req is the parsed WebSocket upgrade
+#'   request (method, path, query, headers with lower-cased names) --
+#'   so a credential the page cannot read, such as an HttpOnly
+#'   session cookie, is still visible to the verifier.
 #' @param origins character vector of page origins allowed to open
 #'   the WebSocket, e.g. "https://app.example.com" (compared with
 #'   default ports stripped), or "*" to disable the check. NULL (the
@@ -88,7 +92,27 @@ app <- function(ui, server, theme = NULL) {
 #'   (default 10 MB). Bodies are buffered whole in memory before
 #'   routing, so this is a memory ceiling as much as a policy one;
 #'   raise it deliberately for apps that take audio or video.
-#'   Oversized requests get a 413 without being read.
+#'   Oversized requests get a 413 without being read. Applies to api
+#'   request bodies too.
+#' @param api a function(method, path, body, query, principal)
+#'   mounting an application JSON API on the same origin, or NULL
+#'   (the default) for none. Consulted for any request the built-in
+#'   routes do not own, every method: return
+#'   `list(status =, body =)` for a JSON response (body is encoded
+#'   with auto-unboxing), `list(status =, file =, content_type =)`
+#'   for a binary response, add a named `headers` element for extras
+#'   such as Set-Cookie or Location, or return NULL to fall through
+#'   to glinty's own routing (a 404 for anything unclaimed). glinty
+#'   decodes the request: `body` arrives as a named list parsed from
+#'   JSON (NULL when absent or unparseable), `query` as a named list
+#'   of decoded strings. `principal` is resolved per request by the
+#'   same `auth` verifier that gates WebSocket sessions, fed the
+#'   Authorization Bearer token (NULL when unauthenticated or auth is
+#'   not configured -- the api function decides what an anonymous
+#'   caller may do, since public routes like a ping are its
+#'   business). Errors inside the function answer 500 with a generic
+#'   body; the condition message goes to the server log, not the
+#'   wire.
 #' @param quiet logical suppress the startup message
 #' @return invisible(NULL); runs until interrupt
 #' @examples
@@ -99,13 +123,17 @@ app <- function(ui, server, theme = NULL) {
 run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
                     static_dir = "www", job_lanes = NULL,
                     max_upload = 10485760L, check_secrets = TRUE,
-                    quiet = FALSE) {
+                    api = NULL, quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
     if (!is.null(auth) && !is.function(auth)) {
         stop("auth must be a function(token), or NULL (see jwt_auth())",
              call. = FALSE)
+    }
+    if (!is.null(api) && !is.function(api)) {
+        stop("api must be a function(method, path, body, query, ",
+             "principal), or NULL", call. = FALSE)
     }
     if (!is.null(origins) && (!is.character(origins) ||
             length(origins) == 0L || anyNA(origins) || any(!nzchar(origins)))) {
@@ -203,7 +231,8 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
 
     handlers <- list(
                      on_request = function(req) {
-        route_http(req, page_html, pkg_www, static_dir, started = started)
+        route_http(req, page_html, pkg_www, static_dir, started = started,
+                   api = api, auth = auth)
     },
                      # Sessions start on the FIRST client message, not at
                      # upgrade: the hello decides between a fresh
@@ -227,7 +256,7 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
         # The gate sits before any session exists, resume included: a
         # token that no longer verifies does not get its old session
         # back.
-        gate <- authenticate_hello(auth, first)
+        gate <- authenticate_hello(auth, first, upgrade_request_for(sid))
         if (!gate$ok) {
             refuse_conn(sid, "authentication failed")
             return(invisible(NULL))
@@ -276,6 +305,9 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
                 "scope the port with a firewall or namespace")
         if (is.null(auth)) {
             message("auth: none (every connection accepted)")
+        }
+        if (!is.null(api)) {
+            message("api: application router mounted on this origin")
         }
     }
     run_ws_server(port, handlers)
@@ -334,6 +366,11 @@ refuse_conn <- function(sid, message) {
 
 #' Route a plain HTTP request
 #'
+#' Built-in routes first, then the mounted api (any method) for
+#' whatever they did not claim, then 404. The built-ins winning is
+#' what keeps an api from shadowing the page, the framework assets,
+#' or the upload/download machinery.
+#'
 #' @param req parsed request
 #' @param page_html character full page document
 #' @param pkg_www character package asset dir (served at /glinty/)
@@ -341,38 +378,49 @@ refuse_conn <- function(sid, message) {
 #'   or NULL
 #' @param started numeric epoch seconds the server came up, for
 #'   /healthz uptime
+#' @param api application router, or NULL (see run_app())
+#' @param auth the configured verifier, for per-request principals
 #' @return raw HTTP response
 #' @keywords internal
 route_http <- function(req, page_html, pkg_www, static_dir,
-                       started = as.numeric(Sys.time())) {
+                       started = as.numeric(Sys.time()),
+                       api = NULL, auth = NULL) {
     if (identical(req$method, "POST") && identical(req$path, "/upload")) {
         return(handle_upload(req))
     }
-    if (!identical(req$method, "GET")) {
-        return(http_response_raw(404L, "text/plain", "Not found"))
+    if (identical(req$method, "GET")) {
+        if (identical(req$path, "/healthz")) {
+            # Session count and uptime, so a supervisor can tell
+            # "listening" from "working" without opening a WebSocket.
+            return(http_response_raw(200L, "application/json",
+                                     sprintf('{"status":"ok","sessions":%d,"uptime":%d}',
+                        length(ls(.globals$sessions)),
+                        max(0L, as.integer(as.numeric(Sys.time()) - started)))))
+        }
+        if (identical(req$path, "/download")) {
+            return(handle_download(req))
+        }
+        if (req$path %in% c("/", "")) {
+            return(http_response_raw(200L, "text/html; charset=utf-8",
+                                     page_html))
+        }
+        # A media element seeks by asking for byte ranges; the header
+        # has to reach serve_static() or every scrub costs a whole file.
+        range <- get_header(req, "range")
+        if (startsWith(req$path, "/glinty/")) {
+            return(serve_static(sub("^/glinty/", "", req$path), pkg_www,
+                                range))
+        }
+        if (!is.null(static_dir) && startsWith(req$path, "/static/")) {
+            return(serve_static(sub("^/static/", "", req$path), static_dir,
+                                range))
+        }
     }
-    if (identical(req$path, "/healthz")) {
-        # Session count and uptime, so a supervisor can tell
-        # "listening" from "working" without opening a WebSocket.
-        return(http_response_raw(200L, "application/json",
-                                 sprintf('{"status":"ok","sessions":%d,"uptime":%d}',
-                    length(ls(.globals$sessions)),
-                    max(0L, as.integer(as.numeric(Sys.time()) - started)))))
-    }
-    if (identical(req$path, "/download")) {
-        return(handle_download(req))
-    }
-    if (req$path %in% c("/", "")) {
-        return(http_response_raw(200L, "text/html; charset=utf-8", page_html))
-    }
-    # A media element seeks by asking for byte ranges; the header has to
-    # reach serve_static() or every scrub costs a whole file.
-    range <- get_header(req, "range")
-    if (startsWith(req$path, "/glinty/")) {
-        return(serve_static(sub("^/glinty/", "", req$path), pkg_www, range))
-    }
-    if (!is.null(static_dir) && startsWith(req$path, "/static/")) {
-        return(serve_static(sub("^/static/", "", req$path), static_dir, range))
+    if (!is.null(api)) {
+        resp <- route_api(req, api, auth)
+        if (!is.null(resp)) {
+            return(resp)
+        }
     }
     http_response_raw(404L, "text/plain", "Not found")
 }

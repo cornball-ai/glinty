@@ -294,6 +294,7 @@ class GlintyRenderer {
       this.inputs = const {},
       this.pushes = const {},
       this.clears = const {},
+      this.focuses = const {},
       this.feeds = const {},
       this.overrides = const {},
       this.condition,
@@ -407,6 +408,13 @@ class GlintyRenderer {
   /// field, a clear applies regardless -- it is causally the user's
   /// own emit, and the composer has focus at exactly that moment.
   final Map<String, int> clears;
+
+  /// How many focus verbs each input has had. A third counter with a
+  /// third rule: applied regardless of who is focused (moving the
+  /// caret is not the never-stomp hazard), including by a field born
+  /// with a nonzero count -- the tree swap and the focus for its
+  /// composer routinely share one drain.
+  final Map<String, int> focuses;
 
   /// Each feed's held window, written by the session from feed
   /// messages. The widget reads items plus the tick/lastOp pair that
@@ -1076,6 +1084,7 @@ class GlintyRenderer {
       value: _value(id, c.str('value') ?? '')?.toString() ?? '',
       push: pushes[id] ?? 0,
       clear: clears[id] ?? 0,
+      focusTick: focuses[id] ?? 0,
       obscure: obscure,
       maxLines: maxLines,
       numeric: numeric,
@@ -2643,6 +2652,7 @@ class _GlintyTextField extends StatefulWidget {
     required this.value,
     required this.push,
     this.clear = 0,
+    this.focusTick = 0,
     required this.obscure,
     required this.maxLines,
     required this.numeric,
@@ -2664,6 +2674,12 @@ class _GlintyTextField extends StatefulWidget {
   /// How many clear_on clears this input has had. Applied even while
   /// focused, unlike a push -- see didUpdateWidget.
   final int clear;
+
+  /// How many focus verbs this input has had. Applied on change AND
+  /// by a state born with a nonzero count: the tree swap and the
+  /// focus aimed at its composer routinely arrive in one drain, so
+  /// the field's first build already carries the count.
+  final int focusTick;
 
   final bool obscure;
   final int maxLines;
@@ -2706,6 +2722,9 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   /// The clear count this field has already answered.
   late int _clearSeen;
 
+  /// The focus count this field has already answered.
+  late int _focusSeen;
+
   @override
   void initState() {
     super.initState();
@@ -2714,8 +2733,19 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
     // one, so _seen would equal the incoming push and swallow it
     _seen = widget.push;
     _clearSeen = widget.clear;
+    _focusSeen = widget.focusTick;
     _reported = widget.value;
     _focus.addListener(_onFocusChange);
+    // A field born with a focus verb pending answers it: the session
+    // drops an input's counter when its tree region is replaced, so a
+    // nonzero count at birth is a verb aimed at THIS field (the
+    // swap-then-focus drain), never one left over from a predecessor.
+    // Post-frame, because the node attaches during the first build.
+    if (widget.focusTick > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
   }
 
   void _onFocusChange() {
@@ -2729,6 +2759,14 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   @override
   void didUpdateWidget(_GlintyTextField old) {
     super.didUpdateWidget(old);
+    // The focus verb first, independent of the value machinery below
+    // (whose branches return early). It applies whoever is focused:
+    // moving the caret is not the hazard the never-stomp guard
+    // refuses, and requestFocus on an already-focused node is free.
+    if (widget.focusTick != _focusSeen) {
+      _focusSeen = widget.focusTick;
+      _focus.requestFocus();
+    }
     // A clear_on clear applies even while the field has focus --
     // BECAUSE it has focus: it is causally this client's own emit
     // (enter in the composer), synchronous with it, so there is no

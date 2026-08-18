@@ -271,6 +271,7 @@ class GlintyView extends StatelessWidget {
           inputs: s.inputs,
           pushes: s.pushes,
           clears: s.clears,
+          focuses: s.focuses,
           feeds: s.feeds,
           overrides: s.overrides,
           condition: s.conditionHolds,

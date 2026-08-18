@@ -8,7 +8,9 @@ route_http(
   page_html,
   pkg_www,
   static_dir,
-  started = as.numeric(Sys.time())
+  started = as.numeric(Sys.time()),
+  api = NULL,
+  auth = NULL
 )
 }
 \arguments{
@@ -23,11 +25,18 @@ or NULL}
 
 \item{started}{numeric epoch seconds the server came up, for
 /healthz uptime}
+
+\item{api}{application router, or NULL (see run_app())}
+
+\item{auth}{the configured verifier, for per-request principals}
 }
 \value{
 raw HTTP response
 }
 \description{
-Route a plain HTTP request
+Built-in routes first, then the mounted api (any method) for
+whatever they did not claim, then 404. The built-ins winning is
+what keeps an api from shadowing the page, the framework assets,
+or the upload/download machinery.
 }
 \keyword{internal}

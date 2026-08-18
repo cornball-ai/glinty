@@ -30,6 +30,13 @@ The feed owns its scroll: it stays pinned to the bottom while the
 reader is there, releases when they scroll up, and offers a way
 back down. `keep` bounds the window; older items fall off the top.
 
+A feed inside a dynamically rendered slot ([render_ui()]) loads
+its history from `session$on_flushed()`, not from inside the
+render: the shell must reach the client before a [feed_reset()]
+aimed at it means anything, and on_flushed fires exactly after the
+flush that carried the slot's tree has drained. One reset per slot
+render, appends between.
+
 }
 \examples{
 feed("log")

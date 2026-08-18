@@ -2495,6 +2495,14 @@
         }
         /* deliberately no synthetic events: the server already knows */
         if (el.type === "range") syncSliderLabels(el);
+        /* focus is a one-shot verb, spent on arrival, applied last so
+           it lands after any value patch. It runs even when another
+           field is focused: moving the caret is not the hazard the
+           never-stomp guard refuses (rewriting a draft is), and the
+           app asked to move the user's attention. */
+        if (msg.focus === true && typeof el.focus === "function") {
+            el.focus();
+        }
     }
 
     /* update_select_input() against a searchable select. Choices
