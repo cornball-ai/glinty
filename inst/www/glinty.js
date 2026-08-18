@@ -26,7 +26,7 @@
         "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
-        "feed",
+        "feed", "rich_text",
         "select_input", "shortcut",
         "slider_input", "spacer", "table_output", "tabset", "text",
         "text_input",
@@ -1584,6 +1584,28 @@
         case "heading":
             node = el("h" + (c.level || 2), { id: c.id });
             node.textContent = c.value;
+            return node;
+        case "rich_text":
+            /* one span (or anchor) per run, marks as classes -- the
+               element structure is the wire form, byte-matched to
+               html_rich_text(). textContent, never innerHTML: run
+               text is exactly as untrusted as any other value. */
+            node = el("p", { "class": "g-richtext", id: c.id });
+            (c.runs || []).forEach(function (r) {
+                var cls = "g-run" +
+                    (r.bold ? " g-run-b" : "") +
+                    (r.italic ? " g-run-i" : "") +
+                    (r.code ? " g-run-c" : "") +
+                    (r.strike ? " g-run-s" : "");
+                var span;
+                if (r.href && /^(https?:\/\/|mailto:|#|\/)/.test(r.href)) {
+                    span = el("a", { "class": cls, href: r.href });
+                } else {
+                    span = el("span", { "class": cls });
+                }
+                span.textContent = r.text;
+                node.appendChild(span);
+            });
             return node;
         case "link":
             node = el("a", {

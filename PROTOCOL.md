@@ -295,11 +295,44 @@ Layout nests:
 ### The set
 
 **Static content**: `text`, `heading`, `link`, `icon`, `image`,
-`divider`, `spacer`
+`divider`, `spacer`, `rich_text`
 
 These are what `p()`, `span()`, `h1()`–`h4()` and `a()` become. Without
 them the migration is not mechanical, because today's apps are full of
 them.
+
+`rich_text` is the inline-formatting leaf: a **flat** list of styled
+runs, each `{text}` plus optional marks (`bold`, `italic`, `code`,
+`strike`) and an optional `href` that makes the run a link. Flat by
+design — runs never nest, so a client renders them with a loop, not a
+grammar; marks combine freely on one run, and equal adjacent
+formatting arrives as one run (the canonical form). `href` is
+scheme-restricted **in the schema** — http(s), mailto, `#fragment`,
+site-relative — so `javascript:` never reaches a client, which
+matters because the usual producer is a model:
+
+```json
+{"component": "rich_text", "runs": [
+  {"text": "some "}, {"text": "bold", "bold": true},
+  {"text": " and a "}, {"text": "link", "href": "https://x.y"}]}
+```
+
+`markdown()` is why it exists, and is **server-side sugar, not a
+component**: it parses a documented markdown subset at build time and
+lowers it onto the vocabulary — paragraphs and list items to
+`rich_text`, `#` headings to `heading` (level capped at 4, inline
+marks flattened — a heading's value is a plain string), fenced code
+to `text(variant: "mono")`, `---` to `divider`. Nothing
+markdown-shaped crosses the wire and no client carries a markdown
+engine, which is the point: two engines is exactly the cross-client
+drift the fixtures exist to prevent. The subset is the spec: bold,
+italic, inline code, strikethrough, links, headings, fences, bullet
+and ordered lists (source indent preserved as run text), rules, and
+backslash escapes. Blockquotes, tables, images and raw HTML are
+**out**, and render as the literal text they were written as — a
+transcript must render whatever a model emitted, so unsupported
+syntax degrades, never errors. A link whose URL fails the scheme
+rule is lowered as its text, unlinked.
 
 **Layout**: `page`, `row`, `column`, `panel`, `collapse`, `tabset` /
 `tab_panel`, `conditional_panel`
@@ -387,6 +420,7 @@ same as safe to add.
 |---|---|---|
 | `text` | `value: string` | `variant`, `id` |
 | `heading` | `value: string` | `level: 1..4` (2), `id` |
+| `rich_text` | `runs: [{text, bold?, italic?, code?, strike?, href?}]` | `id` — marks are present-and-true or absent; `href` scheme-restricted |
 | `link` | `href: string`, and one of `value: string` or `children: []` | `external: bool` (false) |
 | `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload`, `folder`, `file` | `size: int` (16) |
 | `divider` | — | `label: string`, `variant` |
@@ -479,6 +513,7 @@ rather than an intention.
 |---|---|---|
 | `text` | `Text` | variant → `TextStyle` from theme |
 | `heading` | `Text` | level → `textTheme.headlineN` |
+| `rich_text` | `Text.rich` + `TextSpan`s | marks combine on one span's style; linked runs tap through `onLink`, recognizers owned and disposed |
 | `link` | `InkWell` + `Text` or children | `external` → `url_launcher` |
 | `icon` | `Icon` | name → `IconData`; needs a name→icon map |
 | `divider` | `Divider` | `labelled` → `Row` with `Expanded` rules |

@@ -138,7 +138,7 @@ for (nm in names(COMPONENT_SCHEMA)) {
         expect_true(spec$type %in% c("string", "strings", "number",
                                      "numbers", "int", "bool", "enum",
                                      "choices", "panels", "condition",
-                                     "children", "any"))
+                                     "children", "runs", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)

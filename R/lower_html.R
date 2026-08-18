@@ -27,6 +27,7 @@ component_to_html <- function(x) {
 
     switch(x$component,
            text = html_text(x),
+           rich_text = html_rich_text(x),
            heading = html_heading(x),
            link = html_link(x),
            icon = html_icon(x),
@@ -203,6 +204,36 @@ html_text <- function(x) {
 
 html_heading <- function(x) {
     html_el(paste0("h", x$level), list(id = x$id), html_escape(x$value))
+}
+
+#' Lower styled runs to spans
+#'
+#' One span per run, marks as classes -- never nested tags, so the
+#' element structure is exactly the run structure and a client
+#' reading it back sees the wire form. A run with href becomes an
+#' anchor; the schema already refused any scheme worth refusing.
+#' white-space: pre-wrap on the paragraph (see .g-richtext) keeps the
+#' newlines and indent the runs carry.
+#'
+#' @keywords internal
+html_rich_text <- function(x) {
+    spans <- vapply(x$runs, function(r) {
+        cls <- c("g-run",
+                 if (isTRUE(r$bold)) "g-run-b",
+                 if (isTRUE(r$italic)) "g-run-i",
+                 if (isTRUE(r$code)) "g-run-c",
+                 if (isTRUE(r$strike)) "g-run-s")
+        if (!is.null(r$href)) {
+            html_el("a", list(class = paste(cls, collapse = " "),
+                              href = r$href),
+                    html_escape(r$text))
+        } else {
+            html_el("span", list(class = paste(cls, collapse = " ")),
+                    html_escape(r$text))
+        }
+    }, character(1L))
+    html_el("p", list(class = "g-richtext", id = x$id),
+            paste(spans, collapse = ""))
 }
 
 html_link <- function(x) {

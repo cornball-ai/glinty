@@ -108,6 +108,16 @@ COMPONENT_SCHEMA <- list(
                                      name = field("enum", required = TRUE, values = ICON_NAMES),
                                      size = field("int", default = 16L, min = 8, max = 128)
     ),
+                         # The inline-formatting leaf: a FLAT list of styled
+                         # runs -- the one place the vocabulary says "bold" at
+                         # all. Flat on purpose: runs never nest, so a client
+                         # renders them with a loop, not a grammar. Mostly
+                         # produced by markdown(), whose block half lowers to
+                         # components that already exist.
+                         rich_text = list(
+                                          runs = field("runs", required = TRUE),
+                                          id = field("string")
+    ),
                          divider = list(
                                         label = field("string"),
                                         variant = field("enum", default = "line",
@@ -700,6 +710,56 @@ check_field <- function(value, spec, type, nm) {
             }
         }
         return(unname(value))
+    },
+           runs = {
+        # rich_text's flat styled runs. Marks are present-and-TRUE or
+        # absent on the wire -- FALSE is dropped, the same
+        # absent-optionals-omitted rule the canonical serialization
+        # keeps. href is scheme-restricted HERE, at the wire boundary,
+        # so no client ever has to defend against javascript: on its
+        # own -- markdown() pre-filters instead of erroring, because a
+        # transcript must render whatever a model emitted, but a run
+        # an app builds directly deserves the error.
+        if (!is.list(value) || length(value) == 0L) {
+            stop(where, " must be a non-empty list of runs", call. = FALSE)
+        }
+        out <- lapply(seq_along(value), function(i) {
+            r <- value[[i]]
+            if (!is.list(r) || is.null(r$text) || !is.character(r$text) ||
+                    length(r$text) != 1L || is.na(r$text)) {
+                stop(where, " run ", i, " needs text (a single string)",
+                     call. = FALSE)
+            }
+            extra <- setdiff(names(r), c("text", "bold", "italic", "code",
+                                         "strike", "href"))
+            if (length(extra) > 0L) {
+                stop(where, " run ", i, " has unknown fields: ",
+                     paste(extra, collapse = ", "), call. = FALSE)
+            }
+            keep <- list(text = r$text)
+            for (mark in c("bold", "italic", "code", "strike")) {
+                v <- r[[mark]]
+                if (!is.null(v)) {
+                    if (!is.logical(v) || length(v) != 1L || is.na(v)) {
+                        stop(where, " run ", i, " ", mark,
+                             " must be TRUE or FALSE", call. = FALSE)
+                    }
+                    if (isTRUE(v)) {
+                        keep[[mark]] <- TRUE
+                    }
+                }
+            }
+            if (!is.null(r$href)) {
+                if (!md_href_ok(r$href)) {
+                    stop(where, " run ", i, " href must be http(s), ",
+                         "mailto, #fragment or site-relative",
+                         call. = FALSE)
+                }
+                keep$href <- r$href
+            }
+            keep
+        })
+        return(unname(out))
     },
            numbers = {
         # Zero or more finite numbers; arity rules that depend on the

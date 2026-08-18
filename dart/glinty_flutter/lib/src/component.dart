@@ -150,3 +150,35 @@ class GlintyFeedState {
   int tick = 0;
   String lastOp = '';
 }
+
+/// One styled run of a `rich_text`: text plus marks, flat by design.
+///
+/// Marks travel present-and-true or absent, so `json['bold'] == true`
+/// is the whole parse. [href] carries only wire-validated schemes --
+/// the R schema refuses the rest at construction -- but the renderer
+/// re-checks before wiring a tap anyway; a second lock costs one test.
+class GlintyRun {
+  GlintyRun(
+      {required this.text,
+      this.bold = false,
+      this.italic = false,
+      this.code = false,
+      this.strike = false,
+      this.href});
+
+  factory GlintyRun.fromJson(Map<dynamic, dynamic> json) => GlintyRun(
+        text: json['text']?.toString() ?? '',
+        bold: json['bold'] == true,
+        italic: json['italic'] == true,
+        code: json['code'] == true,
+        strike: json['strike'] == true,
+        href: json['href'] is String ? json['href'] as String : null,
+      );
+
+  final String text;
+  final bool bold;
+  final bool italic;
+  final bool code;
+  final bool strike;
+  final String? href;
+}

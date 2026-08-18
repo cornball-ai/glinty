@@ -1,7 +1,7 @@
 {
   "protocol": 3,
   "vocabulary": {
-    "components": ["text", "heading", "link", "icon", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
+    "components": ["text", "heading", "link", "icon", "rich_text", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
     "variants": {
       "text": ["normal", "muted", "strong", "heading", "mono", "small"],
       "divider": ["line", "labelled"],
@@ -47,6 +47,58 @@
         "value": "cornball.ai",
         "href": "https://cornball.ai",
         "external": false
+      }
+    },
+    {
+      "name": "rich-text",
+      "notes": "flat styled runs: marks are present-and-true or absent, combine freely, and href is scheme-restricted at the wire",
+      "component": {
+        "component": "rich_text",
+        "runs": [
+          {
+            "text": "plain, "
+          },
+          {
+            "text": "bold",
+            "bold": true
+          },
+          {
+            "text": ", "
+          },
+          {
+            "text": "italic",
+            "italic": true
+          },
+          {
+            "text": ", "
+          },
+          {
+            "text": "code",
+            "code": true
+          },
+          {
+            "text": ", "
+          },
+          {
+            "text": "gone",
+            "strike": true
+          },
+          {
+            "text": ", "
+          },
+          {
+            "text": "both",
+            "bold": true,
+            "italic": true
+          },
+          {
+            "text": ", and a "
+          },
+          {
+            "text": "link",
+            "href": "https://cornball.ai"
+          }
+        ]
       }
     },
     {

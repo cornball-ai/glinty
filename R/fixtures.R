@@ -45,6 +45,25 @@ component_fixtures <- function() {
                       notes = "href is data; a native frontend opens a browser"
         ),
                  list(
+                      name = "rich-text",
+                      component = component("rich_text", runs = list(
+                list(text = "plain, "),
+                list(text = "bold", bold = TRUE),
+                list(text = ", "),
+                list(text = "italic", italic = TRUE),
+                list(text = ", "),
+                list(text = "code", code = TRUE),
+                list(text = ", "),
+                list(text = "gone", strike = TRUE),
+                list(text = ", "),
+                list(text = "both", bold = TRUE, italic = TRUE),
+                list(text = ", and a "),
+                list(text = "link", href = "https://cornball.ai"))),
+                      notes = paste0("flat styled runs: marks are present-and-",
+                                     "true or absent, combine freely, and href",
+                                     " is scheme-restricted at the wire")
+        ),
+                 list(
                       name = "divider",
                       component = component("divider"),
                       notes = "no required fields; a lowering must handle the bare case"

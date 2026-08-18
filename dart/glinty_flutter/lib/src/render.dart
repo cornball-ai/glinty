@@ -12,6 +12,7 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart' show TapGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/services.dart';
@@ -24,6 +25,7 @@ import 'component.dart';
 /// know draws a visible placeholder naming it.
 const supportedComponents = <String>{
   'text', 'heading', 'link', 'icon', 'divider', 'spacer',
+  'rich_text',
   'page', 'row', 'column', 'panel', 'feed',
   'text_input', 'password_input', 'textarea_input', 'number_input',
   'select_input', 'checkbox_input', 'checkbox_group', 'radio_buttons',
@@ -496,6 +498,8 @@ class GlintyRenderer {
         return _text(context, c);
       case 'heading':
         return _heading(context, c);
+      case 'rich_text':
+        return _richText(c);
       case 'link':
         return _link(context, c);
       case 'icon':
@@ -753,6 +757,15 @@ class GlintyRenderer {
       _ => theme.titleLarge,
     };
     return Text(c.str('value') ?? '', style: style);
+  }
+
+  Widget _richText(GlintyComponent c) {
+    final raw = c.fields['runs'];
+    final runs = raw is List
+        ? raw.whereType<Map>().map((r) => GlintyRun.fromJson(r)).toList()
+        : const <GlintyRun>[];
+    return _GlintyRichText(
+        runs: runs, onLink: onLink, monoStack: monoStack);
   }
 
   Widget _link(BuildContext context, GlintyComponent c) {
@@ -2550,6 +2563,80 @@ class _GlintyFeedState extends State<_GlintyFeed> {
 /// when that value actually differs from what the field holds --
 /// which is how a server-driven update_input lands without stomping
 /// someone mid-word.
+/// Styled runs as one Text.rich.
+///
+/// Stateful for exactly one reason: a linked run needs a
+/// TapGestureRecognizer, and recognizers inside TextSpans are not
+/// disposed by the framework -- the widget that made them owes the
+/// dispose. Marks combine on a TextStyle; newlines and indent in the
+/// run text are content (markdown lists arrive that way), which
+/// Text renders as written.
+class _GlintyRichText extends StatefulWidget {
+  const _GlintyRichText(
+      {required this.runs, required this.onLink, required this.monoStack});
+
+  final List<GlintyRun> runs;
+  final void Function(String href, {bool external})? onLink;
+  final List<String> monoStack;
+
+  @override
+  State<_GlintyRichText> createState() => _GlintyRichTextState();
+}
+
+class _GlintyRichTextState extends State<_GlintyRichText> {
+  final List<TapGestureRecognizer> _taps = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    for (final t in _taps) {
+      t.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    for (final t in _taps) {
+      t.dispose();
+    }
+    _taps.clear();
+    final scheme = Theme.of(context).colorScheme;
+    final spans = widget.runs.map((r) {
+      var style = TextStyle(
+        fontWeight: r.bold ? FontWeight.w600 : null,
+        fontStyle: r.italic ? FontStyle.italic : null,
+        decoration: r.strike
+            ? TextDecoration.lineThrough
+            : (r.href != null ? TextDecoration.underline : null),
+      );
+      if (r.code) {
+        style = style.copyWith(
+          fontFamily: widget.monoStack.first,
+          fontFamilyFallback: widget.monoStack.sublist(1),
+          backgroundColor: scheme.onSurface.withValues(alpha: 0.08),
+        );
+      }
+      TapGestureRecognizer? tap;
+      final href = r.href;
+      final cb = widget.onLink;
+      // the schema already refused unlinkable schemes; re-checked
+      // here so this client stands alone, same as the browser's
+      if (href != null &&
+          RegExp(r'^(https?://|mailto:|#|/)').hasMatch(href)) {
+        style = style.copyWith(color: scheme.primary);
+        // no handler, no tap target -- the link component's rule
+        if (cb != null) {
+          tap = TapGestureRecognizer()
+            ..onTap = () => cb(href, external: true);
+          _taps.add(tap);
+        }
+      }
+      return TextSpan(text: r.text, style: style, recognizer: tap);
+    }).toList();
+    return Text.rich(TextSpan(children: spans));
+  }
+}
+
 class _GlintyTextField extends StatefulWidget {
   const _GlintyTextField({
     super.key,
