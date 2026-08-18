@@ -137,7 +137,11 @@ resume_session <- function(session) {
         session$grace_timer <- NULL
     }
     session$detached <- FALSE
-    replay <- lapply(ls(session$last_sent), function(id) {
+    # all.names: a feed's snapshot is keyed "..feed:<id>" (the ".."
+    # namespace no app id can use), and ls() hides dot-prefixed names
+    # by default -- which silently dropped those from the replay.
+    replay <- lapply(ls(session$last_sent, all.names = TRUE),
+                     function(id) {
         session$last_sent[[id]]
     })
     session$outgoing <- c(list(welcome_msg(session$id, resumed = TRUE)),

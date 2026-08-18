@@ -171,6 +171,7 @@ the server sent the tree, so it already knows the defaults.
 |---|---|---|
 | `welcome` | `session`, `protocol`, `theme?`, `ui`, `ui_revision`, `resumed?` | the bootstrap: session, theme, and the initial component tree |
 | `output` | `id`, `kind`, `value` | an output's current value, including `kind: "ui"` |
+| `feed` | `id`, `op`, `keep`, and `item` or `items` | a delta against a feed's server-held window; see "The feed" |
 | `input_update` | `id`, fields | server-driven input change |
 | `ticket` | `id`, `purpose`, and either `token` + `expires` or `error` | the answer to a ticket request: a credential, or why not |
 | `modal` | `action`, `title?`, `body?`, `footer?` | dialog |
@@ -361,6 +362,13 @@ never reaches the server, and a value update clamps the reader's page
 instead of resetting it. The value's `align` doubles as the sort-type
 signal — `"num"` columns sort numerically, the rest as text.
 
+**Fed by message**: `feed`
+
+`feed` is the scrolling log — a shell in the tree that its own frame
+type fills, item by item, without re-rendering what the client
+already has. Neither layout nor output: the full contract (the ops,
+the window bound, the stick-to-bottom scroll) is in "The feed" below.
+
 **Escape hatch**: `raw_html` — what `tag()` now produces:
 `{"component": "raw_html", "html": "<details>..."}`, a single opaque
 string. Rendered by the browser client, reported unsupported by
@@ -403,6 +411,7 @@ same as safe to add.
 | `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false), `report: bool` (false) |
 | `tabset` | `id`, `panels: [{title, children}]` | `selected` |
 | `conditional_panel` | `condition`, `children: []` | — |
+| `feed` | `id` | `keep: int` (200, min 1), `grow: int`, `width: int` — **no `children`**; items arrive only by `feed` frames |
 
 `password_input` has no `value` field **in the schema**, not merely by
 convention. A field that cannot be expressed cannot leak.
@@ -434,7 +443,11 @@ error, not a degraded render.
 when **this client** emits that event, it empties the field and
 reports `""` — after the event frame, never before, so a handler for
 the event reads the full draft and the store settles at `""` behind
-it. That frame order is the contract. The clear is client-side and
+it. That frame order is the contract, and it binds the server too:
+frames coalesce on the wire, so the server processes each one to
+quiescence in wire order — the event's handlers run before the
+trailing `""` is applied, rather than the whole batch flushing once
+at the end with the store already cleared. The clear is client-side and
 causally tied to the emit on purpose: a server round trip
 (`update_text_input(value = "")`) racing the next keystroke is
 exactly what the browser's never-stomp-live-typing guard on
@@ -490,6 +503,7 @@ rather than an intention.
 | `download_button` | `FilledButton` + ticket request | disabled without an `onDownload` embedder callback |
 | `tabset` | `TabBar` + `TabBarView` | both retain hidden child state |
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
+| `feed` | `ListView` + a scroll controller | a bounded spot gives it a real viewport; an unbounded one shrink-wraps into the page's scroll; the stick contract is in "The feed" |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
 | `data_table` | stateful `DataTable` + controls | sort/filter/page state lives in the client; must agree with the browser's `renderDataTable` |
 | `plot_output` | `LayoutBuilder` + `Image.memory` | always reports, fixed size included; a declared axis wins, an unbounded height becomes 4:3 |
@@ -547,6 +561,61 @@ which the app cannot know and the server needs. `plot_output(width =
 drawn on a 2x screen at half the resolution it should be — the app
 said how big, not how sharp. Both clients report every plot for this
 reason, and the dedup means a fixed one reports once.
+
+### The feed
+
+An append-mostly log — chat rooms, build output, token streams — is
+the case `output` fits worst: re-rendering a transcript to add one
+line resends everything the client already has, and redrawing it
+loses the reader's scroll position. The feed is the delta path. The
+tree carries an empty shell (`feed(id, keep = 200)`); items are
+components, and they arrive only by message:
+
+```json
+{"type": "feed", "id": "room", "op": "append", "keep": 200,
+ "item": {"component": "text", "value": "hello", "variant": "normal"}}
+```
+
+Three ops. `append` adds one item to the end. `patch` rewrites the
+**newest** item — token streaming: append the first chunk, patch the
+growing message after it, so a stream is one item growing rather than
+a thousand appends. `reset` replaces the window (`items`, an array at
+every length — `[]` clears). Patching an empty feed is a server-side
+error; a client that receives one anyway appends rather than
+dropping it.
+
+The window is bounded, and **the server holds it**. `keep` is
+declared on the component but rides every message as the effective
+bound at that moment; a client trims by the message and never keeps a
+second copy of the configuration. A full window drops its oldest item
+per append — the same arithmetic on both ends, so the server's window
+and the client's agree without ever being compared.
+
+A feed starts **empty** — no `children` field, and that is schema,
+not convention. The server's log is the one source of items, so
+history arrives by `feed_reset()` at session start, and booting and
+resuming are the same path: on resume the server replays a single
+`reset` carrying the current window right behind the welcome. A
+client that was away missed the appends but never the state.
+
+The scroll belongs to the client, under one contract: **pinned while
+at the bottom, released the moment the reader scrolls up.** A pinned
+feed follows every append; an unstuck one holds still — a new message
+must never yank a reader away from what they went back to read — and
+offers a "↓ Latest" chip that returns and re-pins. A `reset` pins
+unconditionally, because a replaced window is a fresh read. When trim
+drops items off the top of an unstuck reader's window, the client
+compensates the scroll position so the visible content does not
+shift under them. None of this state is reported: where a reader has
+scrolled to is theirs, not an input.
+
+Where the feed sits decides who scrolls. In a bounded spot — grown
+inside a `fill` panel under a stretch row — it owns a real scroll
+viewport. On a plain page there is no bound to fill, so it
+shrink-wraps and the page scrolls; Flutter reads its inherited bounds
+record to choose, the browser gets the same answer from CSS. Both are
+correct, but only the first gives the stick contract something to
+hold on to.
 
 ### Frames beyond the tree
 

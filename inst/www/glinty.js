@@ -26,6 +26,7 @@
         "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
+        "feed",
         "select_input", "shortcut",
         "slider_input", "spacer", "table_output", "tabset", "text",
         "text_input",
@@ -1338,6 +1339,27 @@
         return node;
     }
 
+    /* The feed shell, byte-for-byte the div html_feed() serves: an
+       empty items box and the sticky jump button. Content arrives by
+       feed messages, never in the tree. */
+    function buildFeed(c) {
+        var node = el("div", {
+            "class": "g-feed" + sizedClass(c),
+            id: c.id,
+            "data-g-keep": c.keep,
+            style: flexStyle(c).length ? flexStyle(c).join(";") : null
+        });
+        node.appendChild(el("div", { "class": "g-feed-items" }));
+        var jump = el("button", {
+            type: "button",
+            "class": "g-feed-jump",
+            hidden: "hidden"
+        });
+        jump.textContent = "↓ Latest";
+        node.appendChild(jump);
+        return node;
+    }
+
     function buildTextLike(c, type) {
         var attrs = assign(bindAttrs(c, "input"), {
             type: type,
@@ -1637,6 +1659,8 @@
             return buildLayout(c, "g-layout-row");
         case "column":
             return buildLayout(c, "g-layout-col");
+        case "feed":
+            return buildFeed(c);
         case "panel":
             var panelStyle = flexStyle(c);
             var capped = c.max_height !== null && c.max_height !== undefined;
@@ -2721,6 +2745,9 @@
         case "video_update":
             applyVideoUpdate(msg);
             break;
+        case "feed":
+            applyFeed(msg);
+            break;
         case "modal":
             if (msg.action === "hide") {
                 closeModal();
@@ -2753,6 +2780,126 @@
         default:
             console.warn("glinty: unknown message type", msg.type);
         }
+    }
+
+    /* ---------- feed ---------- */
+
+    /* All state lives in the DOM (the adoption rule): items are the
+       children of .g-feed-items, stickiness is data-g-stuck on the
+       feed ("1" unless the reader scrolled up -- absent counts as
+       stuck, so an adopted page starts pinned), and the jump button's
+       hidden attribute is the affordance state. The op contract:
+       append adds one item and drops past `keep` from the top; patch
+       rewrites the newest (token streaming); reset replaces the
+       window and pins, because a reset is a fresh read. Every message
+       carries the effective keep -- the shell's data-g-keep is the
+       declaration, not what this code trims by. */
+
+    function feedParts(id) {
+        var box = document.getElementById(id);
+        if (!box || !box.classList.contains("g-feed")) return null;
+        return {
+            box: box,
+            items: box.querySelector(".g-feed-items"),
+            jump: box.querySelector(".g-feed-jump")
+        };
+    }
+
+    /* Within a hair of the bottom counts as at it: fractional device
+       pixels make exact equality flap. */
+    function feedAtBottom(box) {
+        return box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+    }
+
+    function feedStuck(box) {
+        return box.dataset.gStuck !== "0";
+    }
+
+    function feedPin(p) {
+        p.box.scrollTop = p.box.scrollHeight;
+        p.box.dataset.gStuck = "1";
+        if (p.jump) p.jump.hidden = true;
+    }
+
+    function feedTrim(p, keep) {
+        if (!keep || keep < 1) return;
+        var gap = parseFloat(getComputedStyle(p.items).rowGap) || 0;
+        while (p.items.children.length > keep) {
+            var first = p.items.firstElementChild;
+            /* an unstuck reader must not see the page shift under
+               them when history falls off the top */
+            var h = first.offsetHeight + gap;
+            first.remove();
+            if (!feedStuck(p.box)) p.box.scrollTop -= h;
+        }
+    }
+
+    function applyFeed(msg) {
+        var p = feedParts(msg.id);
+        if (!p || !p.items) return;
+        var stuck = feedStuck(p.box);
+        if (msg.op === "append") {
+            var node = buildComponent(msg.item);
+            if (node) p.items.appendChild(node);
+            feedTrim(p, msg.keep);
+            if (stuck) {
+                feedPin(p);
+            } else if (p.jump) {
+                p.jump.hidden = false;
+            }
+        } else if (msg.op === "patch") {
+            var fresh = buildComponent(msg.item);
+            if (!fresh) return;
+            var last = p.items.lastElementChild;
+            if (last) {
+                p.items.replaceChild(fresh, last);
+            } else {
+                p.items.appendChild(fresh);
+            }
+            /* streamed growth keeps the pin */
+            if (stuck) feedPin(p);
+        } else if (msg.op === "reset") {
+            p.items.textContent = "";
+            (msg.items || []).forEach(function (it) {
+                var n = buildComponent(it);
+                if (n) p.items.appendChild(n);
+            });
+            feedTrim(p, msg.keep);
+            feedPin(p);
+        }
+        /* items may hold plots or media the measure observer must
+           track, same as a modal body */
+        observeMeasured();
+    }
+
+    function bindFeeds(root) {
+        /* scroll does not bubble; capture sees every feed */
+        root.addEventListener("scroll", function (ev) {
+            var box = ev.target;
+            if (!box || !box.classList ||
+                !box.classList.contains("g-feed")) return;
+            if (feedAtBottom(box)) {
+                box.dataset.gStuck = "1";
+                var jump = box.querySelector(".g-feed-jump");
+                if (jump) jump.hidden = true;
+            } else {
+                box.dataset.gStuck = "0";
+            }
+        }, true);
+        /* the jump button is client chrome, not a bound control: it
+           carries no data-g-target, so the generic click delegation
+           ignores it and this one owns it */
+        root.addEventListener("click", function (ev) {
+            var jump = ev.target.closest(".g-feed-jump");
+            if (!jump) return;
+            var box = jump.closest(".g-feed");
+            if (!box) return;
+            feedPin({
+                box: box,
+                items: box.querySelector(".g-feed-items"),
+                jump: jump
+            });
+        });
     }
 
     /* ---------- modals ---------- */
@@ -3057,6 +3204,7 @@
         var meta = document.querySelector('meta[name="g-ui-revision"]');
         prerendered = meta ? meta.getAttribute("content") : null;
         bindEvents(root);
+        bindFeeds(root);
         /* Keys listen on the document, not the root: a shortcut is a
            page-wide accelerator, and a click that lands on the header
            must not switch them off. Which bindings are live is still

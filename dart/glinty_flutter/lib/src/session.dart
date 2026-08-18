@@ -35,6 +35,7 @@ class GlintyOutgoing {
   String toString() => 'GlintyOutgoing($type, $body)';
 }
 
+
 /// Why the client refused to render.
 ///
 /// Carried rather than thrown: a refusal the user cannot see is the
@@ -212,6 +213,12 @@ class GlintySession {
   /// every frame: a component tree is the same tree until the next
   /// frame replaces it.
   final Map<String, GlintyComponent> uiValues = <String, GlintyComponent>{};
+
+  /// Each feed's held window, by feed id. Items are parsed once here,
+  /// like [uiValues]; the widget reads [GlintyFeedState.tick] to tell
+  /// one message from the next (a patch changes no length, a repeat
+  /// append of the same item changes no content).
+  final Map<String, GlintyFeedState> feeds = <String, GlintyFeedState>{};
 
   /// Which input ids each dynamic slot put into the store.
   ///
@@ -566,6 +573,42 @@ class GlintySession {
           refusalMessage =
               msg['message']?.toString() ?? 'connection refused';
         }
+      case 'feed':
+        // Delta messages against a held item list: append adds one,
+        // patch rewrites the newest (token streaming), reset replaces
+        // the window. Trimmed to the keep the MESSAGE carries -- the
+        // component attribute is the declaration, this is the runtime
+        // source, and no client invents a third.
+        final id = msg['id'];
+        if (id is String) {
+          final st = feeds.putIfAbsent(id, GlintyFeedState.new);
+          final keep = msg['keep'];
+          switch (msg['op']) {
+            case 'append':
+              st.items.add(GlintyComponent.fromJson(msg['item']));
+            case 'patch':
+              final item = GlintyComponent.fromJson(msg['item']);
+              if (st.items.isEmpty) {
+                st.items.add(item);
+              } else {
+                st.items[st.items.length - 1] = item;
+              }
+            case 'reset':
+              st.items
+                ..clear()
+                ..addAll([
+                  for (final it in (msg['items'] as List? ?? const []))
+                    GlintyComponent.fromJson(it),
+                ]);
+          }
+          if (keep is int && keep > 0) {
+            while (st.items.length > keep) {
+              st.items.removeAt(0);
+            }
+          }
+          st.lastOp = msg['op']?.toString() ?? '';
+          st.tick++;
+        }
       case 'modal':
         // A dialog is a component tree with a title and a footer, so
         // this client can draw it with the renderer it already has --
@@ -636,6 +679,7 @@ class GlintySession {
       pushes.clear();
       clears.clear();
       uiValues.clear();
+      feeds.clear();
       _slotInputs.clear();
       modal = null;
       progress.clear();
@@ -689,8 +733,11 @@ class GlintySession {
         ..addAll(seeds);
       // The slots that held these trees are gone with the page. A
       // record of what they used to seed would have the next slot of
-      // the same name take back values it never put there.
+      // the same name take back values it never put there. Feeds go
+      // with them: a resumed session gets its windows replayed as
+      // reset messages right behind this welcome.
       uiValues.clear();
+      feeds.clear();
       _slotInputs.clear();
     }
     // Invariant 2: nothing is emitted here. Adoption is not user

@@ -1,7 +1,7 @@
 {
   "protocol": 3,
   "vocabulary": {
-    "components": ["text", "heading", "link", "icon", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "tabset", "conditional_panel", "shortcut", "raw_html"],
+    "components": ["text", "heading", "link", "icon", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
     "variants": {
       "text": ["normal", "muted", "strong", "heading", "mono", "small"],
       "divider": ["line", "labelled"],
@@ -577,6 +577,25 @@
         "rows": 6,
         "placeholder": "why",
         "emit": "live"
+      }
+    },
+    {
+      "name": "feed",
+      "notes": "a server-fed item log; starts empty by design, so the shell is all a lowering renders -- items arrive as feed messages, never in the tree",
+      "component": {
+        "component": "feed",
+        "id": "log",
+        "keep": 200
+      }
+    },
+    {
+      "name": "feed-sized",
+      "notes": "the workspace shape: a grown feed filling its panel; keep is the declaration, the effective bound rides every feed message",
+      "component": {
+        "component": "feed",
+        "id": "room",
+        "keep": 500,
+        "grow": 1
       }
     },
     {

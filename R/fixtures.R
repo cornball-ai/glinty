@@ -288,6 +288,22 @@ component_fixtures <- function() {
                       notes = "rows is a count, not a CSS height"
         ),
                  list(
+                      name = "feed",
+                      component = feed("log"),
+                      notes = paste("a server-fed item log; starts empty by",
+                                    "design, so the shell is all a lowering",
+                                    "renders -- items arrive as feed",
+                                    "messages, never in the tree")
+        ),
+                 list(
+                      name = "feed-sized",
+                      component = feed("room", keep = 500L, grow = 1L),
+                      notes = paste("the workspace shape: a grown feed",
+                                    "filling its panel; keep is the",
+                                    "declaration, the effective bound rides",
+                                    "every feed message")
+        ),
+                 list(
                       name = "textarea-clear-on",
                       component = component("textarea_input", id = "draft",
                 label = "Message", rows = 2L, clear_on = "send"),
