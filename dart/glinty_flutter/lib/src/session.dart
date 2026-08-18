@@ -186,6 +186,15 @@ class GlintySession {
   /// server said it twice and the user saw it never.
   final Map<String, int> pushes = <String, int>{};
 
+  /// How many clear_on clears each input has received.
+  ///
+  /// Counted for the same reason [pushes] is, and kept apart from it
+  /// because the two apply under opposite rules: a push refuses a
+  /// focused field (a server write racing a typist), a clear applies
+  /// regardless (it is causally the user's own emit, synchronous with
+  /// it -- the composer has focus at exactly that moment).
+  final Map<String, int> clears = <String, int>{};
+
   /// Bumped whenever the tree is replaced or the state is cleared.
   /// Widgets key off it so Flutter discards controllers and element
   /// state belonging to a tree that no longer exists.
@@ -254,6 +263,7 @@ class GlintySession {
       if (_staticInputs.contains(key)) continue;
       overrides.remove(key);
       pushes.remove(key);
+      clears.remove(key);
       if (!seeds.containsKey(key)) inputs.remove(key);
     }
     _slotInputs[id] = seeds.keys.toSet();
@@ -624,6 +634,7 @@ class GlintySession {
       kinds.clear();
       errors.clear();
       pushes.clear();
+      clears.clear();
       uiValues.clear();
       _slotInputs.clear();
       modal = null;
@@ -725,6 +736,43 @@ class GlintySession {
       // would have the server decide what null means.
       'value': ?value,
     }));
+    // clear_on: a field that declared "clear when this event emits"
+    // empties and reports "" AFTER the event frame, so the server
+    // handler still reads the full draft -- live emit already
+    // reported every keystroke (the schema refuses clear_on on
+    // settle fields), and this client has no debounce to flush.
+    //
+    // Its own counter, not [pushes]: a push refuses a focused field
+    // and is spent by the refusal, which is right for a server write
+    // racing a typist and exactly wrong here -- the composer HAS
+    // focus when enter sends, and this clear is causally the user's
+    // own action, synchronous with it, with nothing mid-typed to
+    // protect. An unmounted field (a folded conditional panel) reads
+    // '' from the store when it returns, which is the same answer.
+    for (final fieldId in clearOnTargets(_heldTrees(), id)) {
+      clears[fieldId] = (clears[fieldId] ?? 0) + 1;
+      sendInput(fieldId, '');
+    }
+  }
+
+  /// Every component tree this session is currently holding: the
+  /// page, each dynamic slot's subtree, and the open modal's body and
+  /// footer. What [clearOnTargets] reads, since a composer can live
+  /// in any of them.
+  Iterable<GlintyComponent> _heldTrees() sync* {
+    if (_ui != null) yield _ui!;
+    yield* uiValues.values;
+    final m = modal;
+    if (m != null) {
+      final body = m['body'];
+      if (body is List) {
+        for (final b in body) {
+          if (b is Map) yield GlintyComponent.fromJson(b);
+        }
+      }
+      final footer = m['footer'];
+      if (footer is Map) yield GlintyComponent.fromJson(footer);
+    }
   }
 
   /// Ask for a transfer ticket. The grant arrives as a `ticket`

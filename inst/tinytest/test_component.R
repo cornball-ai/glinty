@@ -314,6 +314,28 @@ for (f in fx) {
 nms <- vapply(fx, function(f) f$name, character(1L))
 expect_equal(anyDuplicated(nms), 0L)
 
+# --- clear_on: the composer declaration (#60) ---
+# An input may declare that emitting a named event clears it
+# client-side. The value is data on the wire; the behaviour is the
+# client's, asserted in keyboard_client.js and the dart suite.
+ta <- component("textarea_input", id = "draft", clear_on = "send")
+expect_equal(ta$clear_on, "send")
+ti <- component("text_input", id = "quick", clear_on = "go")
+expect_equal(ti$clear_on, "go")
+# absent by default: nothing rides the wire uninvited
+expect_null(component("textarea_input", id = "notes")$clear_on)
+# refused on a settle field: its draft is unreported when the event
+# fires, so clearing would discard text the server never heard
+expect_error(component("textarea_input", id = "draft",
+                       emit = "settle", clear_on = "send"),
+             "emit = \"live\"")
+expect_error(component("text_input", id = "quick",
+                       emit = "settle", clear_on = "go"),
+             "emit = \"live\"")
+# only the two text fields carry the declaration at all
+expect_error(component("number_input", id = "n", clear_on = "send"),
+             "unknown field")
+
 # --- the checked-in JSON matches the R definition ---
 # The Dart client cannot call R, so the artifact both sides consume is
 # the file. This test is what stops the file falling behind the R

@@ -88,6 +88,37 @@ dynamic _seedFor(GlintyComponent c) {
   }
 }
 
+/// Field ids whose `clear_on` names [eventId], across every held tree.
+///
+/// The mirror of the browser's `[data-g-clear-on]` query. Walked at
+/// emit time rather than kept as a registry, because the trees it
+/// reads (page, dynamic slots, modal) each replace wholesale and a
+/// registry would have three invalidation points to get wrong;
+/// events happen at human speed, so the walk costs nothing.
+Set<String> clearOnTargets(Iterable<GlintyComponent> trees, String eventId) {
+  final out = <String>{};
+  void walk(GlintyComponent c) {
+    if ((c.type == 'text_input' || c.type == 'textarea_input') &&
+        c.str('clear_on') == eventId) {
+      final id = c.str('id');
+      if (id != null) out.add(id);
+    }
+    for (final child in c.children) {
+      walk(child);
+    }
+    for (final panel in c.panels) {
+      for (final child in panel.children) {
+        walk(child);
+      }
+    }
+  }
+
+  for (final t in trees) {
+    walk(t);
+  }
+  return out;
+}
+
 /// Does one input value match any of a condition's candidates?
 ///
 /// The rule the whole protocol shares: logicals compare by

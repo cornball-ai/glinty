@@ -15,14 +15,19 @@
 #' @param placeholder character placeholder text
 #' @param emit character "live" to report while typing, "settle" to
 #'   report when the field is committed
+#' @param clear_on character event id; when the client emits that
+#'   event it empties this field and reports "", after the event
+#'   frame, so the event's handler still reads the full draft. The
+#'   composer pattern: pair with a button or shortcut carrying the
+#'   named id. Requires emit = "live".
 #' @return A UI component
 #' @examples
 #' text_input("name", "Name:")
 #' @export
 text_input <- function(id, label = "", value = "", placeholder = NULL,
-                       emit = "live") {
+                       emit = "live", clear_on = NULL) {
     component("text_input", id = id, label = label, value = value,
-              placeholder = placeholder, emit = emit)
+              placeholder = placeholder, emit = emit, clear_on = clear_on)
 }
 
 #' Create a password input
@@ -55,14 +60,22 @@ password_input <- function(id, label = "", placeholder = NULL, emit = "live") {
 #' @param rows integer visible rows
 #' @param placeholder character placeholder text
 #' @param emit character "live" or "settle"
+#' @param clear_on character event id; when the client emits that
+#'   event it empties this field and reports "", after the event
+#'   frame, so the event's handler still reads the full draft. The
+#'   chat composer: \code{textarea_input("draft", clear_on = "send")}
+#'   beside \code{shortcut("send", "enter", typing = TRUE)}. Requires
+#'   emit = "live".
 #' @return A UI component
 #' @examples
 #' textarea_input("notes", "Notes:", rows = 6L)
 #' @export
 textarea_input <- function(id, label = "", value = "", rows = 4L,
-                           placeholder = NULL, emit = "live") {
+                           placeholder = NULL, emit = "live",
+                           clear_on = NULL) {
     component("textarea_input", id = id, label = label, value = value,
-              rows = rows, placeholder = placeholder, emit = emit)
+              rows = rows, placeholder = placeholder, emit = emit,
+              clear_on = clear_on)
 }
 
 #' Create a numeric input

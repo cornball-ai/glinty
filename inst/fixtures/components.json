@@ -544,6 +544,19 @@
       }
     },
     {
+      "name": "textarea-clear-on",
+      "notes": "the composer: emitting the named event clears the field client-side, AFTER the event frame, so the handler reads the full draft",
+      "component": {
+        "component": "textarea_input",
+        "id": "draft",
+        "label": "Message",
+        "value": "",
+        "rows": 2,
+        "emit": "live",
+        "clear_on": "send"
+      }
+    },
+    {
       "name": "number-input",
       "notes": "bounds and step are numbers a frontend may spend on a spinner, a slider, or a hint",
       "component": {
