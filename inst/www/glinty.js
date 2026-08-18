@@ -163,7 +163,15 @@
                 }
                 el._gCond = cond;
             }
-            el.classList.toggle("g-hidden", !evalCondition(cond));
+            var hide = !evalCondition(cond);
+            var was = el.classList.contains("g-hidden");
+            el.classList.toggle("g-hidden", hide);
+            /* a reveal gives sliders inside their first real width;
+               rebuild their scales to the measured label budget */
+            if (was && !hide) {
+                el.querySelectorAll('input[type="range"]')
+                    .forEach(function (r) { syncSliderLabels(r); });
+            }
         });
         /* a panel toggling can reveal a plot that has never had a
            real box to report */
@@ -185,7 +193,13 @@
         });
         set.querySelectorAll(".g-tab-body").forEach(function (p) {
             if (p.closest(".g-tabset") !== set) return;
-            p.classList.toggle("g-hidden", p.dataset.gTabPanel !== name);
+            var show = p.dataset.gTabPanel === name;
+            p.classList.toggle("g-hidden", !show);
+            /* first reveal gives sliders inside their real width */
+            if (show) {
+                p.querySelectorAll('input[type="range"]')
+                    .forEach(function (r) { syncSliderLabels(r); });
+            }
         });
         /* the newly shown panel may hold a plot that was 0x0 while
            hidden and has never reported a real box */
@@ -616,8 +630,25 @@
     /* A scale label at fraction f, snapped to the step grid when
        there is one -- scale numbers should be values the thumb can
        actually take. Mirrors slider_snap() in R. */
+    /* The precision a stepless slider still has: Shiny's
+       findStepSize rule. Integer ends spanning >= 2 mean whole
+       numbers; otherwise a 1/2/5-ladder decimal near range/100.
+       Mirrors slider_implied_step() in R. */
+    function sliderImpliedStep(min, max) {
+        var range = max - min;
+        if (range >= 2 && min % 1 === 0 && max % 1 === 0) return 1;
+        var raw = range / 100;
+        var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+        var norm = raw / mag;
+        return mag * (norm <= 1.5 ? 1 : norm <= 3.5 ? 2 :
+                      norm <= 7.5 ? 5 : 10);
+    }
+
     function sliderSnap(f, min, max, step) {
         var v = min + f * (max - min);
+        if (!(step > 0) && max > min) {
+            step = sliderImpliedStep(min, max);
+        }
         if (step > 0) {
             v = min + Math.round((v - min) / step) * step;
             v = Math.min(Math.max(v, min), max);
@@ -627,28 +658,40 @@
 
     /* The scale as {f, major, label} ticks: on the stops when the
        step grid is coarse enough to see, a fixed tenths grid when
-       the slider reads as continuous. Mirrors slider_ticks() in R;
+       the slider reads as continuous. maxLab caps the numbered
+       majors so a narrow track stays legible; thinned positions
+       keep their tick at minor size. Mirrors slider_ticks() in R;
        the two must agree. */
-    function sliderTicks(min, max, step) {
+    function sliderTicks(min, max, step, maxLab) {
+        maxLab = Math.max(2, maxLab || 11);
         var ticks = [];
         var n = step > 0 ? Math.round((max - min) / step) : 0;
         if (n >= 1 && n <= 20 &&
                 Math.abs(min + n * step - max) < 1e-9 * Math.max(1, Math.abs(max))) {
-            var every = n <= 10 ? 1 : 2;
+            /* at the default budget this is the old rule: every stop
+               to 10, every 2nd for 11-20 */
+            var every = Math.ceil((n + 1) / maxLab);
             for (var i = 0; i <= n; i++) {
-                var major = i % every === 0 || i === n;
+                /* a regular label within one gap of the always-
+                   labeled last stop yields to it */
+                var major = (i % every === 0 && n - i >= every) ||
+                    i === n;
                 ticks.push({ f: i * step / (max - min), major: major,
                              label: major ? numLabel(min + i * step) : "" });
-                if (i < n && n <= 10) {
+                if (i < n && n <= 10 && every === 1) {
                     ticks.push({ f: (i + 0.5) * step / (max - min),
                                  major: false, label: "" });
                 }
             }
             return ticks;
         }
+        var labelEvery = Math.ceil(11 / maxLab);
         var prevLabel = "";
         for (var j = 0; j <= 40; j++) {
-            var isMajor = j % 4 === 0;
+            var m = Math.floor(j / 4);
+            var isMajor = j % 4 === 0 &&
+                ((m % labelEvery === 0 && 10 - m >= labelEvery) ||
+                 m === 10);
             var lab = "";
             if (isMajor) {
                 lab = numLabel(sliderSnap(j / 40, min, max, step));
@@ -666,13 +709,18 @@
 
     /* (Re)draw a slider's scale. Cheap enough to run on build and
        whenever min/max/step change; the drag path never lands here
-       because the signature is unchanged. */
+       because the signature is unchanged. The label budget comes
+       from the measured width (server HTML is width-blind), so the
+       signature carries it: a slider hydrated before layout, or
+       revealed by a conditional panel, rebuilds on its next sync. */
     function buildSliderScale(scale, min, max, step) {
-        var sig = min + ":" + max + ":" + step;
+        var w = scale.offsetWidth;
+        var maxLab = w > 0 ? Math.max(2, Math.floor(w / 70)) : 11;
+        var sig = min + ":" + max + ":" + step + ":" + maxLab;
         if (scale.dataset.gScaleSig === sig) return;
         scale.dataset.gScaleSig = sig;
         scale.textContent = "";
-        sliderTicks(min, max, step).forEach(function (tk) {
+        sliderTicks(min, max, step, maxLab).forEach(function (tk) {
             var left = "left:" +
                 numLabel(Math.round(tk.f * 1000000) / 10000) + "%";
             scale.appendChild(el("span", {
@@ -1820,6 +1868,13 @@
             reportPlotDims();
             observeMeasured();
         }
+        /* Server HTML is width-blind: its slider scales carry the
+           default label budget. One pass on live layout rebuilds
+           each to its measured width (the scale signature makes
+           this a no-op when nothing changes). */
+        Array.prototype.forEach.call(
+            document.querySelectorAll('input[type="range"]'),
+            function (r) { syncSliderLabels(r); });
         /* On resume the DOM is live client state, not the initial
            tree; the welcome's ui rides along and is ignored. */
         flushPending();

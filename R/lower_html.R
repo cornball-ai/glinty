@@ -515,9 +515,30 @@ slider_pct <- function(v, min, max) {
 
 # A scale label at fraction f, snapped to the step grid when there is
 # one -- scale numbers should be values the thumb can actually take.
+# The precision a stepless slider still has: Shiny's findStepSize
+# rule (cribbed from sandbox/shiny R/input-slider.R, MIT). Integer
+# ends spanning >= 2 mean whole numbers; otherwise a 1/2/5-ladder
+# decimal near range/100. Scale labels snap to it so a 1..1000
+# slider reads 101, 301 -- values the thumb can take -- never 100.9.
+slider_implied_step <- function(min, max) {
+    range <- max - min
+    if (range >= 2 && min %% 1 == 0 && max %% 1 == 0) {
+        return(1)
+    }
+    raw <- range / 100
+    mag <- 10^floor(log10(raw))
+    norm <- raw / mag
+    factor <- if (norm <= 1.5) 1 else if (norm <= 3.5) 2 else
+        if (norm <= 7.5) 5 else 10
+    mag * factor
+}
+
 slider_snap <- function(f, min, max, step) {
     v <- min + f * (max - min)
-    if (!is.null(step) && is.numeric(step) && step > 0) {
+    if (is.null(step) || !is.numeric(step) || step <= 0) {
+        step <- if (max > min) slider_implied_step(min, max) else 0
+    }
+    if (step > 0) {
         v <- min + round((v - min) / step) * step
         v <- base::min(base::max(v, min), max)
     }
@@ -532,7 +553,13 @@ slider_snap <- function(f, min, max, step) {
 # a fixed grid: majors every tenth, labels snapped and deduped.
 # Mirrored by sliderTicks() in glinty.js and _sliderTicks() in the
 # Flutter renderer; the three must agree.
-slider_ticks <- function(min, max, step) {
+slider_ticks <- function(min, max, step, max_labels = 11L) {
+    # max_labels caps the numbered majors so a narrow slider's scale
+    # stays legible. The server can't know the track's width, so the
+    # HTML carries the width-blind default and each client rebuilds
+    # with its measured budget (floor(width / 70)); thinned-out
+    # positions keep their tick but drop to minor size.
+    max_labels <- max(2L, as.integer(max_labels))
     ticks <- list()
     add <- function(f, major, label = "") {
         ticks[[length(ticks) + 1L]] <<- list(f = f, major = major,
@@ -544,21 +571,29 @@ slider_ticks <- function(min, max, step) {
         0
     }
     if (n >= 1 && n <= 20 && isTRUE(all.equal(min + n * step, max))) {
-        every <- if (n <= 10) 1L else 2L
+        # at the default budget this is the old rule: every stop to
+        # 10, every 2nd for 11-20
+        every <- as.integer(ceiling((n + 1) / max_labels))
         for (i in 0L:n) {
             f <- i * step / (max - min)
-            major <- i %% every == 0L || i == n
+            # the last stop is always labeled; a regular label within
+            # one gap of it would crowd it, so that one yields
+            major <- (i %% every == 0L && n - i >= every) || i == n
             add(f, major,
                 if (major) num_label(min + i * step) else "")
-            if (i < n && n <= 10) {
+            if (i < n && n <= 10 && every == 1L) {
                 add((i + 0.5) * step / (max - min), FALSE)
             }
         }
         return(ticks)
     }
+    label_every <- as.integer(ceiling(11 / max_labels))
     prev_label <- ""
     for (i in 0L:40L) {
-        major <- i %% 4L == 0L
+        m <- i %/% 4L
+        major <- i %% 4L == 0L &&
+            ((m %% label_every == 0L && 10L - m >= label_every) ||
+                m == 10L)
         lab <- ""
         if (major) {
             lab <- num_label(slider_snap(i / 40, min, max, step))
