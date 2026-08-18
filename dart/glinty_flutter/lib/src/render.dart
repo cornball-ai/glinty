@@ -324,7 +324,7 @@ class GlintyRenderer {
   /// client does not.
   static const _knownVariants = <String, List<String>>{
     'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
-    'text_output': ['normal', 'muted', 'strong', 'mono', 'small'],
+    'text_output': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
     'button': ['default', 'primary', 'secondary', 'danger', 'ghost', 'listing'],
     'download_button': [
       'default', 'primary', 'secondary', 'danger', 'ghost', 'listing'

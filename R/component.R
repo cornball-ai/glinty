@@ -323,7 +323,8 @@ COMPONENT_SCHEMA <- list(
                          text_output = list(
         id = field("string", required = TRUE),
         variant = field("enum", default = "normal",
-                        values = c("normal", "muted", "strong", "mono", "small"))
+                        values = c("normal", "muted", "strong", "heading",
+                                   "mono", "small"))
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),

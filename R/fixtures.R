@@ -103,6 +103,14 @@ component_fixtures <- function() {
                       notes = "an empty slot; the value arrives later, tagged by kind"
         ),
                  list(
+                      name = "text-output-heading",
+                      component = component("text_output", id = "caption",
+                variant = "heading"),
+                      notes = paste("a caption whose text is computed: the",
+                                    "output slot styled like text's heading",
+                                    "variant, same tokens in both lowerings")
+        ),
+                 list(
                       name = "plot-output-responsive",
                       component = component("plot_output", id = "scatter"),
                       notes = "no dimensions: the client reports its box via measure"

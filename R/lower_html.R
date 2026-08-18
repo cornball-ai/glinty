@@ -777,7 +777,8 @@ html_slot <- function(x) {
 
 html_text_output <- function(x) {
     cls <- c(normal = "g-output", muted = "g-output g-muted",
-             strong = "g-output g-strong", mono = "g-output g-mono",
+             strong = "g-output g-strong",
+             heading = "g-output g-text-heading", mono = "g-output g-mono",
              small = "g-output g-small")
     html_el("span", c(html_slot(x), list(class = unname(cls[[x$variant]]))))
 }

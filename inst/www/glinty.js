@@ -624,6 +624,7 @@
         normal: "g-output",
         muted: "g-output g-muted",
         strong: "g-output g-strong",
+        heading: "g-output g-text-heading",
         mono: "g-output g-mono",
         small: "g-output g-small"
     };
@@ -896,7 +897,8 @@
        one release newer may know variants this client does not. */
     var KNOWN_VARIANTS = {
         text: ["normal", "muted", "strong", "heading", "mono", "small"],
-        text_output: ["normal", "muted", "strong", "mono", "small"],
+        text_output: ["normal", "muted", "strong", "heading", "mono",
+                      "small"],
         button: ["default", "primary", "secondary", "danger", "ghost",
                  "listing"],
         download_button: ["default", "primary", "secondary", "danger",

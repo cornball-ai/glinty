@@ -162,6 +162,15 @@
       }
     },
     {
+      "name": "text-output-heading",
+      "notes": "a caption whose text is computed: the output slot styled like text's heading variant, same tokens in both lowerings",
+      "component": {
+        "component": "text_output",
+        "id": "caption",
+        "variant": "heading"
+      }
+    },
+    {
       "name": "plot-output-responsive",
       "notes": "no dimensions: the client reports its box via measure",
       "component": {

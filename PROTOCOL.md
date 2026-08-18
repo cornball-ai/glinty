@@ -739,7 +739,7 @@ client is free to render `danger` however it likes.
 | `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost`, `listing` |
 | `panel` | `plain`, `card`, `sidebar` |
 | `text` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
-| `text_output` | `normal`, `muted`, `strong`, `mono`, `small` |
+| `text_output` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
 | `divider` | `line`, `labelled` |
 
 Unknown variants fall back to the first listed, with a console warning
