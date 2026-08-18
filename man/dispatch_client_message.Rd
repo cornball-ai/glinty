@@ -20,6 +20,7 @@ change, event bumps an event counter. hello no longer carries
 input values -- under v3 the server built the tree, so it seeded
 the defaults itself before the client ever connected.
 Malformed or unknown messages queue an error message instead of
-raising. Does not flush; the caller flushes after dispatch.
+raising. Flushes before returning, so each frame is processed to
+quiescence in wire order (see the comment at the flush).
 }
 \keyword{internal}
