@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**The vocabulary rides `components.json`; client tables are held to
+it** (#57). The fixture JSON now carries the schema's component list
+and per-component variant lists. Client declaration tables stay
+hand-written -- a support list states what a client implements, a
+variant list gates its own style maps -- but each client's suite now
+asserts its tables against the schema, order included, so a
+vocabulary change fails every client that has not answered for it.
+Found on arrival: the browser had implemented `shortcut` and
+`table_output` while declaring neither in hello.
+
 **Flutter: a grown flex under a stretch row no longer blanks the
 window** (#53). A stretch row measures through `IntrinsicHeight`,
 which a `LayoutBuilder` cannot answer, so flexes under the
