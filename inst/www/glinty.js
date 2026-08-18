@@ -394,6 +394,38 @@
             .test(a.type || "text");
     }
 
+    /* Every event this client emits leaves through here, because
+       emitting may also clear a composer: a field whose
+       data-g-clear-on names this event empties itself and reports
+       "" -- AFTER the event frame, so the server handler reads the
+       full draft and the store settles at "" behind it. The frame
+       order is the contract. A live field's debounce may still hold
+       the draft's tail (enter within 200ms of the last keystroke),
+       so any pending report flushes first; clear_on is
+       schema-restricted to live fields, which is what makes that
+       flush sufficient. The server-push path is untouched: the
+       "never stomp live typing" guard on input_update stays, and
+       this exists so nobody needs to fight it. */
+    function emitEventFrame(id, value) {
+        var fields = document.querySelectorAll(
+            '[data-g-clear-on="' + id + '"]');
+        fields.forEach(function (f) {
+            var fid = f.dataset.gTarget;
+            if (debounceTimers.has(fid)) {
+                clearTimeout(debounceTimers.get(fid));
+                debounceTimers.delete(fid);
+                sendInput(f);
+            }
+        });
+        var frame = { type: "event", id: id };
+        if (value !== undefined) frame.value = value;
+        send(frame);
+        fields.forEach(function (f) {
+            f.value = "";
+            sendInput(f);
+        });
+    }
+
     function bindKeys(root) {
         document.addEventListener("keydown", function (ev) {
             var token = keyToken(ev);
@@ -419,11 +451,7 @@
                    and it saves the project rather than also offering to
                    save the page. */
                 ev.preventDefault();
-                var frame = { type: "event", id: el.dataset.gTarget };
-                if (el.dataset.gValue !== undefined) {
-                    frame.value = el.dataset.gValue;
-                }
-                send(frame);
+                emitEventFrame(el.dataset.gTarget, el.dataset.gValue);
             }
         });
     }
@@ -545,11 +573,7 @@
                        one handler can serve a list of rows: the press
                        says which row. Absent on an ordinary button,
                        where the press is the whole message. */
-                    var frame = { type: "event", id: el.dataset.gTarget };
-                    if (el.dataset.gValue !== undefined) {
-                        frame.value = el.dataset.gValue;
-                    }
-                    send(frame);
+                    emitEventFrame(el.dataset.gTarget, el.dataset.gValue);
                 }
                 return;
             }
