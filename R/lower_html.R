@@ -472,7 +472,11 @@ html_slider <- function(x) {
     attrs <- c(html_bind(x),
                list(type = "range", class = "g-slider", min = x$min, max = x$max,
                     value = x$value, step = step))
-    shown <- if (is.null(x$value)) x$min else x$value
+    if (is.null(x$value)) {
+        shown <- x$min
+    } else {
+        shown <- x$value
+    }
     pct <- slider_pct(shown, x$min, x$max)
 
     chip <- function(cls, v, hidden) {
@@ -482,13 +486,13 @@ html_slider <- function(x) {
                 num_label(v))
     }
     bubble <- html_el("output",
-        list(class = "g-slider-chip g-slider-bubble", "for" = x$id,
-             style = sprintf("left:%s%%", num_label(round(pct * 100, 3)))),
-        num_label(shown))
+                      list(class = "g-slider-chip g-slider-bubble", "for" = x$id,
+                           style = sprintf("left:%s%%", num_label(round(pct * 100, 3)))),
+                      num_label(shown))
     top <- html_el("div", list(class = "g-slider-top"),
-        paste0(chip("g-slider-chip-min", x$min, pct < 0.1),
-               bubble,
-               chip("g-slider-chip-max", x$max, pct > 0.9)))
+                   paste0(chip("g-slider-chip-min", x$min, pct < 0.1),
+                          bubble,
+                          chip("g-slider-chip-max", x$max, pct > 0.9)))
 
     marks <- character(0L)
     # ticks take the materialized step: they sit where the thumb can
@@ -544,15 +548,15 @@ html_range_slider <- function(x) {
     }
     bubble <- function(cls, val, pct) {
         html_el("output",
-            list(class = paste0("g-slider-chip g-slider-bubble ", cls),
-                 style = sprintf("left:%s%%", num_label(round(pct * 100, 3)))),
-            num_label(val))
+                list(class = paste0("g-slider-chip g-slider-bubble ", cls),
+                     style = sprintf("left:%s%%", num_label(round(pct * 100, 3)))),
+                num_label(val))
     }
     top <- html_el("div", list(class = "g-slider-top"),
-        paste0(chip("g-slider-chip-min", x$min, p1 < 0.1),
-               bubble("g-range-bubble-lo", lo, p1),
-               bubble("g-range-bubble-hi", hi, p2),
-               chip("g-slider-chip-max", x$max, p2 > 0.9)))
+                   paste0(chip("g-slider-chip-min", x$min, p1 < 0.1),
+                          bubble("g-range-bubble-lo", lo, p1),
+                          bubble("g-range-bubble-hi", hi, p2),
+                          chip("g-slider-chip-max", x$max, p2 > 0.9)))
 
     end_input <- function(end, val) {
         html_el("input",
@@ -565,11 +569,11 @@ html_range_slider <- function(x) {
                           num_label(round(p1 * 100, 3)),
                           num_label(round((p2 - p1) * 100, 3)))
     track <- html_el("div", list(class = "g-range-track"),
-        paste0(html_el("div", list(class = "g-range-rail"), ""),
-               html_el("div", list(class = "g-range-fill",
-                                   style = fill_style), ""),
-               end_input("lo", lo),
-               end_input("hi", hi)))
+                     paste0(html_el("div", list(class = "g-range-rail"), ""),
+                            html_el("div", list(class = "g-range-fill",
+                    style = fill_style), ""),
+                            end_input("lo", lo),
+                            end_input("hi", hi)))
 
     marks <- character(0L)
     for (tk in slider_ticks(x$min, x$max, step)) {
@@ -586,8 +590,7 @@ html_range_slider <- function(x) {
                      paste0(marks, collapse = ""))
 
     box <- html_el("div",
-                   c(html_bind(x),
-                     list(class = "g-slider-box g-range-box")),
+                   c(html_bind(x), list(class = "g-slider-box g-range-box")),
                    paste0(top, track, scale))
     html_field_group(x, box)
 }
@@ -620,17 +623,25 @@ slider_implied_step <- function(min, max) {
         return(1)
     }
     raw <- range / 100
-    mag <- 10^floor(log10(raw))
+    mag <- 10 ^ floor(log10(raw))
     norm <- raw / mag
     factor <- if (norm <= 1.5) 1 else if (norm <= 3.5) 2 else
-        if (norm <= 7.5) 5 else 10
+    if (norm <= 7.5) {
+        5
+    } else {
+        10
+    }
     mag * factor
 }
 
 slider_snap <- function(f, min, max, step) {
     v <- min + f * (max - min)
     if (is.null(step) || !is.numeric(step) || step <= 0) {
-        step <- if (max > min) slider_implied_step(min, max) else 0
+        if (max > min) {
+            step <- slider_implied_step(min, max)
+        } else {
+            step <- 0
+        }
     }
     if (step > 0) {
         v <- min + round((v - min) / step) * step
@@ -657,7 +668,7 @@ slider_ticks <- function(min, max, step, max_labels = 11L) {
     ticks <- list()
     add <- function(f, major, label = "") {
         ticks[[length(ticks) + 1L]] <<- list(f = f, major = major,
-                                             label = label)
+            label = label)
     }
     n <- if (!is.null(step) && is.numeric(step) && step > 0) {
         round((max - min) / step)
@@ -673,8 +684,7 @@ slider_ticks <- function(min, max, step, max_labels = 11L) {
             # the last stop is always labeled; a regular label within
             # one gap of it would crowd it, so that one yields
             major <- (i %% every == 0L && n - i >= every) || i == n
-            add(f, major,
-                if (major) num_label(min + i * step) else "")
+            add(f, major, if (major) num_label(min + i * step) else "")
             if (i < n && n <= 10 && every == 1L) {
                 add((i + 0.5) * step / (max - min), FALSE)
             }
@@ -686,8 +696,8 @@ slider_ticks <- function(min, max, step, max_labels = 11L) {
     for (i in 0L:40L) {
         m <- i %/% 4L
         major <- i %% 4L == 0L &&
-            ((m %% label_every == 0L && 10L - m >= label_every) ||
-                m == 10L)
+        ((m %% label_every == 0L && 10L - m >= label_every) ||
+            m == 10L)
         lab <- ""
         if (major) {
             lab <- num_label(slider_snap(i / 40, min, max, step))
