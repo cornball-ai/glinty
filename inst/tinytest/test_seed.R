@@ -26,6 +26,9 @@ ui <- page(
     checkbox_input("save", "Save", value = TRUE),
     checkbox_input("off", "Off"),
     radio_buttons("mode", "Mode:", c(Fast = "fast", Slow = "slow")),
+    checkbox_group("tops", "Toppings:", c(A = "a", B = "b", C = "c"),
+                   selected = c("a", "c")),
+    checkbox_group("tops_none", "None:", c(A = "a", B = "b")),
     slider_input("sl", "S:", min = 0, max = 100, value = 25),
     slider_input("sl_default", "S2:", min = 10, max = 20),
     range_slider("rng", "R:", min = 1, max = 1000, value = c(200, 500)),
@@ -73,6 +76,11 @@ expect_false(isolate(s$input$off()))
 
 # radio_buttons() guarantees a selection: the first choice
 expect_equal(isolate(s$input$mode()), "fast")
+
+# a checkbox group seeds the plural selection; empty is character(0),
+# not NULL -- the multiple-select rule
+expect_equal(isolate(s$input$tops()), c("a", "c"))
+expect_identical(isolate(s$input$tops_none()), character(0))
 
 # sliders always have a position; the builder default is the HTML
 # midpoint, so every frontend starts the thumb in the same place

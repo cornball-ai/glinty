@@ -14,7 +14,8 @@
        exists so the server can log what a lesser client will show as
        a placeholder. The browser renders the full set. */
     var SUPPORTED_COMPONENTS = [
-        "audio_output", "button", "checkbox_input", "column",
+        "audio_output", "button", "checkbox_group", "checkbox_input",
+        "column", "data_table",
         "conditional_panel", "date_input", "divider", "download_button",
         "collapse", "file_input", "heading", "html_output", "icon",
         "image", "image_output",
@@ -75,6 +76,15 @@
     /* ---------- value extraction ---------- */
 
     function extractValue(el) {
+        /* box-bound inputs: the binding sits on a div whose value is
+           computed from its members, so a bare el.value would
+           harvest undefined */
+        if (el.classList && el.classList.contains("g-checkgroup-box")) {
+            return groupValue(el);
+        }
+        if (el.classList && el.classList.contains("g-range-box")) {
+            return rangeValue(el);
+        }
         if (el.type === "checkbox") return el.checked;
         if (el.type === "radio") {
             var checked = document.querySelector(
@@ -469,6 +479,15 @@
 
         root.addEventListener("input", function (ev) {
             var el = ev.target;
+            /* a group member routes through its box: one server
+               value, many boxes to tick */
+            if (el.dataset.gGroupMember) {
+                var gbox = el.closest(".g-checkgroup-box");
+                if (gbox && gbox.dataset.gEvent === "input") {
+                    sendGroup(gbox);
+                }
+                return;
+            }
             /* a range end routes through its box: one server value,
                two thumbs. The box carries the binding attributes. */
             if (el.dataset.gRangeEnd) {
@@ -489,6 +508,13 @@
 
         root.addEventListener("change", function (ev) {
             var el = ev.target;
+            if (el.dataset.gGroupMember) {
+                var gbox = el.closest(".g-checkgroup-box");
+                if (gbox && gbox.dataset.gEvent === "change") {
+                    sendGroup(gbox);
+                }
+                return;
+            }
             if (el.dataset.gRangeEnd) {
                 var rbox = el.closest(".g-range-box");
                 if (rbox && rbox.dataset.gEvent === "change") {
@@ -629,6 +655,7 @@
         small: "g-output g-small"
     };
     var OUTPUT_KIND_OF = {
+        data_table: "table",
         text_output: "text",
         verbatim_output: "text",
         table_output: "table",
@@ -865,6 +892,21 @@
         var lo = parseFloat(ends[0].value);
         var hi = parseFloat(ends[1].value);
         return [Math.min(lo, hi), Math.max(lo, hi)];
+    }
+
+    /* the checked members' values in choice order -- an array at
+       every length, like a multiple select's */
+    function groupValue(box) {
+        return Array.prototype.map.call(
+            box.querySelectorAll("input[type=checkbox]:checked"),
+            function (m) { return m.value; }
+        );
+    }
+
+    function sendGroup(box) {
+        var value = groupValue(box);
+        noteInput(box.dataset.gTarget, value);
+        send({ type: "input", id: box.dataset.gTarget, value: value });
     }
 
     function sendRange(box) {
@@ -1320,6 +1362,32 @@
             return buildCheckbox(c);
         case "radio_buttons":
             return buildRadio(c);
+        case "checkbox_group": {
+            /* mirrors html_checkbox_group() in R: the binding sits
+               on the box, members carry only their marker */
+            var cgSel = (c.selected || []).map(String);
+            var cgBox = el("div", assign(bindAttrs(c, "input"), {
+                "class": "g-checkgroup-box"
+            }));
+            (c.choices || []).forEach(function (ch, i) {
+                var item = el("div", { "class": "g-check" });
+                var itemId = c.id + "_" + (i + 1);
+                item.appendChild(el("input", {
+                    id: itemId,
+                    type: "checkbox",
+                    value: ch.value,
+                    "class": "g-checkbox",
+                    "data-g-group-member": "1",
+                    checked: cgSel.indexOf(String(ch.value)) !== -1
+                        ? "checked" : null
+                }));
+                var cgLab = el("label", { "for": itemId });
+                cgLab.textContent = ch.label;
+                item.appendChild(cgLab);
+                cgBox.appendChild(item);
+            });
+            return fieldGroup(c, cgBox);
+        }
         case "slider_input": {
             /* Three number layers, mirroring html_slider() in R --
                the two must agree: a bubble above the thumb, min/max
@@ -1415,6 +1483,17 @@
         case "table_output":
             return el("div", assign(slotAttrs(c), {
                 "class": "g-table-output"
+            }));
+        case "data_table":
+            /* mirrors the R lowering: an empty shell carrying the
+               display options as data; the interactive build happens
+               when the value arrives */
+            return el("div", assign(slotAttrs(c), {
+                "class": "g-table-output g-datatable",
+                "data-g-page-length": c.page_length,
+                "data-g-length-menu": (c.length_menu || []).join(","),
+                "data-g-searchable": c.searchable === false ? "0" : "1",
+                "data-g-sortable": c.sortable === false ? "0" : "1"
             }));
         case "plot_output":
             return el("img", assign(slotAttrs(c), {
@@ -1611,6 +1690,185 @@
         el.appendChild(tbl);
     }
 
+    /* ---------- interactive data table ---------- */
+
+    /* Client-side sort, filter and pagination over the same table
+       value a plain table_output receives. The client holds the
+       whole value and rearranges it locally; the server never hears
+       about a sort. Numeric columns (align === "num") sort
+       numerically, the rest as text -- the alignment the wire
+       already carries doubles as the type signal. Mirrors
+       _GlintyDataTable in dart: the two must agree.
+
+       The controls are built once and persist across value updates
+       and re-renders -- rebuilding them would steal focus from the
+       search box on every keystroke. Only the table and footer
+       rebuild. */
+
+    function dataTableState(el) {
+        var st = el._gdt;
+        if (st) return st;
+        st = el._gdt = {
+            page: 0,
+            search: "",
+            sortCol: -1,
+            sortAsc: true,
+            pageLength: Number(el.dataset.gPageLength) || 10,
+            menu: (el.dataset.gLengthMenu || "10,25,50,100")
+                .split(",").map(Number),
+            searchable: el.dataset.gSearchable !== "0",
+            sortable: el.dataset.gSortable !== "0",
+            data: {}
+        };
+
+        var controls = document.createElement("div");
+        controls.className = "g-dt-controls";
+        var lenSel = document.createElement("select");
+        lenSel.className = "g-select g-dt-length";
+        st.menu.forEach(function (n) {
+            var o = document.createElement("option");
+            o.value = String(n);
+            o.textContent = n + " rows";
+            if (n === st.pageLength) o.selected = true;
+            lenSel.appendChild(o);
+        });
+        lenSel.addEventListener("change", function () {
+            st.pageLength = Number(lenSel.value);
+            st.page = 0;
+            renderDataTable(el);
+        });
+        controls.appendChild(lenSel);
+        if (st.searchable) {
+            var box = document.createElement("input");
+            box.type = "search";
+            box.placeholder = "Search";
+            box.className = "g-input g-dt-search";
+            box.addEventListener("input", function () {
+                st.search = box.value;
+                st.page = 0;
+                renderDataTable(el);
+            });
+            controls.appendChild(box);
+        }
+        el.appendChild(controls);
+
+        st.body = document.createElement("div");
+        st.body.className = "g-dt-body";
+        el.appendChild(st.body);
+        st.footer = document.createElement("div");
+        st.footer.className = "g-dt-footer";
+        el.appendChild(st.footer);
+        return st;
+    }
+
+    function dataTableValue(el, data) {
+        var st = dataTableState(el);
+        st.data = data || {};
+        renderDataTable(el);
+    }
+
+    function renderDataTable(el) {
+        var st = dataTableState(el);
+        var align = st.data.align || [];
+        var header = st.data.header || [];
+        var rows = st.data.rows || [];
+
+        var q = st.search.toLowerCase();
+        var filtered = !q ? rows : rows.filter(function (r) {
+            return r.some(function (c) {
+                return String(c).toLowerCase().indexOf(q) !== -1;
+            });
+        });
+        if (st.sortCol >= 0) {
+            var ci = st.sortCol;
+            var numCol = align[ci] === "num";
+            filtered = filtered.slice().sort(function (a, b) {
+                var d;
+                if (numCol) {
+                    d = Number(a[ci]) - Number(b[ci]);
+                } else {
+                    var x = String(a[ci]);
+                    var y = String(b[ci]);
+                    d = x < y ? -1 : x > y ? 1 : 0;
+                }
+                return st.sortAsc ? d : -d;
+            });
+        }
+        var total = filtered.length;
+        var pages = Math.max(1, Math.ceil(total / st.pageLength));
+        /* clamp rather than reset: a value update keeps the reader's
+           place unless the place stopped existing */
+        if (st.page >= pages) st.page = pages - 1;
+        if (st.page < 0) st.page = 0;
+        var from = st.page * st.pageLength;
+        var pageRows = filtered.slice(from, from + st.pageLength);
+
+        st.body.textContent = "";
+        var tbl = document.createElement("table");
+        tbl.className = "g-table";
+        var thead = document.createElement("thead");
+        var hr = document.createElement("tr");
+        header.forEach(function (h, i) {
+            var th = document.createElement("th");
+            th.textContent = h
+                + (st.sortCol === i ? (st.sortAsc ? " ▴" : " ▾")
+                                    : "");
+            if (align[i] === "num") th.className = "g-num";
+            if (st.sortable) {
+                th.classList.add("g-dt-sortable");
+                th.addEventListener("click", function () {
+                    if (st.sortCol === i) {
+                        st.sortAsc = !st.sortAsc;
+                    } else {
+                        st.sortCol = i;
+                        st.sortAsc = true;
+                    }
+                    renderDataTable(el);
+                });
+            }
+            hr.appendChild(th);
+        });
+        thead.appendChild(hr);
+        tbl.appendChild(thead);
+        var tbody = document.createElement("tbody");
+        pageRows.forEach(function (r) {
+            var tr = document.createElement("tr");
+            r.forEach(function (c, i) {
+                var td = document.createElement("td");
+                td.textContent = c;
+                if (align[i] === "num") td.className = "g-num";
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        st.body.appendChild(tbl);
+
+        st.footer.textContent = "";
+        var info = document.createElement("span");
+        info.className = "g-dt-info";
+        var last = Math.min(from + st.pageLength, total);
+        info.textContent = total === 0 ? "No rows"
+            : "Showing " + (from + 1) + "–" + last + " of " + total
+              + (q && rows.length !== total
+                    ? " (filtered from " + rows.length + ")" : "");
+        st.footer.appendChild(info);
+        var mkNav = function (label, delta, enabled) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "g-btn g-btn-ghost g-dt-nav";
+            b.textContent = label;
+            b.disabled = !enabled;
+            b.addEventListener("click", function () {
+                st.page += delta;
+                renderDataTable(el);
+            });
+            st.footer.appendChild(b);
+        };
+        mkNav("‹ Prev", -1, st.page > 0);
+        mkNav("Next ›", 1, st.page < pages - 1);
+    }
+
     /* Apply an output message: the value is typed by kind (what the
        renderer produced), and the receiving element decides how to
        show it. The DOM property names of protocol 2 are gone from
@@ -1628,7 +1886,11 @@
             el.innerHTML = msg.value === null ? "" : msg.value;
             break;
         case "table":
-            buildTable(el, msg.value || {});
+            if (el.classList.contains("g-datatable")) {
+                dataTableValue(el, msg.value || {});
+            } else {
+                buildTable(el, msg.value || {});
+            }
             break;
         case "image": {
             var v = msg.value || {};

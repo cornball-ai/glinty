@@ -282,6 +282,24 @@ component_fixtures <- function() {
                       notes = "one value for the group, from the selected member"
         ),
                  list(
+                      name = "checkbox-group",
+                      component = component("checkbox_group", id = "toppings",
+                choices = c(Cheese = "cheese", Mushroom = "mushroom",
+                    Onion = "onion"),
+                selected = c("cheese", "onion")),
+                      notes = paste("one id, many boxes; the value is the",
+                                    "checked members' values in choice",
+                                    "order, an array at every length")
+        ),
+                 list(
+                      name = "checkbox-group-empty",
+                      component = component("checkbox_group", id = "extras",
+                choices = c(A = "a", B = "b")),
+                      notes = paste("nothing selected is a real state:",
+                                    "character(0) on the server, [] on",
+                                    "the wire, never NULL")
+        ),
+                 list(
                       name = "date-input",
                       component = component("date_input", id = "start",
                 label = "Start:", value = "2026-07-27",
@@ -311,6 +329,20 @@ component_fixtures <- function() {
                       name = "table-output",
                       component = component("table_output", id = "results"),
                       notes = "structure on the wire (header + rows), never markup"
+        ),
+                 list(
+                      name = "data-table",
+                      component = component("data_table", id = "grid",
+                page_length = 5L, length_menu = c(5, 30, 50),
+                searchable = FALSE),
+                      notes = paste("same table value, interactive shell: options",
+                                    "ride as data attributes, length_menu always",
+                                    "an array")
+        ),
+                 list(
+                      name = "data-table-defaults",
+                      component = component("data_table", id = "grid2"),
+                      notes = "defaults spelled out on the wire, nothing implied"
         ),
                  list(
                       name = "image-output",

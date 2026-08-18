@@ -255,6 +255,15 @@ COMPONENT_SCHEMA <- list(
         selected = field("string"),
         emit = field("enum", default = "settle", values = c("live", "settle"))
     ),
+                         checkbox_group = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        choices = field("choices", required = TRUE),
+        # the array of checked members' values -- at every length,
+        # like a multiple select's `selected`
+        selected = field("strings"),
+        emit = field("enum", default = "settle", values = c("live", "settle"))
+    ),
                          slider_input = list(
         id = field("string", required = TRUE),
         label = field("string", default = ""),
@@ -328,6 +337,14 @@ COMPONENT_SCHEMA <- list(
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),
+                         data_table = list(
+        id = field("string", required = TRUE),
+        page_length = field("int", default = 10L, min = 1),
+        # page-size options offered; always an array on the wire
+        length_menu = field("numbers", default = c(10, 25, 50, 100)),
+        searchable = field("bool", default = TRUE),
+        sortable = field("bool", default = TRUE)
+    ),
                          plot_output = list(
         id = field("string", required = TRUE),
         width = field("int", min = 1, max = 8192),
@@ -396,7 +413,8 @@ COMPONENT_SCHEMA <- list(
 #'
 #' @keywords internal
 OUTPUT_KINDS <- list(text_output = "text", verbatim_output = "text",
-                     table_output = "table", plot_output = "image",
+                     table_output = "table", data_table = "table",
+                     plot_output = "image",
                      image_output = "image", audio_output = "audio",
                      video_output = "video", ui_output = "ui")
 
@@ -426,6 +444,8 @@ INPUT_META <- list(
                                        value_type_multiple = "strings"),
                    checkbox_input = list(message = "input", value_type = "bool"),
                    radio_buttons = list(message = "input", value_type = "string"),
+                   checkbox_group = list(message = "input",
+                                         value_type = "strings"),
                    slider_input = list(message = "input", value_type = "number"),
                    range_slider = list(message = "input", value_type = "numbers"),
                    date_input = list(message = "input", value_type = "string"),
@@ -728,6 +748,20 @@ check_component <- function(type, out) {
             }
             out$selected <- selected[[1L]]
         }
+    }
+    if (identical(type, "data_table")) {
+        # as.list() so a one-option menu still emits an array
+        out$length_menu <- as.list(out$length_menu)
+    }
+    if (identical(type, "checkbox_group")) {
+        # as.list() so toJSON() emits an array at every length --
+        # select_input's multiple rule; the group's value is always
+        # plural even when one or zero boxes are checked
+        out$selected <- as.list(if (is.null(out$selected)) {
+                character(0L)
+            } else {
+                as.character(out$selected)
+            })
     }
     if (identical(type, "range_slider")) {
         v <- out$value

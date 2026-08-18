@@ -25,9 +25,9 @@ const supportedComponents = <String>{
   'text', 'heading', 'link', 'icon', 'divider', 'spacer',
   'page', 'row', 'column', 'panel',
   'text_input', 'password_input', 'textarea_input', 'number_input',
-  'select_input', 'checkbox_input', 'radio_buttons', 'slider_input',
-  'range_slider', 'button', 'download_button',
-  'text_output', 'verbatim_output', 'table_output',
+  'select_input', 'checkbox_input', 'checkbox_group', 'radio_buttons',
+  'slider_input', 'range_slider', 'button', 'download_button',
+  'text_output', 'verbatim_output', 'table_output', 'data_table',
   'plot_output', 'image_output', 'image',
   'tabset', 'conditional_panel', 'collapse', 'ui_output',
   // Drawn by the embedder's player, through audioBuilder. Declared
@@ -505,6 +505,8 @@ class GlintyRenderer {
         return _checkbox(c);
       case 'radio_buttons':
         return _radios(context, c);
+      case 'checkbox_group':
+        return _checkboxGroup(context, c);
       case 'slider_input':
         return _slider(context, c);
       case 'range_slider':
@@ -519,6 +521,8 @@ class GlintyRenderer {
         return _slot(context, c, 'text', () => _verbatim(context, c));
       case 'table_output':
         return _slot(context, c, 'table', () => _table(c));
+      case 'data_table':
+        return _slot(context, c, 'table', () => _dataTable(c));
       case 'plot_output':
         return _slot(context, c, 'image', () => _plot(context, c));
       case 'image_output':
@@ -1102,6 +1106,46 @@ class GlintyRenderer {
         ));
   }
 
+  /// One id, many boxes: the group's value is the array of checked
+  /// members' values in choice order, at every length -- the
+  /// multiple-select rule. Each toggle emits the whole array.
+  Widget _checkboxGroup(BuildContext context, GlintyComponent c) {
+    final id = c.str('id')!;
+    final raw = _value(id, c.fields['selected']);
+    final checked = raw is List ? raw.map((v) => '$v').toSet() : <String>{};
+    final choices = _choices(c);
+    return _labelled(
+        context,
+        c,
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: choices
+              .map((ch) => CheckboxListTile(
+                    key: Key('${id}_${ch.value}'),
+                    value: checked.contains(ch.value),
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(ch.label),
+                    onChanged: (v) {
+                      final next = checked.toSet();
+                      if (v == true) {
+                        next.add(ch.value);
+                      } else {
+                        next.remove(ch.value);
+                      }
+                      // choice order, never click order
+                      onInput?.call(
+                          id,
+                          choices
+                              .map((o) => o.value)
+                              .where(next.contains)
+                              .toList());
+                    },
+                  ))
+              .toList(),
+        ));
+  }
+
   Widget _slider(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final min = _numField(c, "min") ?? 0;
@@ -1608,6 +1652,25 @@ class GlintyRenderer {
           DataColumn(label: Text(header[i]), numeric: numAt(i))
       ],
       rows: rows,
+    );
+  }
+
+  /// The interactive table: same value as [_table], plus client-side
+  /// sort, filter and pagination held in a stateful widget keyed by
+  /// id. Mirrors renderDataTable in glinty.js: the two must agree.
+  Widget _dataTable(GlintyComponent c) {
+    final id = c.str('id')!;
+    final v = values[id];
+    final menu = (c.fields['length_menu'] as List? ?? const [10, 25, 50, 100])
+        .whereType<num>()
+        .toList();
+    return _GlintyDataTable(
+      key: Key(id),
+      value: v is Map ? v : null,
+      pageLength: c.integer('page_length') ?? 10,
+      menu: menu,
+      searchable: c.boolean('searchable', fallback: true),
+      sortable: c.boolean('sortable', fallback: true),
     );
   }
 
@@ -2142,6 +2205,171 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         onChanged: _onChanged,
         onSubmitted: _onSubmitted,
       );
+}
+
+/// The interactive table. Sort, filter and page state live here, in
+/// the client, where the click happened -- the server never hears
+/// about a sort. Keyed by id, so the state survives value updates and
+/// re-renders; a new value clamps the page instead of resetting it,
+/// keeping the reader's place unless the place stopped existing.
+///
+/// Must agree with renderDataTable in glinty.js: case-insensitive
+/// contains filter across all columns, numeric sort where the value's
+/// align says "num" (a non-number in a numeric column compares equal,
+/// as JS Number() -> NaN does), text sort elsewhere by code unit like
+/// JS < on strings.
+class _GlintyDataTable extends StatefulWidget {
+  const _GlintyDataTable({
+    super.key,
+    required this.value,
+    required this.pageLength,
+    required this.menu,
+    required this.searchable,
+    required this.sortable,
+  });
+
+  final Map? value;
+  final int pageLength;
+  final List<num> menu;
+  final bool searchable;
+  final bool sortable;
+
+  @override
+  State<_GlintyDataTable> createState() => _GlintyDataTableState();
+}
+
+class _GlintyDataTableState extends State<_GlintyDataTable> {
+  final _search = TextEditingController();
+  late int _pageLength = widget.pageLength;
+  int _page = 0;
+  int? _sortCol;
+  bool _sortAsc = true;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  int _compare(String a, String b, bool numeric) {
+    if (numeric) {
+      final x = num.tryParse(a);
+      final y = num.tryParse(b);
+      if (x == null || y == null) return 0;
+      return x.compareTo(y);
+    }
+    return a.compareTo(b);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.value;
+    final header =
+        (v?['header'] as List? ?? const []).map((h) => h.toString()).toList();
+    // No value yet: an empty shell, like the browser's, and like
+    // _table. (Material's DataTable asserts columns.isNotEmpty, so
+    // this branch is not merely cosmetic.)
+    if (header.isEmpty) return const SizedBox.shrink();
+    final align =
+        (v?['align'] as List? ?? const []).map((a) => a.toString()).toList();
+    bool numAt(int i) => i < align.length && align[i] == 'num';
+    final all = (v?['rows'] as List? ?? const [])
+        .map((r) => (r as List).map((c) => c.toString()).toList())
+        .toList();
+
+    final q = _search.text.toLowerCase();
+    var rows = q.isEmpty
+        ? all
+        : all.where((r) => r.any((c) => c.toLowerCase().contains(q))).toList();
+    final sc = _sortCol;
+    if (sc != null && sc < header.length) {
+      rows = List.of(rows)
+        ..sort((a, b) {
+          final d = _compare(a[sc], b[sc], numAt(sc));
+          return _sortAsc ? d : -d;
+        });
+    }
+
+    final total = rows.length;
+    final pages = (total / _pageLength).ceil().clamp(1, 1 << 30);
+    final page = _page.clamp(0, pages - 1);
+    final from = page * _pageLength;
+    final last = (from + _pageLength).clamp(0, total);
+    final pageRows = rows.sublist(from, last);
+
+    final controls = Row(children: [
+      DropdownButton<int>(
+        value: widget.menu.map((n) => n.toInt()).contains(_pageLength)
+            ? _pageLength
+            : null,
+        items: [
+          for (final n in widget.menu)
+            DropdownMenuItem(value: n.toInt(), child: Text('$n rows'))
+        ],
+        onChanged: (n) => setState(() {
+          if (n != null) _pageLength = n;
+          _page = 0;
+        }),
+      ),
+      if (widget.searchable) ...[
+        const SizedBox(width: 12),
+        Expanded(
+            child: TextField(
+          controller: _search,
+          decoration: const InputDecoration(
+              hintText: 'Search', isDense: true, prefixIcon: Icon(Icons.search)),
+          onChanged: (_) => setState(() => _page = 0),
+        )),
+      ],
+    ]);
+
+    final table = DataTable(
+      sortColumnIndex: sc != null && sc < header.length ? sc : null,
+      sortAscending: _sortAsc,
+      columns: [
+        for (var i = 0; i < header.length; i++)
+          DataColumn(
+            label: Text(header[i]),
+            numeric: numAt(i),
+            onSort: widget.sortable
+                ? (i, asc) => setState(() {
+                      _sortCol = i;
+                      _sortAsc = asc;
+                    })
+                : null,
+          )
+      ],
+      rows: [
+        for (final r in pageRows)
+          DataRow(cells: [for (final c in r) DataCell(Text(c))])
+      ],
+    );
+
+    final info = total == 0
+        ? 'No rows'
+        : 'Showing ${from + 1}–$last of $total'
+            '${q.isNotEmpty && all.length != total ? ' (filtered from ${all.length})' : ''}';
+    final footer = Row(children: [
+      Expanded(child: Text(info)),
+      TextButton(
+          onPressed: page > 0 ? () => setState(() => _page = page - 1) : null,
+          child: const Text('‹ Prev')),
+      TextButton(
+          onPressed: page < pages - 1
+              ? () => setState(() => _page = page + 1)
+              : null,
+          child: const Text('Next ›')),
+    ]);
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      controls,
+      SizedBox(
+          width: double.infinity,
+          child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal, child: table)),
+      footer,
+    ]);
+  }
 }
 
 /// A download button that owns the answer to its own request.

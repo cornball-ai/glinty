@@ -139,6 +139,31 @@ radio_buttons <- function(id, label = "", choices = character(0),
               selected = selected, emit = emit)
 }
 
+#' Create a checkbox group input
+#'
+#' One id, many boxes: the value is the array of checked members'
+#' values, an array at every length -- `["a"]`, never `"a"` -- the
+#' same rule as a multiple select. Order follows the choices, not
+#' the clicks. Unlike [radio_buttons()], nothing is selected unless
+#' `selected` says so: an empty selection is a real state here.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param choices choices in any of the usual shapes
+#' @param selected character values checked at start; NULL for none
+#' @param emit character "settle" (default) or "live"
+#' @return A UI component
+#' @examples
+#' checkbox_group("show_vars", "Columns:",
+#'     choices = c("carat", "cut", "color"),
+#'     selected = c("carat", "cut"))
+#' @export
+checkbox_group <- function(id, label = "", choices = character(0),
+                           selected = NULL, emit = "settle") {
+    component("checkbox_group", id = id, label = label, choices = choices,
+              selected = selected, emit = emit)
+}
+
 #' Create a range slider
 #'
 #' @param id character input ID

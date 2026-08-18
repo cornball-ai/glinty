@@ -89,6 +89,10 @@ input_seed_value <- function(x) {
            number_input = x$value,
            checkbox_input = isTRUE(x$value),
            radio_buttons = x$selected,
+           # always plural, character(0) when nothing is checked --
+           # the multiple-select rule
+           checkbox_group = as.character(unlist(x$selected,
+            use.names = FALSE)),
            slider_input = if (is.null(x$value)) {
             slider_default(x$min, x$max)
         } else {

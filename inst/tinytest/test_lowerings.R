@@ -123,7 +123,7 @@ expect_error(component_to_html(list(component = "text")), "expects a component")
 # callback can be fired directly.
 for (nm in names(INPUT_META)) {
     args <- list(nm, id = "probe")
-    if (nm %in% c("select_input", "radio_buttons")) {
+    if (nm %in% c("select_input", "radio_buttons", "checkbox_group")) {
         args$choices <- c("a", "b")
     }
     if (nm %in% c("slider_input", "range_slider")) {
@@ -461,7 +461,7 @@ for (nm in names(INPUT_META)) {
         next
     }
     args <- list(nm, id = "probe")
-    if (nm %in% c("select_input", "radio_buttons")) {
+    if (nm %in% c("select_input", "radio_buttons", "checkbox_group")) {
         args$choices <- c("a", "b")
     }
     if (nm %in% c("slider_input", "range_slider")) {
@@ -577,3 +577,37 @@ expect_equal(lengths(regmatches(tabs, gregexpr("g-hidden", tabs))), 1L)
 # an immediate-mode renderer would not
 expect_true(grepl(">a<", tabs, fixed = TRUE))
 expect_true(grepl(">b<", tabs, fixed = TRUE))
+
+# --- a checkbox group binds the box, never the members ---
+#
+# A member carrying data-g-target would send a scalar boolean where
+# the server keeps a list, so the binding sits on the box and the
+# members carry only their marker. Mirrors range_slider's rule.
+grp <- component_to_html(component("checkbox_group", id = "tops",
+                                   choices = c(A = "a", B = "b", C = "c"),
+                                   selected = c("a", "c")))
+expect_equal(lengths(regmatches(grp,
+    gregexpr('data-g-target="tops"', grp, fixed = TRUE))), 1L)
+expect_equal(lengths(regmatches(grp,
+    gregexpr("data-g-group-member", grp, fixed = TRUE))), 3L)
+expect_equal(lengths(regmatches(grp,
+    gregexpr('checked="checked"', grp, fixed = TRUE))), 2L)
+expect_false(grepl('type="checkbox"[^>]*data-g-target', grp))
+
+# --- a data table lowers to an empty shell carrying its options ---
+#
+# The interactive build happens client-side when the value arrives,
+# so the server emits only the slot plus the display options as data
+# attributes -- the exact shell glinty.js builds, or hydration lies.
+dtab <- component_to_html(component("data_table", id = "grid",
+                                    page_length = 5L,
+                                    length_menu = c(5, 30, 50),
+                                    searchable = FALSE))
+expect_true(grepl('class="g-table-output g-datatable"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-page-length="5"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-length-menu="5,30,50"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-searchable="0"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-sortable="1"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-output="grid"', dtab, fixed = TRUE))
+# empty: no table markup until a value arrives
+expect_false(grepl("<table", dtab, fixed = TRUE))

@@ -248,6 +248,36 @@ expect_error(component("range_slider", id = "r", min = 0, max = 10,
 full <- range_slider("span", min = 5, max = 50)
 expect_equal(unlist(full$value), c(5, 50))
 
+# --- a checkbox group's selection is plural at every length ---
+grp <- component("checkbox_group", id = "tops",
+                 choices = c(A = "a", B = "b", C = "c"),
+                 selected = c("a", "c"))
+expect_equal(unlist(grp$selected), c("a", "c"))
+expect_true(grepl('"selected":["a","c"]', as_json(grp), fixed = TRUE))
+# one selection stays an array; none is [], never NULL
+one_g <- component("checkbox_group", id = "t", choices = c("a", "b"),
+                   selected = "a")
+expect_true(grepl('"selected":["a"]', as_json(one_g), fixed = TRUE))
+none_g <- component("checkbox_group", id = "t", choices = c("a", "b"))
+expect_true(grepl('"selected":[]', as_json(none_g), fixed = TRUE))
+# unlike radio_buttons, the widget selects nothing by default
+expect_equal(length(checkbox_group("x", choices = c("a", "b"))$selected), 0L)
+expect_error(component("checkbox_group", id = "t", choices = c("a", "b"),
+                       selected = c("a", NA)),
+             "must be strings")
+
+# --- a data table's length menu is an array at every length ---
+dt <- component("data_table", id = "grid")
+expect_equal(dt$page_length, 10L)
+expect_true(grepl('"length_menu":[10,25,50,100]', as_json(dt), fixed = TRUE))
+expect_true(dt$searchable)
+expect_true(dt$sortable)
+# one menu entry stays an array
+one_dt <- component("data_table", id = "g", length_menu = 25)
+expect_true(grepl('"length_menu":[25]', as_json(one_dt), fixed = TRUE))
+expect_error(component("data_table", id = "g", page_length = 0L),
+             "must be >= 1")
+
 # --- fixtures ---
 fx <- component_fixtures()
 # Every component in the schema, exactly once. "length >= 20" let the

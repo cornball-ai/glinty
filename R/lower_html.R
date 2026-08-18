@@ -50,6 +50,7 @@ component_to_html <- function(x) {
            select_input = html_select(x),
            checkbox_input = html_checkbox(x),
            radio_buttons = html_radio(x),
+           checkbox_group = html_checkbox_group(x),
            slider_input = html_slider(x),
            range_slider = html_range_slider(x),
            date_input = html_text_like(x, "date"),
@@ -61,6 +62,21 @@ component_to_html <- function(x) {
                 list(class = "g-verbatim-output"))),
            table_output = html_el("div", c(html_slot(x),
                 list(class = "g-table-output"))),
+           data_table = html_el("div", c(html_slot(x),
+                list(class = "g-table-output g-datatable",
+                     "data-g-page-length" = x$page_length,
+                     "data-g-length-menu" = paste(unlist(x$length_menu),
+                                                  collapse = ","),
+                     "data-g-searchable" = if (isTRUE(x$searchable)) {
+                        "1"
+                    } else {
+                        "0"
+                    },
+                     "data-g-sortable" = if (isTRUE(x$sortable)) {
+                        "1"
+                    } else {
+                        "0"
+                    }))),
            plot_output = html_plot_output(x),
            image_output = html_el("img", c(html_slot(x),
                 list(class = "g-image-output", alt = x$alt)), void = TRUE),
@@ -425,6 +441,34 @@ html_checkbox <- function(x) {
     html_el("div", list(class = "g-check"),
             paste0(html_el("input", attrs, void = TRUE),
                    html_el("label", list("for" = x$id), html_escape(x$label))))
+}
+
+# The group's value is the array of checked members, so the binding
+# sits on the box -- select_input's multiple rule joined with
+# range_slider's box binding. A member carrying data-g-target would
+# send a scalar boolean where the server keeps a list.
+html_checkbox_group <- function(x) {
+    sel <- as.character(unlist(x$selected, use.names = FALSE))
+    items <- paste(vapply(seq_along(x$choices), function(i) {
+        ch <- x$choices[[i]]
+        item_id <- paste0(x$id, "_", i)
+        html_el("div", list(class = "g-check"),
+                paste0(html_el("input",
+                    list(id = item_id, type = "checkbox",
+                         value = ch$value, class = "g-checkbox",
+                         "data-g-group-member" = "1",
+                         checked = if (ch$value %in% sel) {
+                        "checked"
+                    } else {
+                        NULL
+                    }),
+                    void = TRUE),
+                       html_el("label", list("for" = item_id),
+                               html_escape(ch$label))))
+    }, character(1L)), collapse = "")
+    box <- html_el("div", c(html_bind(x), list(class = "g-checkgroup-box")),
+                   items)
+    html_field_group(x, box)
 }
 
 html_radio <- function(x) {
