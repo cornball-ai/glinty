@@ -143,6 +143,50 @@ digits, shape shows 0.09) where render_table() sends full precision
 (0.0903296). A digits/format control on render_table() would close
 it; deferred.
 
+## Round 4: Tabsets (shiny-examples 006, 2026-08-17)
+
+Radio buttons, a continuous 1..1000 slider, and a Plot / Summary /
+Table tabset over one shared reactive. In-process check pins the
+emission graph and that a tab switch is an input, not a re-render.
+Framework yield, all fixed on this branch:
+
+- **The 41-tick scale mushed on a narrow track**: 11 labels in
+  ~230px is unreadable. The label budget is now width-aware
+  (floor(width / 70), floor 2): R emits the width-blind default and
+  each client rebuilds to its measured budget; thinned positions
+  keep their tick at minor size, the last stop is always labeled
+  and a regular label within one gap of it yields. Same rule in R /
+  JS / dart (the step-grid form of the rule reproduces the old
+  every-stop / every-2nd behavior at the default budget).
+- **Two sync gaps for server-rendered scales**: nothing rebuilt them
+  at hydration (width unknown server-side), and nothing rebuilt a
+  slider revealed by a conditional panel or a tab switch (measured
+  0 while hidden). welcome, refreshConditionals and activateTab now
+  run syncSliderLabels over the affected range inputs.
+- **Stepless labels showed float noise** (300.7 where the Shiny
+  reference shows integers). Cribbed the actual rule from the
+  clone: shiny's findStepSize (R/input-slider.R) derives step 1 for
+  integer ends spanning >= 2, else a pretty ~range/100 decimal, and
+  ionRangeSlider rounds grid values to the step's precision. glinty
+  now derives the same implied step when step is absent and snaps
+  scale labels to it: 1..1000 reads 1, 301, 600, 1000. Pinned in
+  test_slider_scale.R.
+- **Flutter clipped tab content at a hardcoded 200px** TabBarView.
+  Now an IndexedStack synced to the TabController: the set sizes to
+  its largest panel, every panel stays alive (the browser keeps
+  hidden tab bodies in the DOM the same way), a 300px plot in a tab
+  keeps its height. No swipe, matching the browser.
+
+- **Flutter's slider layers only aligned with the thumb at the
+  midpoint** (Troy caught it live): Material insets the track by
+  max(overlay, thumb)/2 = 24 per side, while bubble and scale
+  positioned at f * width. A paint probe measured the true inset
+  (slider_geometry_probe_test, kept as a regression net); bubble
+  and scale now map through trackInset + f * (width - 2*inset), the
+  track's own coordinate space. The full-bleed alternative
+  (SliderThemeData.padding: zero) stopped painting the inactive
+  track half, so it was reverted in favor of moving the layers.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
