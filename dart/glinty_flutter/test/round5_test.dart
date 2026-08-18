@@ -2903,6 +2903,41 @@ void _ticketRefusals() {
       expect(find.text('still here'), findsOneWidget);
     });
 
+    testWidgets('a fill panel with a grown child on the CENTERED page',
+        (tester) async {
+      // The centered page branch writes no explicit height record --
+      // the degrade leans on composition: the page's own column wraps
+      // every child in a record (height false for the non-grown), so
+      // the panel reads false and refuses the grant. This pins that
+      // composition. If the per-child wrap ever stops covering it,
+      // fill's `?? true` default grants Expanded into the scroll
+      // view's unbounded height, and this test fails as a crash
+      // instead of a wrong pixel.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Centered',
+        'children': [
+          {
+            'component': 'panel',
+            'fill': true,
+            'children': [
+              {
+                'component': 'column',
+                'grow': 1,
+                'children': [
+                  {'component': 'text', 'value': 'content-sized',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g15');
+      expect(find.text('content-sized'), findsOneWidget);
+      expect(find.ancestor(of: find.text('content-sized'),
+          matching: find.byType(Expanded)), findsNothing);
+    });
+
     testWidgets('the stretch shell inside a scrolling page keeps filling',
         (tester) async {
       // The scroll view un-bounds height, but the stretch row bounds
