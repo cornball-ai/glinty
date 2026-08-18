@@ -474,6 +474,48 @@ collision still materializes if an app touches ggplot2 — the lazy
 autoload attaches graphics *after* glinty and graphics::text wins.
 `txt()` sidesteps the whole class.
 
+## Round 13: Selectize (shiny-examples 013, 2026-08-17)
+
+Gap #3 closed: `select_input(search = TRUE)`, a combobox over the
+same closed choices. The design line that survived every decision:
+**typed text is a view, never a value.** Filtering happens against
+the declared choice list, only picking a real choice reports, and
+the server's value domain never widens to free text — which is also
+why selectize's `create = TRUE` is deliberately not taken.
+
+The browser build extends the box-binding rule to its logical end:
+binding and current value live on the box (`data-g-selected`), the
+option list is pre-rendered, and every interaction reads and writes
+DOM state. That is not a style preference — the client **adopts**
+server markup when ui_revision matches, so a control whose state
+lives in JS memory would come up empty on exactly the pages the
+server rendered. Flutter is one widget swap: Material's
+`DropdownMenu(enableFilter:)` is this component natively.
+
+**Round-13 bug, found by the port's own check:** an empty JSON
+array from the wire normalized to `NULL` — `unlist(list())` — so
+deselecting the last item of a multi select set the server's value
+to NULL where the seed for the identical state is `character(0)`.
+The array-at-every-length rule held everywhere except the server's
+own front door. Fixed in normalize_value ([] → character(0)); the
+old behavior was even pinned by a test, which is the reminder that
+a pin proves stability, not correctness. Surfaced only because
+drive.R was ALSO bypassing normalize_value (feeding raw lists), and
+the two wrongs disagreed — the harness now routes input through the
+live dispatch path, per its own header promise.
+
+Ported unfaithfully: e0/e1/e2/e5 (plain, zero-config→search, multi,
+capped-multi→uncapped). Not taken: create (domain), maxOptions /
+maxItems (display knobs), raw-JS placeholder/onInitialize/render/
+score/load and the GitHub remote search (the escape hatch this
+vocabulary removes; server-driven choices already have
+update_select_input). Live-verified in the browser end to end:
+type-to-filter, arrow-key highlight, Enter pick reporting the value,
+label snap-back, and the select-then-deselect chr(0) round trip.
+Flutter: headless only this round (281 tests, incl. DropdownMenu
+value-vs-label reporting); the viewer tab's compositor wedge now
+blocks semantics entirely, not just capture.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
@@ -520,7 +562,9 @@ radioButtons, textAreaInput (3), passwordInput -> see gaps.
    cosmetic-out-of-scope.
 3. **selectize-style select** — selectizeInput (16) + update (10):
    searchable dropdown, server-side choices, multi/tags. A
-   `search = TRUE` flag on select_input covers most uses.
+   `search = TRUE` flag on select_input covers most uses. **CLOSED
+   round 13: select_input(search = TRUE) in all three renderers**;
+   create/maxItems/raw-JS options deliberately not taken.
 4. **plot interaction** — brushedPoints (14) + nearPoints (9): click/
    brush/hover on plot_output reported to the server. Protocol-level
    (new input frames). Gates the whole "Interactive Plots" section.
