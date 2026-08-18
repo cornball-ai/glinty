@@ -7,6 +7,9 @@
 import 'package:flutter/material.dart';
 import 'package:glinty_flutter/glinty_flutter.dart';
 
+import 'transfer_stub.dart'
+    if (dart.library.html) 'transfer_web.dart' as transfer;
+
 void main(List<String> args) {
   final host = Uri.base.host.isEmpty ? 'localhost' : Uri.base.host;
   final port = int.tryParse(Uri.base.queryParameters['port'] ??
@@ -19,6 +22,11 @@ void main(List<String> args) {
     // SizedBox.expand: a Scaffold body hands its child loose
     // constraints, and a shrink-wrapped app shows the embedder's
     // Material surface through every margin below the content.
-    home: Scaffold(body: SizedBox.expand(child: GlintyApp(url: url))),
+    home: Scaffold(
+        body: SizedBox.expand(
+            child: GlintyApp(
+                url: url,
+                onUpload: transfer.uploadHandler,
+                onDownload: transfer.downloadHandler))),
   ));
 }
