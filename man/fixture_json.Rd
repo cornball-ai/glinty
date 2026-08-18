@@ -10,6 +10,7 @@ character JSON
 }
 \description{
 The wire form of every fixture, plus its name and note, as one
-document. This is what a client in another language consumes.
+document -- and the vocabulary block clients pin their declaration
+tables to. This is what a client in another language consumes.
 }
 \keyword{internal}
