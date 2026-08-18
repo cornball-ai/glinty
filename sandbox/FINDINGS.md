@@ -409,6 +409,71 @@ filed this round, from the loop's accumulated evidence: glinty #56
 (run_app loop waits on external fds) and #57 (client declaration
 tables derived from the R schema instead of hand-restated).
 
+## Round 12: DataTables (shiny-examples 012, 2026-08-17)
+
+The strategic-gap round: gap-table #2 (interactive table) and #5
+(checkbox group) both closed, because the app is nothing but the two
+of them. `data_table()` takes the same table value `table_output`
+does and adds client-side sort/filter/paginate — the server lowers
+an empty shell with the options as data attributes, the interactive
+build happens where the value arrives, and `align` doubles as the
+sort-type signal (`"num"` sorts numerically). Design decisions that
+proved out live:
+
+- **Interaction never touches the server.** Sorting 1000 diamonds is
+  a local rearrangement; the trace shows zero frames from a sort,
+  filter, or page click. Shiny ships DT (a JS library wrapping the
+  same idea); glinty's is ~170 lines of glinty.js and one stateful
+  Flutter widget, same state machine, asserted equal by tests on
+  both sides.
+- **Clamp, don't reset.** A value update keeps the reader's page
+  unless the page stopped existing. Verified end to end in one
+  frame: uncheck a column while on page 2 of a filtered, sorted
+  view — the server re-renders the value, the view comes back still
+  on page 2, filter and sort intact.
+- **Persistent controls over rebuilt body.** The browser builds the
+  length select and search box once per element, so focus survives
+  value updates; only table and footer rebuild.
+- **checkbox_group is the plural radio_buttons** and the third
+  member of the array-at-every-length family (multiple select,
+  range_slider, now selected/reported values incl. `[]`). Binding
+  on the box, members carry only a marker — a member with a target
+  would report a scalar where the server keeps a list. Its live
+  role here: the diamonds column picker, plural value subsetting
+  the data.frame server-side.
+- **The whole 012 app needed zero new layout machinery**: tabset +
+  conditional panels keyed on the tabset's own input (input_is on
+  tab titles, where Shiny writes a JS expression string) composed
+  with the new components on the first try.
+
+Ported unfaithfully where DT is cosmetic: orderClasses (tinting the
+sorted column) skipped; DT's rownames pseudo-column dropped, mtcars
+keeps its models by making them a real `model` column (render_table
+discards rownames, and that is the honest wire shape — a column is
+data or it isn't).
+
+Verification asymmetry worth recording: browser frontend verified
+live (sort arrows, case-insensitive filter with "(filtered from
+1000)", paging, the clamp scenario, per-tab independent state, iris
+honoring page_length 5 / menu 5-30-50); flutter renderer verified
+headless (278 dart tests incl. a 1000-rows-in-a-tabset scale test)
+plus semantics-tree readout of the live viewer showing the real
+server value rendered — but live *interaction* on the web viewer was
+blocked by the stuck CDP device-metrics override (viewport pinned
+1920x905 in a 1568-wide window; pointer events never reach the
+engine, resize doesn't propagate, capture times out). Even a fresh
+tab inherited it this time, so "recreate the tab" is no longer a
+complete recipe; native-window ffmpeg capture or a driven
+RepaintBoundary test remains the fallback. Infrastructure, not
+framework: the same build's logic passes every headless interaction
+test.
+
+littler note for gallery apps: glinty deliberately exports `txt()`
+not `text()` (graphics::text would collide); under littler the
+collision still materializes if an app touches ggplot2 — the lazy
+autoload attaches graphics *after* glinty and graphics::text wins.
+`txt()` sidesteps the whole class.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
@@ -449,7 +514,10 @@ radioButtons, textAreaInput (3), passwordInput -> see gaps.
    formatting remain (see round 5 deferred gaps).
 2. **interactive table** — renderDataTable/dataTableOutput/DT
    (20+16+2): sort/filter/paginate. glinty table is static. Biggest
-   strategic gap; whole "DataTables" demos rest on it.
+   strategic gap; whole "DataTables" demos rest on it. **CLOSED
+   round 12: data_table() in all three renderers**, client-side
+   over the existing table value. orderClasses tinting remains
+   cosmetic-out-of-scope.
 3. **selectize-style select** — selectizeInput (16) + update (10):
    searchable dropdown, server-side choices, multi/tags. A
    `search = TRUE` flag on select_input covers most uses.
@@ -457,7 +525,9 @@ radioButtons, textAreaInput (3), passwordInput -> see gaps.
    brush/hover on plot_output reported to the server. Protocol-level
    (new input frames). Gates the whole "Interactive Plots" section.
 5. **checkbox group** — checkboxGroupInput (12) + update (4). Clear,
-   small vocabulary gap.
+   small vocabulary gap. **CLOSED round 12: checkbox_group() in all
+   three renderers**, array-valued at every length; update_* still
+   open (choices push exists for select/radio only).
 6. **date range** — dateRangeInput (8). Small gap.
 7. **navbar page-level nav** — navbarPage (5) + navlistPanel:
    top-level chrome vs tabset-in-page. Medium layout gap.
