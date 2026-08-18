@@ -282,6 +282,7 @@ class GlintyRenderer {
   GlintyRenderer(
       {this.onInput,
       this.onLocalInput,
+      this.onFocusChanged,
       this.onLink,
       this.onEvent,
       this.onTicket,
@@ -302,6 +303,7 @@ class GlintyRenderer {
       this.pushes = const {},
       this.clears = const {},
       this.focuses = const {},
+      this.seedTicks = const {},
       this.feeds = const {},
       this.overrides = const {},
       this.condition,
@@ -315,6 +317,11 @@ class GlintyRenderer {
   /// reports every intermediate value (which is `live`) or refuses to
   /// move under the thumb.
   final GlintySink? onLocalInput;
+
+  /// A text field gained or lost keyboard focus. What the session's
+  /// tree-swap draft guard (#79) keys on: the focused field is the
+  /// one whose live value a slot replacement must not rewrite.
+  final void Function(String id, bool focused)? onFocusChanged;
 
   final GlintyEventSink? onEvent;
 
@@ -422,6 +429,15 @@ class GlintyRenderer {
   /// with a nonzero count -- the tree swap and the focus for its
   /// composer routinely share one drain.
   final Map<String, int> focuses;
+
+  /// How many times each input's region has been re-declared by a
+  /// slot replacement (#79). The fourth counter, with the push's
+  /// rule: the declared value applies unless the field is focused --
+  /// a re-render is redecorating, not dictating text into the draft
+  /// someone is typing -- and is spent either way. A widget state
+  /// that survives the swap has no initState to reread the store;
+  /// this is how it hears the region changed under it.
+  final Map<String, int> seedTicks;
 
   /// Each feed's held window, written by the session from feed
   /// messages. The widget reads items plus the tick/lastOp pair that
@@ -1107,6 +1123,7 @@ class GlintyRenderer {
       push: pushes[id] ?? 0,
       clear: clears[id] ?? 0,
       focusTick: focuses[id] ?? 0,
+      seedTick: seedTicks[id] ?? 0,
       obscure: obscure,
       maxLines: maxLines,
       numeric: numeric,
@@ -1126,6 +1143,9 @@ class GlintyRenderer {
       onLocal: emit == GlintyEmit.settle && onLocalInput != null
           ? (v) => onLocalInput?.call(id, numeric ? num.tryParse(v) : v)
           : null,
+      onFocusChanged: onFocusChanged == null
+          ? null
+          : (f) => onFocusChanged?.call(id, f),
     );
   }
 
@@ -2675,6 +2695,7 @@ class _GlintyTextField extends StatefulWidget {
     required this.push,
     this.clear = 0,
     this.focusTick = 0,
+    this.seedTick = 0,
     required this.obscure,
     required this.maxLines,
     required this.numeric,
@@ -2685,6 +2706,7 @@ class _GlintyTextField extends StatefulWidget {
     this.onSubmitted,
     this.onSettle,
     this.onLocal,
+    this.onFocusChanged,
   });
 
   final String value;
@@ -2703,6 +2725,13 @@ class _GlintyTextField extends StatefulWidget {
   /// the field's first build already carries the count.
   final int focusTick;
 
+  /// How many times this input's region has been re-declared by a
+  /// slot replacement (#79). Applied like a push -- the declared
+  /// value, unless focused -- and spent either way. A reborn state
+  /// already read the store at birth; this exists for the state that
+  /// survives the swap.
+  final int seedTick;
+
   final bool obscure;
   final int maxLines;
   final bool numeric;
@@ -2720,6 +2749,10 @@ class _GlintyTextField extends StatefulWidget {
   /// A local edit, not reported. Keeps conditional panels keyed on a
   /// settle field tracking what is typed.
   final void Function(String)? onLocal;
+
+  /// Focus arrived or left. The session tracks which field holds
+  /// focus so a tree swap can spare its draft (#79).
+  final void Function(bool)? onFocusChanged;
 
   @override
   State<_GlintyTextField> createState() => _GlintyTextFieldState();
@@ -2747,6 +2780,9 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   /// The focus count this field has already answered.
   late int _focusSeen;
 
+  /// The seed tick this field has already answered.
+  late int _seedSeen;
+
   @override
   void initState() {
     super.initState();
@@ -2756,6 +2792,7 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
     _seen = widget.push;
     _clearSeen = widget.clear;
     _focusSeen = widget.focusTick;
+    _seedSeen = widget.seedTick;
     _reported = widget.value;
     _focus.addListener(_onFocusChange);
     // A field born with a focus verb pending answers it: the session
@@ -2771,6 +2808,7 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   }
 
   void _onFocusChange() {
+    widget.onFocusChanged?.call(_focus.hasFocus);
     if (_focus.hasFocus) return;
     final text = _controller.text;
     if (text == _reported) return;
@@ -2808,6 +2846,24 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
       }
       return;
     }
+    // The region was re-declared under a surviving state (#79): the
+    // declared value applies -- the store already holds it, so
+    // widget.value IS the seed -- unless this field is focused,
+    // which is exactly the draft the swap must spare. Spent either
+    // way, like a push the user typed over.
+    if (widget.seedTick != _seedSeen) {
+      _seedSeen = widget.seedTick;
+      if (!_focus.hasFocus) {
+        _reported = widget.value;
+        if (widget.value != _controller.text) {
+          _controller.value = TextEditingValue(
+            text: widget.value,
+            selection:
+                TextSelection.collapsed(offset: widget.value.length),
+          );
+        }
+      }
+    }
     // Never while the field has focus. A server push landing
     // mid-word replaces what someone is in the middle of typing --
     // the browser client refuses this for the same reason
@@ -2841,6 +2897,12 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
 
   @override
   void dispose() {
+    // A field destroyed while focused reports the loss itself: the
+    // node dies without a blur, and a stale focused-id would let a
+    // LATER swap preserve a draft nobody is typing. Safe during a
+    // swap because the session captures the id before the tree
+    // rebuilds, and the reborn field's post-frame focus re-reports.
+    if (_focus.hasFocus) widget.onFocusChanged?.call(false);
     _focus.removeListener(_onFocusChange);
     _focus.dispose();
     _controller.dispose();

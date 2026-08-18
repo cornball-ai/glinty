@@ -231,6 +231,10 @@ class GlintyView extends StatelessWidget {
     final r = renderer ??
         GlintyRenderer(
           onInput: s.sendInput,
+          // Focus tracking feeds the tree-swap draft guard (#79):
+          // the session spares the focused field's value when a
+          // slot's subtree is replaced.
+          onFocusChanged: s.focusChanged,
           onLocalInput: s.setInputLocal,
           onEvent: s.sendEvent,
           // Only while a dialog is open. A close button with no
@@ -272,6 +276,7 @@ class GlintyView extends StatelessWidget {
           pushes: s.pushes,
           clears: s.clears,
           focuses: s.focuses,
+          seedTicks: s.seedTicks,
           feeds: s.feeds,
           overrides: s.overrides,
           condition: s.conditionHolds,

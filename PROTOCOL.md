@@ -507,6 +507,23 @@ where the rebuilt tree dropped focus. The swap and the focus
 routinely arrive in one drain, so a client must honor a focus aimed
 at a control born in the same batch.
 
+The never-stomp contract extends to tree swaps. A `ui` frame
+replacing a slot's subtree (`render_ui`) may contain a text field
+someone is mid-sentence in — a region re-rendered on a data tick is
+the common shape — and rebuilding that field from its declared
+`value` would do exactly what the `input_update` guard refuses,
+through a frame the guard never sees. So when the replacement
+carries a text-ish input with the same id as the **currently
+focused** field, the client preserves the live draft (and focus,
+since the swap may destroy the element or widget that held it;
+caret where the platform allows) instead of resetting to the
+declared value. Only the focused field: everything else in the new
+tree takes its declared value, which is what a re-render means for a
+field nobody is typing in, and a field the new tree no longer
+carries takes its draft with it — the app removed the composer. The
+browser applies the same rule when a modal replaces a modal, which
+is a tree swap around whatever the user is typing in it.
+
 `range_slider` is array-valued unconditionally: its `value` is the
 pair `[lo, hi]` in the tree, in every `input` frame, and in the
 server's seeded state — ordered, inside `[min, max]`, both ends on
