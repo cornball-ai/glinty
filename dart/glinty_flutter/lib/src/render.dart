@@ -1202,10 +1202,18 @@ class GlintyRenderer {
             // `settle` the server wants the number the user landed on,
             // not the sweep. Local edits keep the thumb (and any panel
             // keyed on it) tracking the finger in the meantime.
+            // Every emitted value goes through _sliderQuantize: with
+            // no divisions Material drags continuously, and a
+            // sample-count slider must not report 394.326 samples --
+            // the browser's range input quantizes to its step, so
+            // this side quantizes to the same implied precision.
             onChanged: settle
-                ? (v) => (onLocalInput ?? onInput)?.call(id, v)
-                : (v) => onInput?.call(id, v),
-            onChangeEnd: settle ? (v) => onInput?.call(id, v) : null,
+                ? (v) => (onLocalInput ?? onInput)
+                    ?.call(id, _sliderQuantize(v, min, max, step))
+                : (v) => onInput?.call(id, _sliderQuantize(v, min, max, step)),
+            onChangeEnd: settle
+                ? (v) => onInput?.call(id, _sliderQuantize(v, min, max, step))
+                : null,
           ),
           scale,
         ]));
@@ -1214,6 +1222,20 @@ class GlintyRenderer {
   /// A scale label at fraction f, snapped to the step grid when
   /// there is one -- scale numbers should be values the thumb can
   /// actually take. Mirrors slider_snap() in R.
+  /// A dragged value quantized to the slider's real granularity:
+  /// its step, or the implied step when the app set none. What the
+  /// browser's range input does natively.
+  static double _sliderQuantize(
+      double v, double min, double max, double? step) {
+    var s = step ?? 0;
+    if (s <= 0 && max > min) s = _sliderImpliedStep(min, max);
+    if (s <= 0) return v;
+    final q = min + ((v - min) / s).round() * s;
+    // step 1 must give exact integers, not 393.99999999999994
+    final r = q.roundToDouble();
+    return ((q - r).abs() < 1e-9 ? r : q).clamp(min, max);
+  }
+
   /// The precision a stepless slider still has: Shiny's findStepSize
   /// rule. Integer ends spanning >= 2 mean whole numbers; otherwise
   /// a 1/2/5-ladder decimal near range/100. Mirrors
