@@ -164,6 +164,16 @@ COMPONENT_SCHEMA <- list(
                                       title = field("string"),
                                       grow = field("int", min = 0, max = 32),
                                       width = field("int", min = 0, max = 4096),
+                                      # The vertical bound width's twin cannot
+                                      # give. A cap rather than a fixed size:
+                                      # the case that wants it (a monitor
+                                      # panel whose media would otherwise
+                                      # decide the row height) letterboxes
+                                      # inside whatever it gets, and a fixed
+                                      # height would hold the panel tall when
+                                      # its content is short.
+                                      max_height = field("int", min = 1,
+                                                         max = 4096),
                                       # The panel becomes a column that hands
                                       # its height to its children, so one of
                                       # them can grow and scroll. Without it a
@@ -383,7 +393,12 @@ COMPONENT_SCHEMA <- list(
         controls = field("bool", default = TRUE),
         autoplay = field("bool", default = FALSE),
         muted = field("bool", default = FALSE),
-        loop = field("bool", default = FALSE)
+        loop = field("bool", default = FALSE),
+        # Opt-in, because most videos never need to phone home and a
+        # report per timeupdate for every player is noise. With it the
+        # player reports position and state through the input channel:
+        # input[[id]] holds list(current_time =, playing =).
+        report = field("bool", default = FALSE)
     ),
                          # Browser-only, like tag(): raw markup has no widget equivalent.
                          html_output = list(id = field("string", required = TRUE)),

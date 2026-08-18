@@ -243,6 +243,9 @@ class GlintyView extends StatelessWidget {
           // plot that then arrives back, relayouts, and measures
           // again.
           onMeasure: s.measure,
+          // measure's video twin: the throttle and dedup live on the
+          // session, behind the per-id callback the renderer binds.
+          onVideoReport: s.videoReport,
           // A relative image src is served by the same app; only the
           // connection knows what address that is.
           assetBase: conn?.assetBase,

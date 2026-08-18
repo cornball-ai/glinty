@@ -93,6 +93,18 @@ dispatch(s, '{"type":"input","id":"name","value":"jorge"}')
 flush_reactions()
 expect_equal(seen, "jorge")
 
+# --- dispatch: a video report is an ordinary input ---
+# video_output(report = TRUE) sends {current_time, playing} under the
+# component's id; the server needs no dispatch of its own, which is
+# the point of the report riding the input channel.
+pos <- NULL
+observe_event(s$input$monitor, function(v) pos <<- v)
+dispatch(s, paste0('{"type":"input","id":"monitor",',
+                   '"value":{"current_time":1.5,"playing":true}}'))
+flush_reactions()
+expect_equal(pos$current_time, 1.5)
+expect_true(pos$playing)
+
 # --- dispatch: events count up ---
 dispatch(s, '{"type":"event","id":"go"}')
 dispatch(s, '{"type":"event","id":"go"}')

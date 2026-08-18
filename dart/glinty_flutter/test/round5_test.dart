@@ -2985,4 +2985,86 @@ void _ticketRefusals() {
           matching: find.byType(Expanded)), findsWidgets);
     });
   });
+
+  group('panel(max_height) (#44)', () {
+    Finder cappedBox(double cap) => find.byWidgetPredicate((w) =>
+        w is ConstrainedBox && w.constraints.maxHeight == cap);
+
+    testWidgets('tall content clamps to the cap and scrolls',
+        (tester) async {
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Capped',
+        'children': [
+          {
+            'component': 'panel',
+            'max_height': 200,
+            'children': [
+              for (var i = 0; i < 40; i++)
+                {'component': 'text', 'value': 'row $i',
+                  'variant': 'normal'},
+            ],
+          },
+        ],
+      }, 'g16');
+      expect(find.text('row 0'), findsOneWidget);
+      expect(tester.getSize(cappedBox(200)).height, 200);
+    });
+
+    testWidgets('short content keeps its own height under the cap',
+        (tester) async {
+      // A bound, not a size: nothing pads a panel out to a cap its
+      // content never reaches.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Short',
+        'children': [
+          {
+            'component': 'panel',
+            'max_height': 400,
+            'children': [
+              {'component': 'text', 'value': 'one line',
+                'variant': 'normal'},
+            ],
+          },
+        ],
+      }, 'g17');
+      expect(tester.getSize(cappedBox(400)).height, lessThan(400));
+    });
+
+    testWidgets('fill under a cap: a bounded box the children divide',
+        (tester) async {
+      // The monitor shape. The cap is the height fill hands over, so
+      // a grown child gets its Expanded even though the panel sits on
+      // a scrolling page where fill alone would have degraded.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Monitor',
+        'children': [
+          {
+            'component': 'panel',
+            'fill': true,
+            'max_height': 240,
+            'children': [
+              {
+                'component': 'column',
+                'grow': 1,
+                'children': [
+                  {'component': 'text', 'value': 'viewer',
+                    'variant': 'normal'},
+                ],
+              },
+              {'component': 'text', 'value': 'transport',
+                'variant': 'normal'},
+            ],
+          },
+        ],
+      }, 'g18');
+      expect(find.text('viewer'), findsOneWidget);
+      expect(find.text('transport'), findsOneWidget);
+      expect(find.ancestor(of: find.text('viewer'),
+          matching: find.byType(Expanded)), findsOneWidget);
+      expect(tester.getSize(cappedBox(240)).height, 240);
+    });
+  });
 }

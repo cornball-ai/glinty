@@ -1,5 +1,20 @@
 # glinty (development version)
 
+**`panel(max_height =)`: the vertical bound a monitor panel needs**
+(#44). A cap, not a fixed size: shorter content keeps its height,
+taller content scrolls -- except media inside `fill = TRUE`, which
+letterboxes into the bound, so a stretched row stops taking its
+height from whatever the video happens to measure.
+
+**`video_output(report = TRUE)`: the player reports back** (#41).
+The set direction shipped as `update_video()`; now the player tells
+the server where the playhead is and whether it is playing, as an
+ordinary input -- `input[[id]]` holds
+`list(current_time =, playing =)`. Throttled and deduplicated
+client-side (a paused player is silent), immediate on
+play/pause/seek, and a position the server just set does not bounce
+back. Opt-in, because most videos never need to phone home.
+
 **`feed()`: the scrolling log** (#58). A shell in the tree that its
 own frame type fills item by item -- `feed_append()`,
 `feed_patch()` (rewrite the newest: token streaming), and

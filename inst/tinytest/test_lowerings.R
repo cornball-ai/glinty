@@ -333,6 +333,25 @@ expect_false(grepl("g-fill",
                    component_to_html(component("panel", children = list())),
                    fixed = TRUE))
 
+# max_height caps the panel: the class carries the rule, the custom
+# property carries the number, and an uncapped panel carries neither
+capped <- component_to_html(component("panel", max_height = 540L,
+                                      children = list()))
+expect_true(grepl("g-capped", capped, fixed = TRUE))
+expect_true(grepl("--g-max-height:540px", capped, fixed = TRUE))
+expect_false(grepl("g-capped",
+                   component_to_html(component("panel", children = list())),
+                   fixed = TRUE))
+# a cap alongside flex sizing keeps both declarations
+both <- component_to_html(component("panel", grow = 1L, max_height = 540L,
+                                    children = list()))
+expect_true(grepl("g-sized", both, fixed = TRUE))
+expect_true(grepl("--g-max-height:540px", both, fixed = TRUE))
+# the schema holds the bound to its range rather than passing junk on
+expect_error(component("panel", max_height = 0L, children = list()))
+expect_error(component("row", max_height = 200L, children = list()),
+             "unknown field")
+
 scroller <- component_to_html(component("column", scroll = TRUE, grow = 1L,
                                         children = list()))
 expect_true(grepl("g-scroll", scroller, fixed = TRUE))
@@ -576,6 +595,13 @@ expect_false(grepl("controls", wall, fixed = TRUE))
 expect_true(grepl('autoplay="autoplay"', wall, fixed = TRUE))
 expect_true(grepl('muted="muted"', wall, fixed = TRUE))
 expect_true(grepl('loop="loop"', wall, fixed = TRUE))
+
+# report = TRUE marks the element for the client's position wiring;
+# the default carries no mark, because most videos never phone home
+reporting <- component_to_html(component("video_output", id = "m",
+                                         report = TRUE))
+expect_true(grepl("data-g-report", reporting, fixed = TRUE))
+expect_false(grepl("data-g-report", vid, fixed = TRUE))
 
 # --- tabset marks exactly one panel open ---
 tabs <- component_to_html(component("tabset", id = "t", panels = list(

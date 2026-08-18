@@ -342,11 +342,19 @@ html_panel <- function(x) {
         inner <- paste0(html_el("div", list(class = "g-panel-title"),
                                 html_escape(x$title)), inner)
     }
+    style <- html_flex_style(x)
+    if (!is.null(x$max_height)) {
+        # A custom property like the flex sizing, so .g-capped owns
+        # the rule and this stays one declaration per element.
+        style <- paste(c(style, paste0("--g-max-height:", x$max_height,
+                                       "px")), collapse = ";")
+    }
     html_el("div", list(class = paste(c(paste0("g-panel g-panel-", x$variant),
                     if (html_is_sized(x)) "g-sized",
+                    if (!is.null(x$max_height)) "g-capped",
                     if (isTRUE(x$fill)) "g-fill"),
                                       collapse = " "),
-                        id = x$id, style = html_flex_style(x)), inner)
+                        id = x$id, style = style), inner)
 }
 
 # --- inputs ---
@@ -947,7 +955,9 @@ html_video_output <- function(x) {
                             controls = if (isTRUE(x$controls)) "controls",
                             autoplay = if (isTRUE(x$autoplay)) "autoplay",
                             muted = if (isTRUE(x$muted)) "muted",
-                            loop = if (isTRUE(x$loop)) "loop", preload = "metadata")))
+                            loop = if (isTRUE(x$loop)) "loop",
+                            "data-g-report" = if (isTRUE(x$report)) "1",
+                            preload = "metadata")))
 }
 
 # --- composite layout ---

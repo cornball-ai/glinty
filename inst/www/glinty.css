@@ -846,6 +846,17 @@ h1, h2, h3, h4 {
     min-height: 0;
 }
 
+/* panel(max_height =): the vertical bound width's twin cannot give.
+   A cap, not a size: shorter content keeps its height, taller
+   content scrolls -- except media in a fill panel, whose
+   min-height: 0 lets the letterbox shrink into the cap instead,
+   which is the monitor-panel case the bound exists for. */
+.g-capped {
+    max-height: var(--g-max-height);
+    overflow-y: auto;
+    min-height: 0;
+}
+
 /* column(scroll = TRUE): overflow scrolls instead of growing the
    page. Only does anything once an ancestor bounds the height --
    which is what g-fill plus a stretched row is for. */

@@ -895,6 +895,47 @@ class GlintySession {
     }
   }
 
+  /// Report a video's playhead and state, throttled and deduplicated.
+  ///
+  /// The embedder's player calls the [GlintyVideoSource.onReport] it
+  /// was handed as often as it likes -- every position tick is fine;
+  /// the discipline lives here, session-owned like [measure]'s dedup
+  /// and for the same reason: the renderer is rebuilt every frame
+  /// and remembers nothing. The report rides the input channel as
+  /// `{current_time, playing}` under the component's id, because a
+  /// position stream is semantically a slider the user drags by
+  /// watching. A changed playing state goes out immediately;
+  /// position alone waits out a 250ms floor and stays silent while
+  /// the rounded position holds still, so a paused player costs
+  /// nothing.
+  ///
+  /// No echo suppression here yet, deliberately: this client has no
+  /// set direction for the embedder's player (a `video_update`
+  /// cannot reach a controller glinty never holds), so there is no
+  /// just-set state to recognize. Whoever wires that seam owes this
+  /// method the suppression beside it.
+  void videoReport(String id, double currentTime, bool playing) {
+    final key = '${(currentTime * 10).round() / 10}|$playing';
+    final last = _videoSent[id];
+    if (last == key) return;
+    final flipped = last != null && last.endsWith('|${!playing}');
+    final at = _videoSentAt[id];
+    final now = DateTime.now();
+    if (!flipped &&
+        at != null &&
+        now.difference(at) < const Duration(milliseconds: 250)) {
+      return;
+    }
+    _videoSent[id] = key;
+    _videoSentAt[id] = now;
+    sendInput(id, {'current_time': currentTime, 'playing': playing});
+  }
+
+  /// Last report per video id, and when it went, for the dedup and
+  /// the floor above.
+  final Map<String, String> _videoSent = <String, String>{};
+  final Map<String, DateTime> _videoSentAt = <String, DateTime>{};
+
   /// Returns whether the wire took the frame. With no transport
   /// wired -- a session driven straight, as the fixture and protocol
   /// tests do -- there is nothing to drop it, so it counts as taken.

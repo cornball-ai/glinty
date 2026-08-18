@@ -107,6 +107,10 @@ typedef GlintyTicketSink = void Function(String id, String purpose);
 typedef GlintyMeasureSink = void Function(
     String id, double width, double height, double dpr);
 
+/// Reports a video's playhead and playing state for one output id.
+typedef GlintyVideoReportSink = void Function(
+    String id, double currentTime, bool playing);
+
 /// An audio value, ready to hand to a player.
 ///
 /// The src is resolved: a data URI stays as it is, a relative path
@@ -150,6 +154,7 @@ class GlintyVideoSource {
     this.autoplay = false,
     this.muted = false,
     this.loop = false,
+    this.onReport,
   });
 
   final Uri src;
@@ -167,6 +172,19 @@ class GlintyVideoSource {
   final bool autoplay;
   final bool muted;
   final bool loop;
+
+  /// Where position and state reports go, non-null exactly when the
+  /// component asked for them (`video_output(report = TRUE)`).
+  ///
+  /// The embedder's player calls this from its position listener --
+  /// as often as it likes, on every tick: glinty owns the throttle
+  /// and the dedup behind it, the same discipline the browser's
+  /// timeupdate wiring keeps, so the wire sees at most ~4 reports a
+  /// second and a paused player is silent. Null means the component
+  /// never asked; a player with nothing to call simply does not
+  /// report, and wiring a listener anyway costs the app nothing but
+  /// the listener.
+  final void Function(double currentTime, bool playing)? onReport;
 }
 
 /// The server refused a transfer, or the connection did.
@@ -260,6 +278,7 @@ class GlintyRenderer {
       this.onTicket,
       this.onModalClose,
       this.onMeasure,
+      this.onVideoReport,
       this.assetBase,
       this.audioBuilder,
       this.videoBuilder,
@@ -332,6 +351,12 @@ class GlintyRenderer {
   /// render, where there is no server to tell -- the plot then draws
   /// whatever value it was given and measures nothing.
   final GlintyMeasureSink? onMeasure;
+
+  /// Where a reporting video's position goes. Null in a fixture
+  /// render for the same reason as [onMeasure]; with it, a
+  /// `video_output(report = TRUE)` hands its player an
+  /// [GlintyVideoSource.onReport] wired here.
+  final GlintyVideoReportSink? onVideoReport;
 
   /// The theme's base spacing unit in logical pixels. spacer() sizes
   /// are multiples of it -- the same rule the browser applies through
@@ -531,7 +556,7 @@ class GlintyRenderer {
       case 'row':
         return _sized(c, _row(context, c));
       case 'panel':
-        return _sized(c, _panel(context, c));
+        return _sized(c, _capped(c, _panel(context, c)));
       case 'text_input':
         return _textField(context, c);
       case 'password_input':
@@ -1861,6 +1886,30 @@ class GlintyRenderer {
         width: width.toDouble(), child: _bounded(child, width: true));
   }
 
+  /// panel(max_height): the height cap, honored the way .g-capped is.
+  ///
+  /// A fill panel gets a bounded box for its children to divide --
+  /// the letterbox shrinks media into the cap, which is the
+  /// monitor-panel case the bound exists for -- so the record says
+  /// height is real. (One divergence, accepted: fill under a cap
+  /// sits AT the cap even when its content is short, where the
+  /// browser's auto-height column hugs; the case that wants the cap
+  /// is media that exceeds it, where both agree.) A plain panel
+  /// scrolls what does not fit, like the browser's overflow-y, and a
+  /// scroll view means unbounded inside, which the record says too.
+  Widget _capped(GlintyComponent c, Widget child) {
+    final cap = c.integer('max_height')?.toDouble();
+    if (cap == null) return child;
+    if (c.boolean('fill')) {
+      return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: cap),
+          child: _bounded(child, height: true));
+    }
+    return ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: cap),
+        child: SingleChildScrollView(child: _bounded(child, height: false)));
+  }
+
   /// Shrink-wraps [child] where the width record says unbounded, and
   /// leaves it alone where width is real.
   ///
@@ -2055,6 +2104,13 @@ class GlintyRenderer {
           autoplay: c.boolean('autoplay'),
           muted: c.boolean('muted'),
           loop: c.boolean('loop'),
+          // Non-null exactly when the component opted in and there is
+          // a session to tell. The id is bound here so the embedder's
+          // player never learns it; the throttle lives on the session.
+          onReport: c.boolean('report') && onVideoReport != null
+              ? (time, playing) =>
+                  onVideoReport!(c.str('id')!, time, playing)
+              : null,
         ));
   }
 
