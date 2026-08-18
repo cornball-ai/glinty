@@ -208,12 +208,21 @@ COMPONENT_SCHEMA <- list(
                          # a debounce; Flutter would lower them to onChanged and
                          # onEditingComplete. Naming a DOM event here would have made the
                          # schema browser-shaped.
+                         # `clear_on` names an event id: when this client emits that
+                         # event, it clears the field locally and reports "" -- after
+                         # the event frame, so the server handler still reads the full
+                         # draft. Client-side by design: a server round trip to clear a
+                         # focused composer races the next keystroke, and the browser's
+                         # "never stomp live typing" guard (rightly) drops it. Requires
+                         # emit = "live", or the clear could discard text the server
+                         # never heard.
                          text_input = list(
         id = field("string", required = TRUE),
         label = field("string", default = ""),
         value = field("string", default = ""),
         placeholder = field("string"),
-        emit = field("enum", default = "live", values = c("live", "settle"))
+        emit = field("enum", default = "live", values = c("live", "settle")),
+        clear_on = field("string")
     ),
                          password_input = list(
         # No `value` field, by schema. A field that cannot be expressed
@@ -229,7 +238,9 @@ COMPONENT_SCHEMA <- list(
         value = field("string", default = ""),
         rows = field("int", default = 4L, min = 1, max = 100),
         placeholder = field("string"),
-        emit = field("enum", default = "live", values = c("live", "settle"))
+        emit = field("enum", default = "live", values = c("live", "settle")),
+        # same contract as text_input's clear_on
+        clear_on = field("string")
     ),
                          number_input = list(
         id = field("string", required = TRUE),
@@ -771,6 +782,15 @@ check_component <- function(type, out) {
             stop("select_input(search=) is single-select; ",
                  "drop multiple = TRUE", call. = FALSE)
         }
+    }
+    if (type %in% c("text_input", "textarea_input") &&
+        !is.null(out$clear_on) && identical(out$emit, "settle")) {
+        # explicit refusal: a settle field's draft is unreported until
+        # blur, so clearing at emit time would discard text the server
+        # never heard -- the handler would read yesterday's value and
+        # the user's message would be gone everywhere
+        stop(type, "(clear_on=) needs emit = \"live\"; a settle field's ",
+             "text is unreported when the event fires", call. = FALSE)
     }
     if (identical(type, "data_table")) {
         # as.list() so a one-option menu still emits an array

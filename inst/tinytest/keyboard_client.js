@@ -32,17 +32,38 @@ var sent = [];
 var keyHandler = null;
 var activeElement = null;
 
+// Fields registered with a data-g-clear-on declaration, for
+// emitEventFrame's document-wide query. Everything the block reads
+// off a field: its value, its target, its clear-on event.
+var clearOnFields = [];
+
 var document = {
   addEventListener: function (type, fn) {
     if (type === 'keydown') keyHandler = fn;
   },
   get activeElement() {
     return activeElement;
+  },
+  querySelectorAll: function (sel) {
+    var m = /^\[data-g-clear-on="(.*)"\]$/.exec(sel);
+    if (!m) return [];
+    return clearOnFields.filter(function (el) {
+      return el.dataset.gClearOn === m[1];
+    });
   }
 };
 
 function send(frame) {
   sent.push(frame);
+}
+
+// The real sendInput lives outside the sliced block (it leans on
+// extractValue and the whole binding zoo); for a text field it
+// reduces to "report el.value under el's target", which is what the
+// block's clear path needs and what this supplies.
+var debounceTimers = new Map();
+function sendInput(el) {
+  sent.push({ type: 'input', id: el.dataset.gTarget, value: el.value });
 }
 
 // A shortcut element, as the lowering builds it: flags present mean
@@ -72,9 +93,10 @@ var root = {
 
 // --- load the block ---
 
-var load = new Function('document', 'send', block + '\nreturn {' +
+var load = new Function('document', 'send', 'sendInput', 'debounceTimers',
+  block + '\nreturn {' +
   'bindKeys: bindKeys, keyToken: keyToken, isTyping: isTyping};');
-var api = load(document, send);
+var api = load(document, send, sendInput, debounceTimers);
 api.bindKeys(root);
 
 // --- assertions ---
@@ -212,6 +234,45 @@ bound = [
 ];
 eq(press('KeyK'), [{ type: 'event', id: 'a' }, { type: 'event', id: 'b' }],
   'every matching binding fires');
+
+// --- clear_on: the composer shape (#60) ---
+// A live textarea declaring clear_on="send", enter bound to send with
+// typing:true. The contract is the frame ORDER: the event goes out
+// first, so the server handler reads the full draft, and the cleared
+// "" follows it.
+bound = [shortcutEl({ id: 'send', key: 'enter', typing: true })];
+var composer = {
+  value: 'hello world',
+  dataset: { gTarget: 'draft', gClearOn: 'send' }
+};
+clearOnFields = [composer];
+activeElement = { tagName: 'TEXTAREA' };
+
+eq(press('Enter'),
+  [{ type: 'event', id: 'send' }, { type: 'input', id: 'draft', value: '' }],
+  'send clears the composer: event first, then the emptied report');
+eq(composer.value, '', 'the field itself is emptied');
+
+// Enter within the debounce window: the tail of the draft is still
+// queued, so it flushes BEFORE the event -- the handler must read
+// what the user saw when they pressed enter, not 200ms behind it.
+composer.value = 'hello wor';
+debounceTimers.set('draft', setTimeout(function () {}, 1000));
+eq(press('Enter'),
+  [{ type: 'input', id: 'draft', value: 'hello wor' },
+   { type: 'event', id: 'send' },
+   { type: 'input', id: 'draft', value: '' }],
+  'a pending debounce flushes ahead of the event');
+eq(debounceTimers.has('draft'), false, 'the flushed timer is gone');
+
+// Only the named event clears: another shortcut leaves the draft be.
+composer.value = 'kept';
+bound = [shortcutEl({ id: 'other', key: 'escape', typing: true })];
+eq(press('Escape'), [{ type: 'event', id: 'other' }],
+  'an unrelated event does not touch a clear_on field');
+eq(composer.value, 'kept', 'the draft survives unrelated events');
+clearOnFields = [];
+activeElement = null;
 
 if (failures.length) {
   failures.forEach(function (f) { console.error('FAIL ' + f); });

@@ -291,6 +291,7 @@ class GlintyRenderer {
       this.errors = const {},
       this.inputs = const {},
       this.pushes = const {},
+      this.clears = const {},
       this.overrides = const {},
       this.condition,
       this.spacing = 4,
@@ -397,6 +398,12 @@ class GlintyRenderer {
   /// controls tell one push from the next by this count rather than
   /// by the value, so a repeat of the same value still registers.
   final Map<String, int> pushes;
+
+  /// How many `clear_on` clears each input has had. Counted apart
+  /// from [pushes] because the rules differ: a push refuses a focused
+  /// field, a clear applies regardless -- it is causally the user's
+  /// own emit, and the composer has focus at exactly that moment.
+  final Map<String, int> clears;
 
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
@@ -1047,6 +1054,7 @@ class GlintyRenderer {
       key: Key(id),
       value: _value(id, c.str('value') ?? '')?.toString() ?? '',
       push: pushes[id] ?? 0,
+      clear: clears[id] ?? 0,
       obscure: obscure,
       maxLines: maxLines,
       numeric: numeric,
@@ -2375,6 +2383,7 @@ class _GlintyTextField extends StatefulWidget {
     super.key,
     required this.value,
     required this.push,
+    this.clear = 0,
     required this.obscure,
     required this.maxLines,
     required this.numeric,
@@ -2392,6 +2401,10 @@ class _GlintyTextField extends StatefulWidget {
   /// How many pushes this input has had. Compared rather than the
   /// value, so a second push of the same text is still a push.
   final int push;
+
+  /// How many clear_on clears this input has had. Applied even while
+  /// focused, unlike a push -- see didUpdateWidget.
+  final int clear;
 
   final bool obscure;
   final int maxLines;
@@ -2431,6 +2444,9 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   /// alone is not an edit.
   late String _reported;
 
+  /// The clear count this field has already answered.
+  late int _clearSeen;
+
   @override
   void initState() {
     super.initState();
@@ -2438,6 +2454,7 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
     // happens inside didUpdateWidget -- by then `widget` is the new
     // one, so _seen would equal the incoming push and swallow it
     _seen = widget.push;
+    _clearSeen = widget.clear;
     _reported = widget.value;
     _focus.addListener(_onFocusChange);
   }
@@ -2453,6 +2470,25 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
   @override
   void didUpdateWidget(_GlintyTextField old) {
     super.didUpdateWidget(old);
+    // A clear_on clear applies even while the field has focus --
+    // BECAUSE it has focus: it is causally this client's own emit
+    // (enter in the composer), synchronous with it, so there is no
+    // typist to race and the text it removes is exactly the text
+    // that was just sent. It also spends any concurrent push: the
+    // clear is the later action.
+    if (widget.clear != _clearSeen) {
+      _clearSeen = widget.clear;
+      _seen = widget.push;
+      _reported = widget.value;
+      if (widget.value != _controller.text) {
+        _controller.value = TextEditingValue(
+          text: widget.value,
+          selection:
+              TextSelection.collapsed(offset: widget.value.length),
+        );
+      }
+      return;
+    }
     // Never while the field has focus. A server push landing
     // mid-word replaces what someone is in the middle of typing --
     // the browser client refuses this for the same reason

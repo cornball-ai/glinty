@@ -288,6 +288,15 @@ component_fixtures <- function() {
                       notes = "rows is a count, not a CSS height"
         ),
                  list(
+                      name = "textarea-clear-on",
+                      component = component("textarea_input", id = "draft",
+                label = "Message", rows = 2L, clear_on = "send"),
+                      notes = paste("the composer: emitting the named event",
+                                    "clears the field client-side, AFTER the",
+                                    "event frame, so the handler reads the",
+                                    "full draft")
+        ),
+                 list(
                       name = "number-input",
                       component = component("number_input", id = "k",
                 label = "Clusters:", value = 3,

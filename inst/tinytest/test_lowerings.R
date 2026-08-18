@@ -27,6 +27,18 @@ for (f in component_fixtures()) {
 }
 
 # --- static content ---
+# clear_on rides the DOM (an adopted page must recover it); absent
+# unless declared, so no control grows an attribute uninvited
+ta_html <- component_to_html(component("textarea_input", id = "draft",
+    clear_on = "send"))
+expect_true(grepl('data-g-clear-on="send"', ta_html, fixed = TRUE))
+expect_false(grepl("data-g-clear-on",
+                   component_to_html(component("textarea_input",
+    id = "notes")), fixed = TRUE))
+expect_true(grepl('data-g-clear-on="go"',
+                  component_to_html(component("text_input", id = "quick",
+    clear_on = "go")), fixed = TRUE))
+
 expect_true(grepl(">hello<", component_to_html(component("text",
                                                          value = "hello")),
                   fixed = TRUE))

@@ -394,6 +394,11 @@ html_bind <- function(x) {
     if (!is.null(x$emit)) {
         out[["data-g-event"]] <- emit_event(x$emit)
     }
+    # clear_on rides in the DOM so an adopted page recovers it: the
+    # client clears this field when it emits the named event.
+    if (!is.null(x$clear_on)) {
+        out[["data-g-clear-on"]] <- x$clear_on
+    }
     # A button's value rides along on the event it emits, which is
     # what lets one handler serve a list of rows. The tabset lowering
     # has always used this attribute for the same purpose; a button

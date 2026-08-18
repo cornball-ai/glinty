@@ -389,7 +389,7 @@ same as safe to add.
 | `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `max_height: int`, `fill: bool` (false), `id` |
 | `image` | `src: string` | `alt` (""), `width: int`, `height: int` |
 | `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
-| `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
+| `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant`, `clear_on: string` |
 | `password_input` | `id` | `label`, `placeholder` — **never `value`** |
 | `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool`, `search: bool` (false; single-select only) |
 | `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
@@ -430,6 +430,23 @@ the input's domain stays exactly the declared choices and the server
 never sees free text. `search` with `multiple` is a validation
 error, not a degraded render.
 
+`clear_on` (on `text_input` and `textarea_input`) names an event id:
+when **this client** emits that event, it empties the field and
+reports `""` — after the event frame, never before, so a handler for
+the event reads the full draft and the store settles at `""` behind
+it. That frame order is the contract. The clear is client-side and
+causally tied to the emit on purpose: a server round trip
+(`update_text_input(value = "")`) racing the next keystroke is
+exactly what the browser's never-stomp-live-typing guard on
+`input_update` refuses, and that guard stays. `clear_on` requires
+`emit: live` — a settle field's draft is unreported when the event
+fires, so clearing it would discard text the server never heard; the
+schema refuses the combination. A live field's trailing debounce (the
+browser reports keystrokes on a 200ms timer) flushes ahead of the
+event frame for the same reason. The composer spelling this exists
+for: `textarea_input("draft", clear_on = "send")` beside
+`shortcut("send", "enter", typing = TRUE)`.
+
 `range_slider` is array-valued unconditionally: its `value` is the
 pair `[lo, hi]` in the tree, in every `input` frame, and in the
 server's seeded state — ordered, inside `[min, max]`, both ends on
@@ -456,9 +473,9 @@ rather than an intention.
 | `page` | `Column` | `width` is a viewport-layout hint; native keeps its own padding |
 | `row` / `column` | `Row` / `Column` | `gap` → separators; `grow` → `Expanded`, `width` → `SizedBox`; `align: stretch` → `IntrinsicHeight`; `scroll` → `SingleChildScrollView` |
 | `panel` | `Card` / `Container` | variant selects; `fill` → a max-size `Column` whose grown children take `Expanded`; `max_height` → `ConstrainedBox`, scrolling overflow unless `fill` letterboxes it |
-| `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit |
+| `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit; `clear_on` → a clear counter the controller answers even focused |
 | `password_input` | `TextField(obscureText: true)` | |
-| `textarea_input` | `TextField(maxLines:)` | |
+| `textarea_input` | `TextField(maxLines:)` | `clear_on` as text_input |
 | `number_input` | `TextField` + `TextInputType.number` | Flutter has no spinner; bounds show as helper text |
 | `select_input` | `DropdownButton`, or `FilterChip`s | `multiple` has no dropdown; chips carry the list |
 | `select_input` + `search` | `DropdownMenu(enableFilter:)` | Material's own filter-as-you-type; same contract as the browser combobox |
