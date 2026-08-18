@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**Flutter: a grown flex under a stretch row no longer blanks the
+window** (#53). A stretch row measures through `IntrinsicHeight`,
+which a `LayoutBuilder` cannot answer, so flexes under the
+measurement now read axis boundedness from a build-time record kept
+by the containers that decide it. Growth is refused where the axis
+is truly unbounded (the browser's `flex-grow` with nothing to
+divide) and granted under a declared width -- the chat-composer
+shape. Zero-column tables and a collapse shrink-wrapped in a row
+stopped throwing on the way.
+
 **`data_table()`: the interactive table.** The same table value
 `table_output()` receives, plus client-side sorting, filtering and
 pagination. Interaction never touches the server; `align` doubles as
