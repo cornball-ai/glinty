@@ -263,6 +263,34 @@
           }
         ],
         "multiple": false,
+        "search": false,
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "select-search",
+      "notes": "a combobox over the same closed choices: typing filters, only a real choice reports",
+      "component": {
+        "component": "select_input",
+        "id": "state",
+        "label": "",
+        "choices": [
+          {
+            "value": "AL",
+            "label": "Alabama"
+          },
+          {
+            "value": "AK",
+            "label": "Alaska"
+          },
+          {
+            "value": "AZ",
+            "label": "Arizona"
+          }
+        ],
+        "selected": "AK",
+        "multiple": false,
+        "search": true,
         "emit": "settle"
       }
     },
@@ -292,6 +320,7 @@
           "c"
         ],
         "multiple": true,
+        "search": false,
         "emit": "settle"
       }
     },

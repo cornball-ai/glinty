@@ -318,6 +318,42 @@ h1, h2, h3, h4 {
     resize: vertical;
 }
 
+/* ---------- searchable select (combobox) ---------- */
+
+.g-combo {
+    position: relative;
+}
+
+.g-combo-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 16rem;
+    overflow-y: auto;
+    margin-top: 2px;
+    background: var(--g-surface);
+    border: 1px solid var(--g-border);
+    border-radius: var(--g-radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 800;
+}
+
+.g-combo-option {
+    padding: 0.35rem 0.6rem;
+    cursor: pointer;
+}
+
+.g-combo-option:hover,
+.g-combo-active {
+    background: color-mix(in srgb, var(--g-primary) 15%, var(--g-surface));
+}
+
+.g-combo-empty {
+    padding: 0.35rem 0.6rem;
+    color: var(--g-muted);
+}
+
 .g-check label,
 .g-radio-item label {
     margin-left: 0.35rem;

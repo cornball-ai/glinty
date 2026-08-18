@@ -240,6 +240,10 @@ COMPONENT_SCHEMA <- list(
         # `multiple`, which check_component() enforces.
         selected = field("strings"),
         multiple = field("bool", default = FALSE),
+        # A filter-as-you-type view over the same closed choices: the
+        # typed text filters, only a real choice ever reports. Single
+        # only -- check_component() refuses search + multiple.
+        search = field("bool", default = FALSE),
         emit = field("enum", default = "settle", values = c("live", "settle"))
     ),
                          checkbox_input = list(
@@ -745,6 +749,12 @@ check_component <- function(type, out) {
                      call. = FALSE)
             }
             out$selected <- selected[[1L]]
+        }
+        if (isTRUE(out$search) && isTRUE(out$multiple)) {
+            # explicit refusal, not silent degradation: the combobox
+            # is single-select, a multiple select filters natively
+            stop("select_input(search=) is single-select; ",
+                 "drop multiple = TRUE", call. = FALSE)
         }
     }
     if (identical(type, "data_table")) {

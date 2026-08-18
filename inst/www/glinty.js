@@ -85,6 +85,11 @@
         if (el.classList && el.classList.contains("g-range-box")) {
             return rangeValue(el);
         }
+        if (el.classList && el.classList.contains("g-combo")) {
+            /* the current value rides on the box; the text input is
+               a filter view, never the value */
+            return el.dataset.gSelected || "";
+        }
         if (el.type === "checkbox") return el.checked;
         if (el.type === "radio") {
             var checked = document.querySelector(
@@ -424,6 +429,98 @@
        handlers" structural: hydration touches the DOM, never the
        listeners, so there is no second registration to forget to
        skip. */
+    /* ---------- searchable select (combobox) ---------- */
+
+    /* All state lives in the DOM: the box's data-g-selected is the
+       value, hidden attributes are open/closed and filtered-out, and
+       .g-combo-active is the keyboard highlight. Nothing to rebuild,
+       nothing lost when the page was adopted rather than built. */
+
+    function comboLabel(box) {
+        var sel = box.dataset.gSelected;
+        var lab = "";
+        box.querySelectorAll(".g-combo-option").forEach(function (o) {
+            if (o.dataset.gValue === sel) lab = o.textContent;
+        });
+        return lab;
+    }
+
+    function comboActive(box, opt) {
+        box.querySelectorAll(".g-combo-active").forEach(function (o) {
+            o.classList.remove("g-combo-active");
+        });
+        if (opt) {
+            opt.classList.add("g-combo-active");
+            opt.scrollIntoView({ block: "nearest" });
+        }
+    }
+
+    function comboVisible(box) {
+        return Array.prototype.filter.call(
+            box.querySelectorAll(".g-combo-option"),
+            function (o) { return !o.hasAttribute("hidden"); }
+        );
+    }
+
+    function comboOpen(box) {
+        var input = box.querySelector(".g-combo-input");
+        var list = box.querySelector(".g-combo-list");
+        list.removeAttribute("hidden");
+        input.setAttribute("aria-expanded", "true");
+        /* opening shows everything: the field text is the current
+           label, not a filter yet. Select it so typing replaces. */
+        box.querySelectorAll(".g-combo-option").forEach(function (o) {
+            o.removeAttribute("hidden");
+        });
+        box.querySelector(".g-combo-empty").setAttribute("hidden", "hidden");
+        comboActive(box, null);
+        input.select();
+    }
+
+    function comboClose(box) {
+        var input = box.querySelector(".g-combo-input");
+        box.querySelector(".g-combo-list").setAttribute("hidden", "hidden");
+        input.setAttribute("aria-expanded", "false");
+        /* typed text was a view; the label snaps back to the value */
+        input.value = comboLabel(box);
+        comboActive(box, null);
+    }
+
+    function comboFilter(box) {
+        var input = box.querySelector(".g-combo-input");
+        var list = box.querySelector(".g-combo-list");
+        if (list.hasAttribute("hidden")) comboOpen(box);
+        var q = input.value.toLowerCase();
+        var first = null;
+        box.querySelectorAll(".g-combo-option").forEach(function (o) {
+            var hit = o.textContent.toLowerCase().indexOf(q) !== -1;
+            if (hit) {
+                o.removeAttribute("hidden");
+                if (!first) first = o;
+            } else {
+                o.setAttribute("hidden", "hidden");
+            }
+        });
+        var none = box.querySelector(".g-combo-empty");
+        if (first) {
+            none.setAttribute("hidden", "hidden");
+        } else {
+            none.removeAttribute("hidden");
+        }
+        comboActive(box, first);
+    }
+
+    function comboPick(box, opt) {
+        box.dataset.gSelected = opt.dataset.gValue;
+        comboClose(box);
+        noteInput(box.dataset.gTarget, opt.dataset.gValue);
+        send({
+            type: "input",
+            id: box.dataset.gTarget,
+            value: opt.dataset.gValue
+        });
+    }
+
     function bindEvents(root) {
         root.addEventListener("click", function (ev) {
             var el = ev.target.closest("[data-g-target]");
@@ -529,6 +626,77 @@
             }
             if (el.dataset.gEvent !== "change") return;
             sendInput(el);
+        });
+
+        /* combobox: open on click, pick on option click. Options
+           preventDefault on mousedown so the input keeps focus and
+           focusout does not close the list before the click arrives
+           -- the classic combobox race. */
+        root.addEventListener("mousedown", function (ev) {
+            if (ev.target.closest(".g-combo-option")) ev.preventDefault();
+        });
+        root.addEventListener("click", function (ev) {
+            var opt = ev.target.closest(".g-combo-option");
+            if (opt) {
+                comboPick(opt.closest(".g-combo"), opt);
+                return;
+            }
+            var ci = ev.target.closest(".g-combo-input");
+            if (ci) comboOpen(ci.closest(".g-combo"));
+        });
+        root.addEventListener("input", function (ev) {
+            if (ev.target.classList &&
+                    ev.target.classList.contains("g-combo-input")) {
+                comboFilter(ev.target.closest(".g-combo"));
+            }
+        });
+        root.addEventListener("focusout", function (ev) {
+            var box = ev.target.closest && ev.target.closest(".g-combo");
+            if (!box) return;
+            /* only when focus truly leaves the box */
+            if (ev.relatedTarget && box.contains(ev.relatedTarget)) return;
+            comboClose(box);
+        });
+        root.addEventListener("keydown", function (ev) {
+            if (!ev.target.classList ||
+                    !ev.target.classList.contains("g-combo-input")) {
+                return;
+            }
+            var box = ev.target.closest(".g-combo");
+            var open = !box.querySelector(".g-combo-list")
+                .hasAttribute("hidden");
+            if (ev.key === "Escape") {
+                if (open) {
+                    /* the list eats this Escape; a modal behind the
+                       combobox stays put */
+                    ev.stopPropagation();
+                    comboClose(box);
+                }
+                return;
+            }
+            if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+                ev.preventDefault();
+                if (!open) {
+                    comboOpen(box);
+                    return;
+                }
+                var vis = comboVisible(box);
+                if (!vis.length) return;
+                var cur = box.querySelector(".g-combo-active");
+                var i = vis.indexOf(cur);
+                var next = ev.key === "ArrowDown"
+                    ? vis[Math.min(i + 1, vis.length - 1)]
+                    : vis[Math.max(i - 1, 0)];
+                comboActive(box, next);
+                return;
+            }
+            if (ev.key === "Enter") {
+                if (!open) return;
+                ev.preventDefault();
+                var act = box.querySelector(".g-combo-active") ||
+                    comboVisible(box)[0];
+                if (act) comboPick(box, act);
+            }
         });
     }
 
@@ -1075,6 +1243,7 @@
     }
 
     function buildSelect(c) {
+        if (c.search) return buildCombo(c);
         var attrs = assign(bindAttrs(c, "input"), { "class": "g-select" });
         if (c.multiple) attrs.multiple = "multiple";
         var sel = el("select", attrs);
@@ -1097,6 +1266,52 @@
             sel.appendChild(opt);
         });
         return fieldGroup(c, sel);
+    }
+
+    /* The searchable select, mirroring html_combo() in R: binding
+       and current value on the box, a text input as the filter view,
+       the full option list pre-rendered so an adopted page needs
+       nothing built. */
+    function buildCombo(c) {
+        var chosen = c.selected === null || c.selected === undefined
+            ? ((c.choices || []).length ? String(c.choices[0].value) : "")
+            : String(c.selected);
+        var lab = "";
+        (c.choices || []).forEach(function (ch) {
+            if (String(ch.value) === chosen) lab = ch.label;
+        });
+        var box = el("div", assign(bindAttrs(c, "input"), {
+            "class": "g-combo",
+            "data-g-selected": chosen
+        }));
+        box.appendChild(el("input", {
+            type: "text",
+            "class": "g-input g-combo-input",
+            role: "combobox",
+            "aria-expanded": "false",
+            autocomplete: "off",
+            value: lab
+        }));
+        var list = el("div", {
+            "class": "g-combo-list",
+            hidden: "hidden"
+        });
+        (c.choices || []).forEach(function (ch) {
+            var o = el("div", {
+                "class": "g-combo-option",
+                "data-g-value": ch.value
+            });
+            o.textContent = ch.label;
+            list.appendChild(o);
+        });
+        var none = el("div", {
+            "class": "g-combo-empty",
+            hidden: "hidden"
+        });
+        none.textContent = "No matches";
+        list.appendChild(none);
+        box.appendChild(list);
+        return fieldGroup(c, box);
     }
 
     function buildCheckbox(c) {
@@ -2057,6 +2272,11 @@
             return;
         }
 
+        if (el.classList && el.classList.contains("g-combo")) {
+            applyComboUpdate(el, msg);
+            return;
+        }
+
         if (msg.label !== undefined) {
             var lab = document.querySelector('label[for="' + msg.id + '"]');
             if (lab) lab.textContent = msg.label;
@@ -2104,6 +2324,38 @@
         }
         /* deliberately no synthetic events: the server already knows */
         if (el.type === "range") syncSliderLabels(el);
+    }
+
+    /* update_select_input() against a searchable select. Choices
+       rebuild the option nodes (the plain select's rule applied to
+       divs); a pushed selection updates the box value and label. An
+       open list is never stomped, like a focused input. */
+    function applyComboUpdate(box, msg) {
+        if (msg.label !== undefined) {
+            var lab = document.querySelector('label[for="' + msg.id + '"]');
+            if (lab) lab.textContent = msg.label;
+        }
+        var list = box.querySelector(".g-combo-list");
+        var open = !list.hasAttribute("hidden");
+        if (msg.choices !== undefined && !open) {
+            box.querySelectorAll(".g-combo-option").forEach(function (o) {
+                o.remove();
+            });
+            var none = box.querySelector(".g-combo-empty");
+            msg.choices.forEach(function (c) {
+                var o = document.createElement("div");
+                o.className = "g-combo-option";
+                o.dataset.gValue = c.value;
+                o.textContent = c.label;
+                list.insertBefore(o, none);
+            });
+        }
+        if (msg.selected !== undefined && !open) {
+            box.dataset.gSelected = String(msg.selected);
+        }
+        if (!open) {
+            box.querySelector(".g-combo-input").value = comboLabel(box);
+        }
     }
 
     function applyError(msg) {

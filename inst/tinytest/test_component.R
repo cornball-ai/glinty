@@ -266,6 +266,21 @@ expect_error(component("checkbox_group", id = "t", choices = c("a", "b"),
                        selected = c("a", NA)),
              "must be strings")
 
+# --- a searchable select is the same select, single only ---
+srch <- component("select_input", id = "state",
+                  choices = c(A = "a", B = "b"), search = TRUE)
+expect_true(srch$search)
+expect_false(component("select_input", id = "s",
+                       choices = "a")$search)
+# the combobox is a view over the same value semantics, so selected
+# stays a bare string exactly like a plain single select
+srch2 <- component("select_input", id = "s", choices = c("a", "b"),
+                   search = TRUE, selected = "b")
+expect_equal(srch2$selected, "b")
+expect_error(component("select_input", id = "s", choices = c("a", "b"),
+                       search = TRUE, multiple = TRUE),
+             "single-select")
+
 # --- a data table's length menu is an array at every length ---
 dt <- component("data_table", id = "grid")
 expect_equal(dt$page_length, 10L)

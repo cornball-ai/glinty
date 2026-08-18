@@ -1002,6 +1002,26 @@ class GlintyRenderer {
     if (c.boolean('multiple')) return _multiSelect(context, c, id, choices);
     final current = _value(id, c.str('selected'))?.toString() ??
         (choices.isNotEmpty ? choices.first.value : null);
+    if (c.boolean('search')) {
+      // The searchable select. Material's DropdownMenu filters its
+      // entries as the user types -- the same contract as the
+      // browser's combobox: typed text is a view, only picking a
+      // real entry reports. Selection state lives in the menu's own
+      // controller keyed by id; the reported value is the entry's.
+      return _labelled(context, c, DropdownMenu<String>(
+        key: Key(id),
+        enableFilter: true,
+        requestFocusOnTap: true,
+        initialSelection:
+            choices.any((ch) => ch.value == current) ? current : null,
+        dropdownMenuEntries: choices
+            .map((ch) => DropdownMenuEntry(value: ch.value, label: ch.label))
+            .toList(),
+        onSelected: (v) {
+          if (v != null) onInput?.call(id, v);
+        },
+      ));
+    }
     return _labelled(context, c, DropdownButton<String>(
       key: Key(id),
       // a value the choices no longer contain would assert; fall

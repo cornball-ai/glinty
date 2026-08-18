@@ -378,7 +378,7 @@ same as safe to add.
 | `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
 | `password_input` | `id` | `label`, `placeholder` — **never `value`** |
-| `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
+| `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool`, `search: bool` (false; single-select only) |
 | `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
 | `checkbox_group` | `id`, `choices: [{value,label}]` | `label`, `selected: [string]` (always an array) |
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
@@ -409,6 +409,13 @@ including one element and none:
 string makes a client parse a list on Tuesday and a string on
 Wednesday, and every lowering then grows its own guess about which
 it got. The same rule holds for `input` and `input_update`.
+
+`search: true` turns a single select into a combobox: typing filters
+the same closed choice list, and only picking a real choice reports
+a value — the typed text is a display-side view, never a value, so
+the input's domain stays exactly the declared choices and the server
+never sees free text. `search` with `multiple` is a validation
+error, not a degraded render.
 
 `range_slider` is array-valued unconditionally: its `value` is the
 pair `[lo, hi]` in the tree, in every `input` frame, and in the
@@ -441,6 +448,7 @@ rather than an intention.
 | `textarea_input` | `TextField(maxLines:)` | |
 | `number_input` | `TextField` + `TextInputType.number` | Flutter has no spinner; bounds show as helper text |
 | `select_input` | `DropdownButton`, or `FilterChip`s | `multiple` has no dropdown; chips carry the list |
+| `select_input` + `search` | `DropdownMenu(enableFilter:)` | Material's own filter-as-you-type; same contract as the browser combobox |
 | `checkbox_input` | `CheckboxListTile` | |
 | `radio_buttons` | `RadioGroup` + `RadioListTile` | |
 | `checkbox_group` | `CheckboxListTile` column | each toggle emits the whole array, in choice order |

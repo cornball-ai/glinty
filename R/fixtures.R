@@ -154,6 +154,16 @@ component_fixtures <- function() {
                       notes = "choices normalize to value/label however they were written"
         ),
                  list(
+                      name = "select-search",
+                      component = component("select_input", id = "state",
+                choices = c(Alabama = "AL", Alaska = "AK",
+                        Arizona = "AZ"),
+                search = TRUE, selected = "AK"),
+                      notes = paste("a combobox over the same closed choices:",
+                                    "typing filters, only a real choice",
+                                    "reports")
+        ),
+                 list(
                       name = "select-multiple",
                       component = component("select_input", id = "tags",
                 choices = c("Alpha" = "a", "Beta" = "b", "Gamma" = "c"),

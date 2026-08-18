@@ -594,6 +594,37 @@ expect_equal(lengths(regmatches(grp,
     gregexpr('checked="checked"', grp, fixed = TRUE))), 2L)
 expect_false(grepl('type="checkbox"[^>]*data-g-target', grp))
 
+# --- a searchable select lowers to a combobox, value on the box ---
+#
+# No <select> at all: a text input filters a pre-rendered option
+# list, the binding and current value sit on the box so an adopted
+# page recovers everything from the DOM, and the input shows the
+# selected label rather than the value.
+cmb <- component_to_html(component("select_input", id = "state",
+                                   choices = c(Alabama = "AL",
+                                               Alaska = "AK"),
+                                   search = TRUE, selected = "AK"))
+expect_false(grepl("<select", cmb, fixed = TRUE))
+expect_true(grepl('class="g-combo"', cmb, fixed = TRUE))
+expect_true(grepl('data-g-selected="AK"', cmb, fixed = TRUE))
+expect_equal(lengths(regmatches(cmb,
+    gregexpr('data-g-target="state"', cmb, fixed = TRUE))), 1L)
+expect_equal(lengths(regmatches(cmb,
+    gregexpr("g-combo-option", cmb, fixed = TRUE))), 2L)
+expect_true(grepl('value="Alaska"', cmb, fixed = TRUE))
+expect_true(grepl("No matches", cmb, fixed = TRUE))
+# unselected defaults to the first choice, the plain select's rule
+cmb2 <- component_to_html(component("select_input", id = "s",
+                                    choices = c(A = "a", B = "b"),
+                                    search = TRUE))
+expect_true(grepl('data-g-selected="a"', cmb2, fixed = TRUE))
+expect_true(grepl('value="A"', cmb2, fixed = TRUE))
+# a plain select is untouched by the flag's existence
+plain <- component_to_html(component("select_input", id = "s",
+                                     choices = c(A = "a")))
+expect_true(grepl("<select", plain, fixed = TRUE))
+expect_false(grepl("g-combo", plain, fixed = TRUE))
+
 # --- a data table lowers to an empty shell carrying its options ---
 #
 # The interactive build happens client-side when the value arrives,

@@ -418,6 +418,9 @@ html_number <- function(x) {
 }
 
 html_select <- function(x) {
+    if (isTRUE(x$search)) {
+        return(html_combo(x))
+    }
     # A multiple select carries a list of selections, so membership
     # rather than equality. identical() against a list is always
     # FALSE, which rendered every option unselected however many the
@@ -432,6 +435,47 @@ html_select <- function(x) {
                list(class = "g-select",
                     multiple = if (isTRUE(x$multiple)) "multiple" else NULL))
     html_field_group(x, html_el("select", attrs, opts))
+}
+
+# The searchable select: same closed choices, a filter view on top.
+# The binding sits on the box (range_slider's rule) and the current
+# value rides in data-g-selected, because the client may adopt this
+# markup without ever building it -- everything the combobox needs
+# must be recoverable from the DOM alone. The text input is display:
+# typing filters the option nodes, and only clicking or Enter-ing a
+# real option changes the value.
+html_combo <- function(x) {
+    chosen <- if (is.null(x$selected)) {
+        if (length(x$choices) == 0L) "" else x$choices[[1L]]$value
+    } else {
+        x$selected
+    }
+    lab <- ""
+    for (ch in x$choices) {
+        if (identical(ch$value, chosen)) {
+            lab <- ch$label
+        }
+    }
+    opts <- paste(vapply(x$choices, function(ch) {
+        html_el("div", list(class = "g-combo-option",
+                            "data-g-value" = ch$value),
+                html_escape(ch$label))
+    }, character(1L)), collapse = "")
+    inner <- paste0(
+        html_el("input", list(type = "text",
+                              class = "g-input g-combo-input",
+                              role = "combobox",
+                              "aria-expanded" = "false",
+                              autocomplete = "off",
+                              value = lab), void = TRUE),
+        html_el("div", list(class = "g-combo-list", hidden = "hidden"),
+                paste0(opts,
+                       html_el("div", list(class = "g-combo-empty",
+                                           hidden = "hidden"),
+                               "No matches"))))
+    box <- c(html_bind(x),
+             list(class = "g-combo", "data-g-selected" = chosen))
+    html_field_group(x, html_el("div", box, inner))
 }
 
 html_checkbox <- function(x) {

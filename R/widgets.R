@@ -85,21 +85,33 @@ number_input <- function(id, label = "", value = NULL, min = NULL,
 
 #' Create a select dropdown
 #'
+#' With `search = TRUE` the control is a combobox: typing filters the
+#' same closed choice list, and only picking a real choice reports a
+#' value -- the typed text is a view, never a value, so the input's
+#' domain stays exactly the declared choices. Single-select only;
+#' a multiple select already filters by scrolling and refuses the
+#' flag. Long lists (dozens up) are where it earns the extra control.
+#'
 #' @param id character input ID
 #' @param label character label text
 #' @param choices character vector of choices; names are display
 #'   labels. A list of value/label pairs also works.
 #' @param selected character value selected initially
 #' @param multiple logical allow several selections
+#' @param search logical filter-as-you-type over the choices
+#'   (single-select only)
 #' @param emit character "live" or "settle"
 #' @return A UI component
 #' @examples
 #' select_input("engine", "Engine:", c(Fast = "fast", Slow = "slow"))
+#' select_input("state", "State:", datasets::state.name, search = TRUE)
 #' @export
 select_input <- function(id, label = "", choices = character(0),
-                         selected = NULL, multiple = FALSE, emit = "settle") {
+                         selected = NULL, multiple = FALSE, search = FALSE,
+                         emit = "settle") {
     component("select_input", id = id, label = label, choices = choices,
-              selected = selected, multiple = multiple, emit = emit)
+              selected = selected, multiple = multiple, search = search,
+              emit = emit)
 }
 
 #' Create a checkbox
