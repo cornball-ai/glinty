@@ -1256,6 +1256,10 @@
         attrs["data-g-target"] = c.id;
         attrs["data-g-message"] = message;
         if (c.emit) attrs["data-g-event"] = emitEvent(c.emit);
+        /* clear_on rides in the DOM (html_bind writes the same
+           attribute on the static path) so emitEventFrame's
+           document-wide query finds a dynamically built composer. */
+        if (c.clear_on) attrs["data-g-clear-on"] = c.clear_on;
         if (valued) attrs["data-g-value"] = c.value;
         return attrs;
     }

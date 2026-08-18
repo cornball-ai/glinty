@@ -39,6 +39,25 @@ expect_true(grepl('data-g-clear-on="go"',
                   component_to_html(component("text_input", id = "quick",
     clear_on = "go")), fixed = TRUE))
 
+# The dynamic half of the same contract: the JS builder's bindAttrs
+# must write the binding attributes html_bind writes, clear_on
+# included -- the two drifted once and a composer inside a rendered
+# slot silently never cleared (#80). Sliced out of the shipped
+# glinty.js and driven under node; skipped where node is absent, a
+# development check rather than an R CMD check requirement.
+node <- Sys.which("node")
+js_path <- system.file("www", "glinty.js", package = "glinty")
+harness <- system.file("tinytest", "builder_client.js", package = "glinty")
+if (nzchar(node) && nzchar(harness) && file.exists(harness)) {
+    out <- suppressWarnings(system2(node, c(harness, js_path),
+                                    stdout = TRUE, stderr = TRUE))
+    status <- attr(out, "status")
+    expect_true(is.null(status) || identical(status, 0L),
+                info = paste(out, collapse = "\n"))
+    expect_true(any(grepl("^ok [0-9]+$", out)),
+                info = paste(out, collapse = "\n"))
+}
+
 expect_true(grepl(">hello<", component_to_html(component("text",
                                                          value = "hello")),
                   fixed = TRUE))

@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**A composer inside a rendered slot clears again** (#80). The
+browser's `clear_on` path is attribute-driven, and the dynamic
+builder's `bindAttrs` -- the JS mirror of `html_bind` -- never wrote
+`data-g-clear-on`, so `clear_on` worked on a lowered page and
+silently did nothing inside a `ui_output` slot. One attribute of
+drift, now written on both paths and held there: a node harness
+slices `bindAttrs` out of the shipped file and asserts the binding
+map key for key, so the next attribute `html_bind` grows fails until
+the builder answers for it.
+
 **`markdown()` and `rich_text`: model output renders without the
 escape hatch** (#70). `rich_text` is the new inline-formatting leaf
 -- a flat list of styled runs (bold/italic/code/strike, optional
