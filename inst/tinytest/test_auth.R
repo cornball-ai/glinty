@@ -266,6 +266,51 @@ expect_false(is.null(issue_ticket(sc, "again", "upload")))
 glinty:::session_end(sc)
 glinty:::session_end(sc2)
 
+# --- two-argument verifiers see the upgrade request (#73) ---
+# The cookie rides the upgrade request's headers; the hello has no
+# token at all. This is the HttpOnly-cookie shape: page script never
+# held a credential to send.
+seen <- NULL
+ver2 <- function(token, req) {
+    seen <<- req
+    if (identical(unname(req$headers[["cookie"]]), "session=abc")) {
+        list(id = "cookie-user")
+    }
+}
+upreq <- list(method = "GET", path = "/ws", query = "",
+              headers = c(cookie = "session=abc", host = "localhost"))
+gate <- authenticate_hello(ver2, list(type = "hello"), upreq)
+expect_true(gate$ok)
+expect_equal(gate$principal$id, "cookie-user")
+expect_equal(unname(seen$headers[["cookie"]]), "session=abc")
+# a wrong cookie refuses, same as a wrong token always has
+bad <- list(method = "GET", path = "/ws", query = "",
+            headers = c(cookie = "session=nope"))
+expect_false(authenticate_hello(ver2, list(type = "hello"), bad)$ok)
+# a one-argument verifier is untouched by the new context
+ver1 <- function(token) if (identical(token, "t")) list(id = "u1")
+expect_true(authenticate_hello(ver1, list(token = "t"), upreq)$ok)
+# no surviving request (nothing stashed): a two-arg verifier gets NULL
+# and can still decide on the token alone
+ver_both <- function(token, req) {
+    if (is.null(req) && identical(token, "t")) list(id = "n")
+}
+expect_true(authenticate_hello(ver_both, list(token = "t"), NULL)$ok)
+
+# --- upgrade_request_for: the registry keeps the parsed head ---
+upgrade_request_for <- glinty:::upgrade_request_for
+glinty:::reg_reset()
+entry <- new.env(parent = emptyenv())
+entry$upgrade_req <- upreq
+reg <- glinty:::REG
+reg$conns[["c1"]] <- entry
+reg$sessions[["s1"]] <- "c1"
+expect_equal(upgrade_request_for("s1")$path, "/ws")
+expect_equal(unname(upgrade_request_for("s1")$headers[["cookie"]]),
+             "session=abc")
+expect_null(upgrade_request_for("no-such-session"))
+glinty:::reg_reset()
+
 # --- run_app validates auth ---
 a <- app(ui = page(txt("x"), title = "T"),
          server = function(input, output) NULL)

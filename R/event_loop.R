@@ -188,6 +188,12 @@ handle_http_bytes <- function(key, handlers) {
             entry$state <- "ws_open"
             sid <- new_session_id()
             entry$session_id <- sid
+            # The parsed head survives on the entry (headers included)
+            # so the hello gate can hand it to a verifier: an HttpOnly
+            # session cookie rides the upgrade request, never the
+            # hello frame. A GET upgrade has no body, so this is the
+            # whole head and nothing more.
+            entry$upgrade_req <- req
             REG$sessions[[sid]] <- key
             if (!is.null(handlers$on_open)) {
                 handlers$on_open(sid)

@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**Cookie-visible auth: a verifier can see the upgrade request** (#73).
+`run_app(auth = )` still takes a `function(token)`; a verifier that
+declares a second parameter is now called as `auth(token, req)`,
+where `req` is the parsed WebSocket upgrade request (method, path,
+query, lower-cased headers). That request is where an HttpOnly
+session cookie actually travels, so a deployment that deliberately
+keeps its session where page script cannot read it can authenticate
+the socket from the same verifier instead of downgrading to a
+script-readable token.
+
 **`panel(max_height =)`: the vertical bound a monitor panel needs**
 (#44). A cap, not a fixed size: shorter content keeps its height,
 taller content scrolls -- except media inside `fill = TRUE`, which

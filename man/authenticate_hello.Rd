@@ -3,12 +3,15 @@
 \alias{authenticate_hello}
 \title{Run the configured verifier against a hello}
 \usage{
-authenticate_hello(auth, msg)
+authenticate_hello(auth, msg, req = NULL)
 }
 \arguments{
-\item{auth}{a function(token) or NULL}
+\item{auth}{a function(token) or function(token, req), or NULL}
 
 \item{msg}{decoded hello message}
+
+\item{req}{the parsed HTTP request that upgraded this connection
+(method, path, query, headers), or NULL when none survives}
 }
 \value{
 list(ok, principal)
