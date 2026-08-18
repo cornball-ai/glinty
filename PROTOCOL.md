@@ -869,7 +869,8 @@ Sent once in `welcome`. A closed set of tokens, not a stylesheet.
     "primary": "#6366f1", "on_primary": "#ffffff",
     "surface": "#ffffff", "background": "#f8fafc",
     "text": "#1e293b", "muted": "#64748b",
-    "border": "#e2e8f0", "danger": "#f43f5e"
+    "border": "#e2e8f0", "danger": "#f43f5e",
+    "success": "#16a34a", "warning": "#d97706"
   },
   "spacing": 4,
   "radius": 8,
@@ -878,7 +879,8 @@ Sent once in `welcome`. A closed set of tokens, not a stylesheet.
     "primary": "#a5b4fc", "on_primary": "#111827",
     "surface": "#1f2937", "background": "#111827",
     "text": "#e5e7eb", "muted": "#9ca3af",
-    "border": "#374151", "danger": "#f87171"
+    "border": "#374151", "danger": "#f87171",
+    "success": "#4ade80", "warning": "#fbbf24"
   }
 }
 ```
@@ -932,8 +934,8 @@ client is free to render `danger` however it likes.
 |---|---|
 | `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost`, `listing` |
 | `panel` | `plain`, `card`, `sidebar` |
-| `text` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
-| `text_output` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
+| `text` | `normal`, `muted`, `strong`, `heading`, `mono`, `small`, `success`, `warning`, `danger` |
+| `text_output` | `normal`, `muted`, `strong`, `heading`, `mono`, `small`, `success`, `warning`, `danger` |
 | `divider` | `line`, `labelled` |
 
 Unknown variants fall back to the first listed, with a console warning
@@ -1223,7 +1225,9 @@ make it slower.
    beat glinty.css, app CSS beats tokens) holds identically before
    and after the socket connects. Flutter consumes every token:
    colors onto the scheme (`muted` -> `onSurfaceVariant`, `danger`
-   -> `error`), radius onto cards and buttons, fonts including mono,
+   -> `error`; `success`/`warning` have no Material seat and ride a
+   `GlintyStatusColors` ThemeExtension the status text variants
+   read), radius onto cards and buttons, fonts including mono,
    spacing feeding spacer() on both sides. A themeless app keeps
    each frontend's own defaults, browser dark mode included. The
    stylesheet was rewired to the token set and the v3 class

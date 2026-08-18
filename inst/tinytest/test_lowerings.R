@@ -39,6 +39,24 @@ expect_true(grepl('data-g-clear-on="go"',
                   component_to_html(component("text_input", id = "quick",
     clear_on = "go")), fixed = TRUE))
 
+# The status trio rides as classes over theme tokens; text and
+# text_output carry the same three (#78)
+expect_true(grepl('class="g-text g-success"',
+                  component_to_html(component("text", value = "ok",
+    variant = "success")), fixed = TRUE))
+expect_true(grepl('class="g-text g-warning"',
+                  component_to_html(component("text", value = "hm",
+    variant = "warning")), fixed = TRUE))
+expect_true(grepl('class="g-text g-danger"',
+                  component_to_html(component("text", value = "no",
+    variant = "danger")), fixed = TRUE))
+expect_true(grepl("g-output g-success",
+                  component_to_html(component("text_output", id = "st",
+    variant = "success")), fixed = TRUE))
+expect_true(grepl("g-output g-danger",
+                  component_to_html(component("text_output", id = "st2",
+    variant = "danger")), fixed = TRUE))
+
 # The dynamic half of the same contract: the JS builder's bindAttrs
 # must write the binding attributes html_bind writes, clear_on
 # included -- the two drifted once and a composer inside a rendered

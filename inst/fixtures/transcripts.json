@@ -31,7 +31,9 @@
                 "text": "#1a1a1a",
                 "muted": "#6a6a6a",
                 "border": "#d0d0d5",
-                "danger": "#b3261e"
+                "danger": "#b3261e",
+                "success": "#1a7f37",
+                "warning": "#9a6700"
               },
               "spacing": 4,
               "radius": 6,

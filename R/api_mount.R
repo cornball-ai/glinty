@@ -24,12 +24,11 @@
 route_api <- function(req, api, auth = NULL) {
     res <- tryCatch(
                     api(req$method, req$path, api_body(req),
-                        as.list(parse_query(req$query)),
-                        api_principal(req, auth)),
-        error = function(e) {
-            message("api request failed: ", conditionMessage(e))
-            list(status = 500L, body = list(error = "internal error"))
-        }
+                        as.list(parse_query(req$query)), api_principal(req, auth)),
+                    error = function(e) {
+        message("api request failed: ", conditionMessage(e))
+        list(status = 500L, body = list(error = "internal error"))
+    }
     )
     if (is.null(res)) {
         return(NULL)
@@ -106,12 +105,19 @@ api_principal <- function(req, auth) {
 #' @return raw HTTP response
 #' @keywords internal
 api_response_raw <- function(res) {
-    status <- if (is.null(res$status)) 200L else as.integer(res$status)
-    extra <- if (length(res$headers)) unlist(res$headers) else NULL
+    if (is.null(res$status)) {
+        status <- 200L
+    } else {
+        status <- as.integer(res$status)
+    }
+    if (length(res$headers)) {
+        extra <- unlist(res$headers)
+    } else {
+        extra <- NULL
+    }
     if (!is.null(res$file)) {
         if (!file.exists(res$file)) {
-            return(http_response_raw(404L, "text/plain", "Not found",
-                                     extra))
+            return(http_response_raw(404L, "text/plain", "Not found", extra))
         }
         ctype <- res$content_type
         if (is.null(ctype)) {

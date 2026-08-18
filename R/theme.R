@@ -4,7 +4,8 @@
 # than tokens ship a stylesheet, which only the browser sees.
 
 THEME_COLOR_NAMES <- c("primary", "on_primary", "surface", "background",
-                       "text", "muted", "border", "danger")
+                       "text", "muted", "border", "danger", "success",
+                       "warning")
 
 # The stylesheet's dark palette (inst/www/glinty.css), as tokens:
 # what app_theme(dark = ) merges over, so a partial dark list starts
@@ -13,7 +14,8 @@ THEME_COLOR_NAMES <- c("primary", "on_primary", "surface", "background",
 DARK_COLOR_DEFAULTS <- list(primary = "#6f95f5", on_primary = "#10131a",
                             surface = "#1e2128", background = "#16181d",
                             text = "#e6e6e6", muted = "#9a9aa2",
-                            border = "#3a3d45", danger = "#e5484d")
+                            border = "#3a3d45", danger = "#e5484d",
+                            success = "#3fb950", warning = "#d29922")
 
 #' glinty's default look, as explicit tokens
 #'
@@ -24,7 +26,8 @@ theme_defaults <- function() {
          colors = list(primary = "#2456d6", on_primary = "#ffffff",
                        surface = "#ffffff", background = "#ffffff",
                        text = "#1a1a1a", muted = "#6a6a6a",
-                       border = "#d0d0d5", danger = "#b3261e"),
+                       border = "#d0d0d5", danger = "#b3261e",
+                       success = "#1a7f37", warning = "#9a6700"),
 
          spacing = 4,
          radius = 6,
@@ -57,8 +60,8 @@ theme_defaults <- function() {
 #' glinty must never charge.
 #'
 #' @param colors named list over primary, on_primary, surface,
-#'   background, text, muted, border, danger; values are
-#'   "#rrggbb" (or "#rrggbbaa") strings
+#'   background, text, muted, border, danger, success, warning;
+#'   values are "#rrggbb" (or "#rrggbbaa") strings
 #' @param spacing numeric base spacing unit in logical pixels;
 #'   spacer() sizes are multiples of it
 #' @param radius numeric corner radius in logical pixels

@@ -915,7 +915,10 @@
         strong: "g-text g-strong",
         heading: "g-text g-text-heading",
         mono: "g-text g-mono",
-        small: "g-text g-small"
+        small: "g-text g-small",
+        success: "g-text g-success",
+        warning: "g-text g-warning",
+        danger: "g-text g-danger"
     };
     var OUTPUT_CLASSES = {
         normal: "g-output",
@@ -923,7 +926,10 @@
         strong: "g-output g-strong",
         heading: "g-output g-text-heading",
         mono: "g-output g-mono",
-        small: "g-output g-small"
+        small: "g-output g-small",
+        success: "g-output g-success",
+        warning: "g-output g-warning",
+        danger: "g-output g-danger"
     };
     var OUTPUT_KIND_OF = {
         data_table: "table",
@@ -1213,9 +1219,10 @@
        equal to the schema, order included, so a new variant fails
        there until the style exists here too. */
     var KNOWN_VARIANTS = {
-        text: ["normal", "muted", "strong", "heading", "mono", "small"],
+        text: ["normal", "muted", "strong", "heading", "mono", "small",
+               "success", "warning", "danger"],
         text_output: ["normal", "muted", "strong", "heading", "mono",
-                      "small"],
+                      "small", "success", "warning", "danger"],
         button: ["default", "primary", "secondary", "danger", "ghost",
                  "listing"],
         download_button: ["default", "primary", "secondary", "danger",
@@ -2622,7 +2629,7 @@
        reload. */
     var THEME_COLOR_NAMES = ["primary", "on_primary", "surface",
                              "background", "text", "muted", "border",
-                             "danger"];
+                             "danger", "success", "warning"];
 
     /* Token values are interpolated into CSS text, so each field is
        held to the same rule app_theme() enforces server-side --

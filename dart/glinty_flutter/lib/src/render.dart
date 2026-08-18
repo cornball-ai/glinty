@@ -18,6 +18,7 @@ import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/services.dart';
 
 import 'component.dart';
+import 'theme.dart' show GlintyStatusColors;
 
 /// What a client can do, declared in `hello`.
 ///
@@ -75,8 +76,14 @@ const unsupportedComponents = <String>{
 /// fallback), so a new variant fails there until this client styles
 /// it.
 const knownVariants = <String, List<String>>{
-  'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
-  'text_output': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
+  'text': [
+    'normal', 'muted', 'strong', 'heading', 'mono', 'small', //
+    'success', 'warning', 'danger'
+  ],
+  'text_output': [
+    'normal', 'muted', 'strong', 'heading', 'mono', 'small', //
+    'success', 'warning', 'danger'
+  ],
   'button': ['default', 'primary', 'secondary', 'danger', 'ghost', 'listing'],
   'download_button': [
     'default', 'primary', 'secondary', 'danger', 'ghost', 'listing'
@@ -748,6 +755,21 @@ class GlintyRenderer {
             fontFamilyFallback: monoStack.sublist(1));
       case 'small':
         return theme.bodySmall;
+      case 'success':
+        return theme.bodyMedium?.copyWith(
+            color: Theme.of(context)
+                .extension<GlintyStatusColors>()
+                ?.success);
+      case 'warning':
+        return theme.bodyMedium?.copyWith(
+            color: Theme.of(context)
+                .extension<GlintyStatusColors>()
+                ?.warning);
+      case 'danger':
+        // the danger token lands on ColorScheme.error in
+        // glintyThemeData, so the variant reads it back from there
+        return theme.bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.error);
       default:
         return theme.bodyMedium;
     }

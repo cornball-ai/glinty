@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**The status trio: `txt()` and `text_output()` say healthy, degraded,
+failing** (#78). Three new variants -- `success`, `warning`,
+`danger` -- coloring text from two new theme tokens (`success`,
+`warning`) beside the existing `danger`, with light and dark defaults
+and the usual `app_theme()` override. Semantic like every variant:
+the vocabulary names the states, the theme decides the colors. In
+Flutter, `danger` reads `ColorScheme.error` and the other two ride a
+`GlintyStatusColors` ThemeExtension, since Material has no seat for
+them.
+
 **A composer inside a rendered slot clears again** (#80). The
 browser's `clear_on` path is attribute-driven, and the dynamic
 builder's `bindAttrs` -- the JS mirror of `html_bind` -- never wrote

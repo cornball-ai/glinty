@@ -101,15 +101,13 @@ get_header <- function(req, name) {
 #' @keywords internal
 http_response_raw <- function(status, content_type, body,
                               extra_headers = NULL) {
-    reason <- switch(as.character(status), "200" = "OK",
-                     "201" = "Created", "204" = "No Content",
-                     "206" = "Partial Content", "302" = "Found",
-                     "400" = "Bad Request", "401" = "Unauthorized",
-                     "403" = "Forbidden", "404" = "Not Found",
-                     "413" = "Payload Too Large",
+    reason <- switch(as.character(status), "200" = "OK", "201" = "Created",
+                     "204" = "No Content", "206" = "Partial Content",
+                     "302" = "Found", "400" = "Bad Request",
+                     "401" = "Unauthorized", "403" = "Forbidden",
+                     "404" = "Not Found", "413" = "Payload Too Large",
                      "416" = "Range Not Satisfiable",
-                     "426" = "Upgrade Required",
-                     "429" = "Too Many Requests",
+                     "426" = "Upgrade Required", "429" = "Too Many Requests",
                      "500" = "Internal Server Error",
                      "501" = "Not Implemented", "OK")
     if (is.character(body)) {

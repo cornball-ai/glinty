@@ -21,6 +21,15 @@ expect_equal(th2$colors$text, th$colors$text)
 expect_equal(th2$radius, 10)
 expect_equal(th2$spacing, 4)
 
+# the status tokens are ordinary members of the closed set (#78):
+# overridable one at a time, defaulted like every other color
+expect_equal(th$colors$success, "#1a7f37")
+expect_equal(th$colors$warning, "#9a6700")
+th_st <- app_theme(colors = list(success = "#00AA00"))
+expect_equal(th_st$colors$success, "#00aa00")
+expect_equal(th_st$colors$warning, th$colors$warning)
+expect_equal(app_theme(dark = list())$dark$success, "#3fb950")
+
 # --- the set is closed and the values are checked ---
 expect_error(app_theme(colors = list(primry = "#000000")), "unknown token")
 expect_error(app_theme(colors = list(primary = "red")), "rrggbb")
