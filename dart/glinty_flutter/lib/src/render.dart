@@ -11,6 +11,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1128,6 +1129,14 @@ class GlintyRenderer {
                 color: primary
                     ? theme.colorScheme.onPrimary
                     : theme.colorScheme.onSurface)));
+    // Material's track is inset by max(overlay, thumb)/2 = 24 on
+    // each side (BaseSliderTrackShape.getPreferredRect); the bubble
+    // and scale must live in the track's coordinate space or they
+    // only line up with the thumb at the midpoint. Pinned by
+    // slider_geometry_probe_test so a Material redesign fails loud.
+    const trackInset = 24.0;
+    double trackX(double f, double w) =>
+        w > 2 * trackInset ? trackInset + f * (w - 2 * trackInset) : f * w;
     final chipRow = SizedBox(
         height: 22,
         child: LayoutBuilder(
@@ -1139,7 +1148,7 @@ class GlintyRenderer {
                     Positioned(right: 0, top: 0,
                         child: chip(_numLabel(max), primary: false)),
                   Positioned(
-                      left: pct * box.maxWidth, top: 0,
+                      left: trackX(pct, box.maxWidth), top: 0,
                       child: FractionalTranslation(
                           translation: const Offset(-0.5, 0),
                           child: chip(_numLabel(value), primary: true))),
@@ -1147,10 +1156,15 @@ class GlintyRenderer {
     final scale = SizedBox(
         height: 20,
         child: LayoutBuilder(builder: (context, box) {
+          // the label budget comes from the measured track width,
+          // the same floor(width / 70) the browser client uses
+          final maxLab = box.maxWidth.isFinite
+              ? ((box.maxWidth - 2 * trackInset) / 70).floor().clamp(2, 11)
+              : 11;
           final marks = <Widget>[];
-          for (final tk in _sliderTicks(min, max, step)) {
+          for (final tk in _sliderTicks(min, max, step, maxLab)) {
             marks.add(Positioned(
-                left: tk.f * box.maxWidth, top: 0,
+                left: trackX(tk.f, box.maxWidth), top: 0,
                 child: Container(
                     width: 1,
                     height: tk.major ? 7 : 4,
@@ -1159,7 +1173,7 @@ class GlintyRenderer {
                         : theme.colorScheme.outlineVariant)));
             if (tk.major) {
               marks.add(Positioned(
-                  left: tk.f * box.maxWidth, top: 8,
+                  left: trackX(tk.f, box.maxWidth), top: 8,
                   child: FractionalTranslation(
                       translation: const Offset(-0.5, 0),
                       child: Text(tk.label,
@@ -1200,10 +1214,32 @@ class GlintyRenderer {
   /// A scale label at fraction f, snapped to the step grid when
   /// there is one -- scale numbers should be values the thumb can
   /// actually take. Mirrors slider_snap() in R.
+  /// The precision a stepless slider still has: Shiny's findStepSize
+  /// rule. Integer ends spanning >= 2 mean whole numbers; otherwise
+  /// a 1/2/5-ladder decimal near range/100. Mirrors
+  /// slider_implied_step() in R and sliderImpliedStep() in glinty.js.
+  static double _sliderImpliedStep(double min, double max) {
+    final range = max - min;
+    if (range >= 2 && min % 1 == 0 && max % 1 == 0) return 1;
+    final raw = range / 100;
+    final mag = math.pow(10, (math.log(raw) / math.ln10).floor()).toDouble();
+    final norm = raw / mag;
+    return mag *
+        (norm <= 1.5
+            ? 1
+            : norm <= 3.5
+                ? 2
+                : norm <= 7.5
+                    ? 5
+                    : 10);
+  }
+
   static double _sliderSnap(double f, double min, double max, double? step) {
     var v = min + f * (max - min);
-    if (step != null && step > 0) {
-      v = min + ((v - min) / step).round() * step;
+    var s = step ?? 0;
+    if (s <= 0 && max > min) s = _sliderImpliedStep(min, max);
+    if (s > 0) {
+      v = min + ((v - min) / s).round() * s;
       v = v.clamp(min, max);
     }
     return v;
@@ -1212,34 +1248,45 @@ class GlintyRenderer {
   /// The scale as (fraction, major, label) ticks: on the stops when
   /// the step grid is coarse enough to see (ticks must sit where the
   /// thumb can rest), a fixed tenths grid when the slider reads as
-  /// continuous. Mirrors slider_ticks() in R and sliderTicks() in
+  /// continuous. maxLabels caps the numbered majors so a narrow
+  /// track stays legible; thinned positions keep their tick at
+  /// minor size. Mirrors slider_ticks() in R and sliderTicks() in
   /// glinty.js; the three must agree.
   static List<({double f, bool major, String label})> _sliderTicks(
-      double min, double max, double? step) {
+      double min, double max, double? step,
+      [int maxLabels = 11]) {
+    if (maxLabels < 2) maxLabels = 2;
     final ticks = <({double f, bool major, String label})>[];
     final n = step != null && step > 0 ? ((max - min) / step).round() : 0;
     if (n >= 1 &&
         n <= 20 &&
         (min + n * step! - max).abs() <
             1e-9 * (max.abs() > 1 ? max.abs() : 1)) {
-      final every = n <= 10 ? 1 : 2;
+      // at the default budget this is the old rule: every stop to
+      // 10, every 2nd for 11-20
+      final every = ((n + 1) / maxLabels).ceil();
       for (var i = 0; i <= n; i++) {
-        final major = i % every == 0 || i == n;
+        // a regular label within one gap of the always-labeled last
+        // stop yields to it
+        final major = (i % every == 0 && n - i >= every) || i == n;
         ticks.add((
           f: i * step / (max - min),
           major: major,
           label: major ? _numLabel(min + i * step) : ''
         ));
-        if (i < n && n <= 10) {
+        if (i < n && n <= 10 && every == 1) {
           ticks.add((f: (i + 0.5) * step / (max - min), major: false,
                      label: ''));
         }
       }
       return ticks;
     }
+    final labelEvery = (11 / maxLabels).ceil();
     var prevLabel = '';
     for (var j = 0; j <= 40; j++) {
-      final major = j % 4 == 0;
+      final m = j ~/ 4;
+      final major = j % 4 == 0 &&
+          ((m % labelEvery == 0 && 10 - m >= labelEvery) || m == 10);
       var lab = '';
       if (major) {
         lab = _numLabel(_sliderSnap(j / 40, min, max, step));
@@ -1465,19 +1512,29 @@ class GlintyRenderer {
           // Unlike flitR, every panel is built and Flutter retains the
           // state of the ones not on screen. That divergence is in
           // PROTOCOL.md; it is not something this renderer can hide.
-          SizedBox(
-            height: 200,
-            child: TabBarView(
-              children: panels
-                  .map((p) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children:
-                            p.children.map((k) => build(context, k)).toList(),
-                      ))
-                  .toList(),
-            ),
-          ),
+          // IndexedStack rather than a fixed-height TabBarView: the
+          // set sizes to its largest panel, so a plot living in a tab
+          // keeps its real height instead of clipping at a hardcoded
+          // viewport. (No swipe -- the browser's tabs don't swipe
+          // either.)
+          Builder(builder: (context) {
+            final ctl = DefaultTabController.of(context);
+            return AnimatedBuilder(
+              animation: ctl,
+              builder: (context, _) => IndexedStack(
+                index: ctl.index,
+                children: panels
+                    .map((p) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: p.children
+                              .map((k) => build(context, k))
+                              .toList(),
+                        ))
+                    .toList(),
+              ),
+            );
+          }),
         ],
       ),
     );
