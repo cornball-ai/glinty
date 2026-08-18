@@ -454,10 +454,36 @@ component_fixtures <- function() {
     }))
 }
 
+#' The vocabulary as data: component names and variant lists
+#'
+#' What the R schema declares, in the schema's own order, for clients
+#' to check their declaration tables against. Those tables cannot be
+#' generated -- a support list states what a client implements, and a
+#' variant list gates that client's own style maps -- so the honest
+#' relation is verified restatement: each client asserts its tables
+#' against this block in its own suite, and a vocabulary change fails
+#' the client that has not answered for it instead of falling back
+#' silently.
+#'
+#' Order matters for variants: the first listed value is the fallback
+#' an unknown variant takes, and a test asserts it is also the schema
+#' default.
+#'
+#' @return list(components, variants)
+#' @keywords internal
+vocabulary <- function() {
+    with_variants <- Filter(function(s) is.character(s$variant$values),
+                            COMPONENT_SCHEMA)
+    # I() so jsonlite keeps every list an array even at length one
+    variants <- lapply(with_variants, function(s) I(s$variant$values))
+    list(components = I(names(COMPONENT_SCHEMA)), variants = variants)
+}
+
 #' Serialize the fixtures to JSON
 #'
 #' The wire form of every fixture, plus its name and note, as one
-#' document. This is what a client in another language consumes.
+#' document -- and the vocabulary block clients pin their declaration
+#' tables to. This is what a client in another language consumes.
 #'
 #' @return character JSON
 #' @keywords internal
@@ -472,6 +498,7 @@ fixture_json <- function() {
     # this file that has drifted is worse than no copy: both repos pass
     # independently, against different data.
     as.character(jsonlite::toJSON(list(protocol = PROTOCOL_VERSION,
+                                       vocabulary = vocabulary(),
                                        fixtures = payload),
                                   auto_unbox = TRUE, pretty = TRUE,
                                   null = "null"))

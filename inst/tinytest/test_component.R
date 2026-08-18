@@ -327,6 +327,17 @@ if (nzchar(path) && file.exists(path)) {
     # consumer in another language can check before rendering
     parsed <- jsonlite::fromJSON(path, simplifyVector = FALSE)
     expect_equal(parsed$protocol, glinty:::PROTOCOL_VERSION)
+    # the vocabulary block rides along, so a client in another
+    # language pins its declaration tables to this same artifact
+    expect_equal(unlist(parsed$vocabulary$components),
+                 names(glinty:::COMPONENT_SCHEMA))
+    sv <- Filter(Negate(is.null),
+                 lapply(glinty:::COMPONENT_SCHEMA,
+                        function(s) s$variant$values))
+    expect_equal(names(parsed$vocabulary$variants), names(sv))
+    for (nm in names(sv)) {
+        expect_equal(unlist(parsed$vocabulary$variants[[nm]]), sv[[nm]])
+    }
     expect_equal(length(parsed$fixtures), length(fx))
     for (i in seq_along(fx)) {
         expect_equal(parsed$fixtures[[i]]$name, fx[[i]]$name)

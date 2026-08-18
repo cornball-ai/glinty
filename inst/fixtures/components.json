@@ -1,5 +1,16 @@
 {
   "protocol": 3,
+  "vocabulary": {
+    "components": ["text", "heading", "link", "icon", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "tabset", "conditional_panel", "shortcut", "raw_html"],
+    "variants": {
+      "text": ["normal", "muted", "strong", "heading", "mono", "small"],
+      "divider": ["line", "labelled"],
+      "panel": ["plain", "card", "sidebar"],
+      "button": ["default", "primary", "secondary", "danger", "ghost", "listing"],
+      "download_button": ["default", "primary", "secondary", "danger", "ghost", "listing"],
+      "text_output": ["normal", "muted", "strong", "heading", "mono", "small"]
+    }
+  },
   "fixtures": [
     {
       "name": "text",
