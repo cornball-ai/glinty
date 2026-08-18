@@ -854,6 +854,47 @@ h1, h2, h3, h4 {
     min-height: 0;
 }
 
+/* ---------- feed ---------- */
+
+/* The feed owns its scroll (the stick-to-bottom contract needs the
+   scroller), so it takes .g-scroll's rules itself. Like .g-scroll it
+   only scrolls once an ancestor bounds its height -- a grown feed in
+   a fill panel, the workspace shape. position: relative anchors the
+   sticky jump button. */
+.g-feed {
+    position: relative;
+    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.g-feed-items {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--g-space) * 2);
+    /* pins a short feed's items to the bottom edge, where a chat
+       reads from; harmless once content overflows */
+    margin-top: auto;
+}
+
+/* Client chrome, not vocabulary: appears when the reader has
+   scrolled up and items arrived below. Sticky inside the scroller,
+   so it rides the bottom edge of the visible area. */
+.g-feed-jump {
+    position: sticky;
+    bottom: calc(var(--g-space) * 2);
+    align-self: center;
+    padding: 0.3rem 0.9rem;
+    border: 1px solid var(--g-border);
+    border-radius: 999px;
+    background: var(--g-surface);
+    color: var(--g-text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
 /* ---------- visibility ---------- */
 
 /* The one lever conditional_panel() and tabset() pull. Kept blunt so

@@ -268,6 +268,7 @@ class GlintyView extends StatelessWidget {
           inputs: s.inputs,
           pushes: s.pushes,
           clears: s.clears,
+          feeds: s.feeds,
           overrides: s.overrides,
           condition: s.conditionHolds,
           spacing: glintySpacing(s.theme),
