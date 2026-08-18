@@ -160,6 +160,16 @@ COMPONENT_SCHEMA <- list(
                                       title = field("string"),
                                       grow = field("int", min = 0, max = 32),
                                       width = field("int", min = 0, max = 4096),
+                                      # The vertical bound width's twin cannot
+                                      # give. A cap rather than a fixed size:
+                                      # the case that wants it (a monitor
+                                      # panel whose media would otherwise
+                                      # decide the row height) letterboxes
+                                      # inside whatever it gets, and a fixed
+                                      # height would hold the panel tall when
+                                      # its content is short.
+                                      max_height = field("int", min = 1,
+                                                         max = 4096),
                                       # The panel becomes a column that hands
                                       # its height to its children, so one of
                                       # them can grow and scroll. Without it a

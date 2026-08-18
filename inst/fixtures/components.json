@@ -155,6 +155,26 @@
       }
     },
     {
+      "name": "panel-capped",
+      "notes": "the monitor shape: max_height caps the panel so tall media letterboxes into the bound instead of deciding the row height",
+      "component": {
+        "component": "panel",
+        "children": [
+          {
+            "component": "video_output",
+            "id": "preview",
+            "controls": true,
+            "autoplay": false,
+            "muted": false,
+            "loop": false
+          }
+        ],
+        "variant": "plain",
+        "max_height": 540,
+        "fill": true
+      }
+    },
+    {
       "name": "empty-column",
       "notes": "a lowering must not crash on an empty container",
       "component": {

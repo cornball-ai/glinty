@@ -516,7 +516,7 @@ class GlintyRenderer {
       case 'row':
         return _sized(c, _row(context, c));
       case 'panel':
-        return _sized(c, _panel(context, c));
+        return _sized(c, _capped(c, _panel(context, c)));
       case 'text_input':
         return _textField(context, c);
       case 'password_input':
@@ -1843,6 +1843,30 @@ class GlintyRenderer {
     // not -- a fixed-width panel sitting shrink-wrapped in a row.
     return SizedBox(
         width: width.toDouble(), child: _bounded(child, width: true));
+  }
+
+  /// panel(max_height): the height cap, honored the way .g-capped is.
+  ///
+  /// A fill panel gets a bounded box for its children to divide --
+  /// the letterbox shrinks media into the cap, which is the
+  /// monitor-panel case the bound exists for -- so the record says
+  /// height is real. (One divergence, accepted: fill under a cap
+  /// sits AT the cap even when its content is short, where the
+  /// browser's auto-height column hugs; the case that wants the cap
+  /// is media that exceeds it, where both agree.) A plain panel
+  /// scrolls what does not fit, like the browser's overflow-y, and a
+  /// scroll view means unbounded inside, which the record says too.
+  Widget _capped(GlintyComponent c, Widget child) {
+    final cap = c.integer('max_height')?.toDouble();
+    if (cap == null) return child;
+    if (c.boolean('fill')) {
+      return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: cap),
+          child: _bounded(child, height: true));
+    }
+    return ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: cap),
+        child: SingleChildScrollView(child: _bounded(child, height: false)));
   }
 
   /// Shrink-wraps [child] where the width record says unbounded, and

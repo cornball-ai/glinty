@@ -386,7 +386,7 @@ same as safe to add.
 | `page` | `children: []` | `title` ("glinty app"), `width`: `content` \| `full` (`content`), `id` |
 | `row` | `children: []` | `gap: int`, `align`: `start` \| `center` \| `end` \| `stretch`, `grow: int`, `width: int`, `id` |
 | `column` | `children: []` | `gap: int`, `grow: int`, `width: int`, `scroll: bool` (false), `id` |
-| `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `fill: bool` (false), `id` |
+| `panel` | `children: []` | `variant`, `title: string`, `grow: int`, `width: int`, `max_height: int`, `fill: bool` (false), `id` |
 | `image` | `src: string` | `alt` (""), `width: int`, `height: int` |
 | `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
@@ -455,7 +455,7 @@ rather than an intention.
 | `spacer` | `SizedBox` | size × theme spacing |
 | `page` | `Column` | `width` is a viewport-layout hint; native keeps its own padding |
 | `row` / `column` | `Row` / `Column` | `gap` → separators; `grow` → `Expanded`, `width` → `SizedBox`; `align: stretch` → `IntrinsicHeight`; `scroll` → `SingleChildScrollView` |
-| `panel` | `Card` / `Container` | variant selects; `fill` → a max-size `Column` whose grown children take `Expanded` |
+| `panel` | `Card` / `Container` | variant selects; `fill` → a max-size `Column` whose grown children take `Expanded`; `max_height` → `ConstrainedBox`, scrolling overflow unless `fill` letterboxes it |
 | `text_input` | `TextField` | `emit` → `onChanged` vs blur/submit |
 | `password_input` | `TextField(obscureText: true)` | |
 | `textarea_input` | `TextField(maxLines:)` | |

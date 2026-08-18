@@ -93,6 +93,16 @@ component_fixtures <- function() {
                       notes = "a titled container; the browser draws a header, Flutter a Card"
         ),
                  list(
+                      name = "panel-capped",
+                      component = component("panel", fill = TRUE,
+                max_height = 540L,
+                children = list(component("video_output", id = "preview"))),
+                      notes = paste("the monitor shape: max_height caps the",
+                                    "panel so tall media letterboxes into",
+                                    "the bound instead of deciding the row",
+                                    "height")
+        ),
+                 list(
                       name = "empty-column",
                       component = component("column", children = list()),
                       notes = "a lowering must not crash on an empty container"

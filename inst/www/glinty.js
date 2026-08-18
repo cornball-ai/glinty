@@ -1543,9 +1543,15 @@
             return buildLayout(c, "g-layout-col");
         case "panel":
             var panelStyle = flexStyle(c);
+            var capped = c.max_height !== null && c.max_height !== undefined;
+            if (capped) {
+                panelStyle = panelStyle.concat(
+                    "--g-max-height:" + c.max_height + "px");
+            }
             node = el("div", {
                 "class": "g-panel g-panel-" +
                     checkVariant("panel", c.variant) + sizedClass(c) +
+                    (capped ? " g-capped" : "") +
                     (c.fill ? " g-fill" : ""),
                 id: c.id,
                 style: panelStyle.length ? panelStyle.join(";") : null

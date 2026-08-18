@@ -317,11 +317,19 @@ html_panel <- function(x) {
         inner <- paste0(html_el("div", list(class = "g-panel-title"),
                                 html_escape(x$title)), inner)
     }
+    style <- html_flex_style(x)
+    if (!is.null(x$max_height)) {
+        # A custom property like the flex sizing, so .g-capped owns
+        # the rule and this stays one declaration per element.
+        style <- paste(c(style, paste0("--g-max-height:", x$max_height,
+                                       "px")), collapse = ";")
+    }
     html_el("div", list(class = paste(c(paste0("g-panel g-panel-", x$variant),
                     if (html_is_sized(x)) "g-sized",
+                    if (!is.null(x$max_height)) "g-capped",
                     if (isTRUE(x$fill)) "g-fill"),
                                       collapse = " "),
-                        id = x$id, style = html_flex_style(x)), inner)
+                        id = x$id, style = style), inner)
 }
 
 # --- inputs ---
