@@ -161,6 +161,14 @@ component_fixtures <- function() {
                       notes = "numbers, not CSS strings: Flutter derives Slider divisions from step"
         ),
                  list(
+                      name = "range-slider",
+                      component = component("range_slider", id = "years",
+                min = 1990, max = 2030, value = c(2000, 2015), step = 1),
+                      notes = paste("one input, two thumbs; its value is the",
+                                    "pair [lo, hi] on the wire, both ends on",
+                                    "the step grid")
+        ),
+                 list(
                       name = "button-primary",
                       component = component("button", id = "go", label = "Run",
                 variant = "primary"),

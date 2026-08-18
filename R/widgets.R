@@ -165,6 +165,34 @@ slider_input <- function(id, label = "", min = 0, max = 1, value = NULL,
               value = value, step = step, emit = emit)
 }
 
+#' Create a two-thumb range slider
+#'
+#' One component, two thumbs: its value is the pair `c(lo, hi)` and
+#' arrives server-side as a length-2 numeric vector. With no `value`
+#' the thumbs start at the ends. `step` and `emit` behave exactly as
+#' in [slider_input()]; a stepless range still drags at the implied
+#' precision.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param min,max numeric bounds
+#' @param value numeric `c(lo, hi)` initial pair; NULL means the ends
+#' @param step numeric step size; NULL for the implied precision
+#' @param emit character "live" (default) or "settle"
+#' @return A UI component
+#' @examples
+#' range_slider("years", "Years:", min = 1990, max = 2030,
+#'     value = c(2000, 2015), step = 1)
+#' @export
+range_slider <- function(id, label = "", min = 0, max = 1, value = NULL,
+                         step = NULL, emit = "live") {
+    if (is.null(value)) {
+        value <- c(min, max)
+    }
+    component("range_slider", id = id, label = label, min = min, max = max,
+              value = value, step = step, emit = emit)
+}
+
 #' Create a date input
 #'
 #' The value arrives server-side as a "YYYY-MM-DD" string; convert

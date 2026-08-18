@@ -135,9 +135,10 @@ for (nm in names(COMPONENT_SCHEMA)) {
     for (fname in names(COMPONENT_SCHEMA[[nm]])) {
         spec <- COMPONENT_SCHEMA[[nm]][[fname]]
         expect_true(is.character(spec$type))
-        expect_true(spec$type %in% c("string", "strings", "number", "int",
-                                     "bool", "enum", "choices", "panels",
-                                     "condition", "children", "any"))
+        expect_true(spec$type %in% c("string", "strings", "number",
+                                     "numbers", "int", "bool", "enum",
+                                     "choices", "panels", "condition",
+                                     "children", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)
@@ -211,6 +212,41 @@ expect_true(grepl('"selected":"b"', as_json(one), fixed = TRUE))
 expect_error(component("select_input", id = "s", choices = c("a", "b"),
                        selected = c("a", NA), multiple = TRUE),
              "must be strings")
+
+# --- a range slider's value is exactly the pair [lo, hi] ---
+#
+# One input, one server value, two thumbs. The arity rule lives in
+# check_component() like select_input's, because field types cannot
+# say "exactly two".
+rng <- component("range_slider", id = "yrs", min = 1990, max = 2030,
+                 value = c(2000, 2015))
+expect_equal(unlist(rng$value), c(2000, 2015))
+# the wire form is an array, never a collapsed scalar
+expect_true(grepl('"value":[2000,2015]', as_json(rng), fixed = TRUE))
+
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = 5),
+             "must be c\\(lo, hi\\)")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(1, 2, 3)),
+             "must be c\\(lo, hi\\)")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(7, 3)),
+             "lo <= hi")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(-1, 5)),
+             "within \\[min, max\\]")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(3, 11)),
+             "within \\[min, max\\]")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(1, NA)),
+             "finite numbers")
+
+# the widget defaults an omitted value to the full span, so a bare
+# range_slider(id) is usable the way slider_input(id) is
+full <- range_slider("span", min = 5, max = 50)
+expect_equal(unlist(full$value), c(5, 50))
 
 # --- fixtures ---
 fx <- component_fixtures()

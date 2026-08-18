@@ -28,6 +28,8 @@ ui <- page(
     radio_buttons("mode", "Mode:", c(Fast = "fast", Slow = "slow")),
     slider_input("sl", "S:", min = 0, max = 100, value = 25),
     slider_input("sl_default", "S2:", min = 10, max = 20),
+    range_slider("rng", "R:", min = 1, max = 1000, value = c(200, 500)),
+    range_slider("rng_default", "R2:", min = 5, max = 50),
     select_input("engine", "E:", c(A = "a", B = "b")),
     select_input("engine_sel", "E2:", c(A = "a", B = "b"), selected = "b"),
     select_input("multi", "M:", c(A = "a", B = "b"), multiple = TRUE),
@@ -76,6 +78,11 @@ expect_equal(isolate(s$input$mode()), "fast")
 # midpoint, so every frontend starts the thumb in the same place
 expect_equal(isolate(s$input$sl()), 25)
 expect_equal(isolate(s$input$sl_default()), 15)
+
+# a range seeds the numeric pair, not the list the wire carries;
+# omitted it spans the whole range
+expect_equal(isolate(s$input$rng()), c(200, 500))
+expect_equal(isolate(s$input$rng_default()), c(5, 50))
 
 # a single select shows its first choice; a multiple select shows an
 # empty selection, which is character(0) and not NULL. The browser

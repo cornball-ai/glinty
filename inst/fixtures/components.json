@@ -301,6 +301,23 @@
       }
     },
     {
+      "name": "range-slider",
+      "notes": "one input, two thumbs; its value is the pair [lo, hi] on the wire, both ends on the step grid",
+      "component": {
+        "component": "range_slider",
+        "id": "years",
+        "label": "",
+        "min": 1990,
+        "max": 2030,
+        "value": [
+          2000,
+          2015
+        ],
+        "step": 1,
+        "emit": "live"
+      }
+    },
+    {
       "name": "button-primary",
       "notes": "emits an event, not an input: there is no value to keep",
       "component": {

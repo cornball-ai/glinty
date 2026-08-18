@@ -51,6 +51,7 @@ component_to_html <- function(x) {
            checkbox_input = html_checkbox(x),
            radio_buttons = html_radio(x),
            slider_input = html_slider(x),
+           range_slider = html_range_slider(x),
            date_input = html_text_like(x, "date"),
            file_input = html_file(x),
            button = html_button(x),
@@ -490,7 +491,9 @@ html_slider <- function(x) {
                chip("g-slider-chip-max", x$max, pct > 0.9)))
 
     marks <- character(0L)
-    for (tk in slider_ticks(x$min, x$max, x$step)) {
+    # ticks take the materialized step: they sit where the thumb can
+    # actually rest, and the thumb now rests on the implied grid
+    for (tk in slider_ticks(x$min, x$max, step)) {
         left <- sprintf("left:%s%%", num_label(round(tk$f * 100, 4)))
         marks[[length(marks) + 1L]] <- html_el("span",
             list(class = if (tk$major) "g-tick g-tick-major" else "g-tick",
@@ -505,6 +508,87 @@ html_slider <- function(x) {
 
     box <- html_el("div", list(class = "g-slider-box"),
                    paste0(top, html_el("input", attrs, void = TRUE), scale))
+    html_field_group(x, box)
+}
+
+# A range slider is two stacked native range inputs over one drawn
+# rail: the inputs are transparent and pointer-inert except at their
+# thumbs, the rail and the [lo, hi] fill are glinty's own elements,
+# and the number layers mirror html_slider() -- two bubbles, end
+# chips, one shared scale. The binding attributes live on the BOX
+# (one server value), never on the end inputs: an end that carried
+# data-g-target would send a scalar where the server keeps a pair.
+html_range_slider <- function(x) {
+    step <- x$step
+    if ((is.null(step) || !is.numeric(step) || step <= 0) &&
+        is.numeric(x$min) && is.numeric(x$max) && x$max > x$min) {
+        step <- slider_implied_step(x$min, x$max)
+    }
+    # a bare tree value spans the whole range, matching the seed and
+    # the range_slider() widget default
+    v <- if (is.null(x$value)) {
+        c(x$min, x$max)
+    } else {
+        as.numeric(unlist(x$value))
+    }
+    lo <- v[[1L]]
+    hi <- v[[2L]]
+    p1 <- slider_pct(lo, x$min, x$max)
+    p2 <- slider_pct(hi, x$min, x$max)
+
+    chip <- function(cls, val, hidden) {
+        html_el("span",
+                list(class = paste0("g-slider-chip ", cls),
+                     style = if (hidden) "visibility:hidden" else NULL),
+                num_label(val))
+    }
+    bubble <- function(cls, val, pct) {
+        html_el("output",
+            list(class = paste0("g-slider-chip g-slider-bubble ", cls),
+                 style = sprintf("left:%s%%", num_label(round(pct * 100, 3)))),
+            num_label(val))
+    }
+    top <- html_el("div", list(class = "g-slider-top"),
+        paste0(chip("g-slider-chip-min", x$min, p1 < 0.1),
+               bubble("g-range-bubble-lo", lo, p1),
+               bubble("g-range-bubble-hi", hi, p2),
+               chip("g-slider-chip-max", x$max, p2 > 0.9)))
+
+    end_input <- function(end, val) {
+        html_el("input",
+                list(type = "range", class = "g-slider g-range-end",
+                     "data-g-range-end" = end,
+                     min = x$min, max = x$max, value = val, step = step),
+                void = TRUE)
+    }
+    fill_style <- sprintf("left:%s%%;width:%s%%",
+                          num_label(round(p1 * 100, 3)),
+                          num_label(round((p2 - p1) * 100, 3)))
+    track <- html_el("div", list(class = "g-range-track"),
+        paste0(html_el("div", list(class = "g-range-rail"), ""),
+               html_el("div", list(class = "g-range-fill",
+                                   style = fill_style), ""),
+               end_input("lo", lo),
+               end_input("hi", hi)))
+
+    marks <- character(0L)
+    for (tk in slider_ticks(x$min, x$max, step)) {
+        left <- sprintf("left:%s%%", num_label(round(tk$f * 100, 4)))
+        marks[[length(marks) + 1L]] <- html_el("span",
+            list(class = if (tk$major) "g-tick g-tick-major" else "g-tick",
+                 style = left), "")
+        if (tk$major) {
+            marks[[length(marks) + 1L]] <- html_el("span",
+                list(class = "g-tick-label", style = left), tk$label)
+        }
+    }
+    scale <- html_el("div", list(class = "g-slider-scale"),
+                     paste0(marks, collapse = ""))
+
+    box <- html_el("div",
+                   c(html_bind(x),
+                     list(class = "g-slider-box g-range-box")),
+                   paste0(top, track, scale))
     html_field_group(x, box)
 }
 

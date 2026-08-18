@@ -48,3 +48,23 @@ labs11 <- vapply(Filter(function(t) t$major && nzchar(t$label), tk11),
 expect_equal(length(labs11), 11L)
 expect_equal(labs11[[1L]], "1")
 expect_equal(labs11[[11L]], "1000")
+
+# --- range slider lowering: two ends, one binding, materialized step
+hr <- glinty:::component_to_html(
+    glinty::range_slider("rng", "R:", min = 1, max = 1000,
+        value = c(200, 500)))
+# both ends drag at the implied granularity, like a single slider
+expect_equal(lengths(regmatches(hr, gregexpr('step="1"', hr, fixed = TRUE))),
+    2L)
+expect_true(grepl('data-g-range-end="lo"', hr, fixed = TRUE))
+expect_true(grepl('data-g-range-end="hi"', hr, fixed = TRUE))
+# the server value is one pair, so the binding sits on the box; an
+# end input carrying data-g-target would send a scalar
+expect_equal(lengths(regmatches(hr,
+    gregexpr('data-g-target="rng"', hr, fixed = TRUE))), 1L)
+expect_false(grepl('data-g-target[^>]*g-range-end', hr))
+# both bubbles show, positioned at their own percent
+expect_true(grepl("g-range-bubble-lo", hr, fixed = TRUE))
+expect_true(grepl("g-range-bubble-hi", hr, fixed = TRUE))
+# the fill spans lo..hi: p1 = 199/999, width = 300/999
+expect_true(grepl("left:19.92%;width:30.03%", hr, fixed = TRUE))

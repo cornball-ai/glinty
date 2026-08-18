@@ -26,7 +26,7 @@ const supportedComponents = <String>{
   'page', 'row', 'column', 'panel',
   'text_input', 'password_input', 'textarea_input', 'number_input',
   'select_input', 'checkbox_input', 'radio_buttons', 'slider_input',
-  'button', 'download_button',
+  'range_slider', 'button', 'download_button',
   'text_output', 'verbatim_output', 'table_output',
   'plot_output', 'image_output', 'image',
   'tabset', 'conditional_panel', 'collapse', 'ui_output',
@@ -507,6 +507,8 @@ class GlintyRenderer {
         return _radios(context, c);
       case 'slider_input':
         return _slider(context, c);
+      case 'range_slider':
+        return _rangeSlider(context, c);
       case 'button':
       case 'download_button':
         return _button(context, c);
@@ -1116,73 +1118,31 @@ class GlintyRenderer {
     // the bubble reaches them, and a graded scale below the track.
     // Local edits rebuild this subtree, so every layer tracks the
     // finger under `settle` too.
-    Widget chip(String text, {required bool primary}) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        decoration: BoxDecoration(
-            color: primary
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outline.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(4)),
-        child: Text(text,
-            style: theme.textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: primary
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurface)));
-    // Material's track is inset by max(overlay, thumb)/2 = 24 on
-    // each side (BaseSliderTrackShape.getPreferredRect); the bubble
-    // and scale must live in the track's coordinate space or they
-    // only line up with the thumb at the midpoint. Pinned by
-    // slider_geometry_probe_test so a Material redesign fails loud.
-    const trackInset = 24.0;
-    double trackX(double f, double w) =>
-        w > 2 * trackInset ? trackInset + f * (w - 2 * trackInset) : f * w;
     final chipRow = SizedBox(
         height: 22,
         child: LayoutBuilder(
             builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
                   if (pct >= 0.1)
                     Positioned(left: 0, top: 0,
-                        child: chip(_numLabel(min), primary: false)),
+                        child: _sliderChip(theme, _numLabel(min),
+                            primary: false)),
                   if (pct <= 0.9)
                     Positioned(right: 0, top: 0,
-                        child: chip(_numLabel(max), primary: false)),
+                        child: _sliderChip(theme, _numLabel(max),
+                            primary: false)),
                   Positioned(
-                      left: trackX(pct, box.maxWidth), top: 0,
+                      left: _trackX(pct, box.maxWidth), top: 0,
                       child: FractionalTranslation(
                           translation: const Offset(-0.5, 0),
-                          child: chip(_numLabel(value), primary: true))),
+                          child: _sliderChip(theme, _numLabel(value),
+                              primary: true))),
                 ])));
-    final scale = SizedBox(
-        height: 20,
-        child: LayoutBuilder(builder: (context, box) {
-          // the label budget comes from the measured track width,
-          // the same floor(width / 70) the browser client uses
-          final maxLab = box.maxWidth.isFinite
-              ? ((box.maxWidth - 2 * trackInset) / 70).floor().clamp(2, 11)
-              : 11;
-          final marks = <Widget>[];
-          for (final tk in _sliderTicks(min, max, step, maxLab)) {
-            marks.add(Positioned(
-                left: trackX(tk.f, box.maxWidth), top: 0,
-                child: Container(
-                    width: 1,
-                    height: tk.major ? 7 : 4,
-                    color: tk.major
-                        ? theme.colorScheme.onSurfaceVariant
-                        : theme.colorScheme.outlineVariant)));
-            if (tk.major) {
-              marks.add(Positioned(
-                  left: trackX(tk.f, box.maxWidth), top: 8,
-                  child: FractionalTranslation(
-                      translation: const Offset(-0.5, 0),
-                      child: Text(tk.label,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant)))));
-            }
-          }
-          return Stack(clipBehavior: Clip.none, children: marks);
-        }));
+    // ticks take the materialized step: they sit where the thumb can
+    // actually rest, and the thumb rests on the implied grid
+    final effStep = step != null && step > 0
+        ? step
+        : (max > min ? _sliderImpliedStep(min, max) : null);
+    final scale = _sliderScale(theme, min, max, effStep);
     return _labelled(
         context,
         c,
@@ -1219,9 +1179,147 @@ class GlintyRenderer {
         ]));
   }
 
-  /// A scale label at fraction f, snapped to the step grid when
-  /// there is one -- scale numbers should be values the thumb can
-  /// actually take. Mirrors slider_snap() in R.
+  /// Material's track is inset by max(overlay, thumb)/2 = 24 on each
+  /// side (BaseSliderTrackShape.getPreferredRect); every overlay
+  /// layer maps through the track's coordinate space or it only
+  /// lines up with the thumb at the midpoint. Pinned by
+  /// slider_geometry_probe_test so a Material redesign fails loud.
+  static const double _trackInset = 24.0;
+
+  static double _trackX(double f, double w) =>
+      w > 2 * _trackInset ? _trackInset + f * (w - 2 * _trackInset) : f * w;
+
+  Widget _sliderChip(ThemeData theme, String text, {required bool primary}) =>
+      Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+              color: primary
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outline.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(4)),
+          child: Text(text,
+              style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: primary
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurface)));
+
+  /// The graded scale under a track, shared by _slider and
+  /// _rangeSlider. Takes the EFFECTIVE step (materialized when the
+  /// app set none), the grid the thumb actually rests on.
+  Widget _sliderScale(
+          ThemeData theme, double min, double max, double? effStep) =>
+      SizedBox(
+          height: 20,
+          child: LayoutBuilder(builder: (context, box) {
+            // the label budget comes from the measured track width,
+            // the same floor(width / 70) the browser client uses
+            final maxLab = box.maxWidth.isFinite
+                ? ((box.maxWidth - 2 * _trackInset) / 70).floor().clamp(2, 11)
+                : 11;
+            final marks = <Widget>[];
+            for (final tk in _sliderTicks(min, max, effStep, maxLab)) {
+              marks.add(Positioned(
+                  left: _trackX(tk.f, box.maxWidth), top: 0,
+                  child: Container(
+                      width: 1,
+                      height: tk.major ? 7 : 4,
+                      color: tk.major
+                          ? theme.colorScheme.onSurfaceVariant
+                          : theme.colorScheme.outlineVariant)));
+              if (tk.major) {
+                marks.add(Positioned(
+                    left: _trackX(tk.f, box.maxWidth), top: 8,
+                    child: FractionalTranslation(
+                        translation: const Offset(-0.5, 0),
+                        child: Text(tk.label,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color:
+                                    theme.colorScheme.onSurfaceVariant)))));
+              }
+            }
+            return Stack(clipBehavior: Clip.none, children: marks);
+          }));
+
+  /// One component, two thumbs: Material's RangeSlider under the
+  /// same three number layers as _slider, emitting the pair
+  /// [lo, hi]. The server keeps one value; every emitted end is
+  /// quantized exactly as a single slider's would be.
+  Widget _rangeSlider(BuildContext context, GlintyComponent c) {
+    final id = c.str('id')!;
+    final min = _numField(c, "min") ?? 0;
+    final max = _numField(c, "max") ?? 1;
+    final step = _numField(c, "step");
+    final raw = _value(id, c.fields['value']);
+    var lo = min;
+    var hi = max;
+    if (raw is List && raw.length == 2) {
+      lo = (raw[0] as num?)?.toDouble() ?? min;
+      hi = (raw[1] as num?)?.toDouble() ?? max;
+    }
+    lo = lo.clamp(min, max);
+    hi = hi.clamp(lo, max);
+    final settle = GlintyEmit.parse(c.str('emit')) == GlintyEmit.settle;
+    final theme = Theme.of(context);
+    final span = max > min ? max - min : 1;
+    final p1 = ((lo - min) / span).clamp(0.0, 1.0);
+    final p2 = ((hi - min) / span).clamp(0.0, 1.0);
+    final chipRow = SizedBox(
+        height: 22,
+        child: LayoutBuilder(
+            builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
+                  if (p1 >= 0.1)
+                    Positioned(left: 0, top: 0,
+                        child: _sliderChip(theme, _numLabel(min),
+                            primary: false)),
+                  if (p2 <= 0.9)
+                    Positioned(right: 0, top: 0,
+                        child: _sliderChip(theme, _numLabel(max),
+                            primary: false)),
+                  Positioned(
+                      left: _trackX(p1, box.maxWidth), top: 0,
+                      child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: _sliderChip(theme, _numLabel(lo),
+                              primary: true))),
+                  Positioned(
+                      left: _trackX(p2, box.maxWidth), top: 0,
+                      child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: _sliderChip(theme, _numLabel(hi),
+                              primary: true))),
+                ])));
+    final effStep = step != null && step > 0
+        ? step
+        : (max > min ? _sliderImpliedStep(min, max) : null);
+    List<double> quantized(RangeValues v) {
+      final a = _sliderQuantize(v.start, min, max, step);
+      final b = _sliderQuantize(v.end, min, max, step);
+      return a <= b ? [a, b] : [b, a];
+    }
+
+    return _labelled(
+        context,
+        c,
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          chipRow,
+          RangeSlider(
+            key: Key(id),
+            min: min,
+            max: max,
+            divisions:
+                step != null && step > 0 ? ((max - min) / step).round() : null,
+            values: RangeValues(lo, hi),
+            onChanged: settle
+                ? (v) => (onLocalInput ?? onInput)?.call(id, quantized(v))
+                : (v) => onInput?.call(id, quantized(v)),
+            onChangeEnd:
+                settle ? (v) => onInput?.call(id, quantized(v)) : null,
+          ),
+          _sliderScale(theme, min, max, effStep),
+        ]));
+  }
+
   /// A dragged value quantized to the slider's real granularity:
   /// its step, or the implied step when the app set none. What the
   /// browser's range input does natively.

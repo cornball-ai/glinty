@@ -19,7 +19,8 @@
         "collapse", "file_input", "heading", "html_output", "icon",
         "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
-        "plot_output", "radio_buttons", "raw_html", "row", "select_input",
+        "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
+        "select_input",
         "slider_input", "spacer", "tabset", "text", "text_input",
         "text_output", "textarea_input", "ui_output", "verbatim_output",
         "video_output"
@@ -468,6 +469,17 @@
 
         root.addEventListener("input", function (ev) {
             var el = ev.target;
+            /* a range end routes through its box: one server value,
+               two thumbs. The box carries the binding attributes. */
+            if (el.dataset.gRangeEnd) {
+                var rbox = el.closest(".g-range-box");
+                if (!rbox) return;
+                syncRangeLabels(rbox, el);
+                if (rbox.dataset.gEvent === "input") {
+                    sendRangeDebounced(rbox);
+                }
+                return;
+            }
             /* the readout tracks the thumb regardless of emit: a
                settle slider still shows where the finger is */
             if (el.type === "range") syncSliderLabels(el);
@@ -477,6 +489,14 @@
 
         root.addEventListener("change", function (ev) {
             var el = ev.target;
+            if (el.dataset.gRangeEnd) {
+                var rbox = el.closest(".g-range-box");
+                if (rbox && rbox.dataset.gEvent === "change") {
+                    syncRangeLabels(rbox, el);
+                    sendRange(rbox);
+                }
+                return;
+            }
             if (el.dataset.gUpload) {
                 uploadFiles(el);
                 return;
@@ -742,6 +762,12 @@
     function syncSliderLabels(input, box) {
         box = box || input.closest(".g-slider-box");
         if (!box) return;
+        /* a range box shares the slider classes so the chips, bubble
+           and scale styling carry over; its sync is its own */
+        if (box.classList.contains("g-range-box")) {
+            syncRangeLabels(box);
+            return;
+        }
         var min = parseFloat(input.min) || 0;
         var max = parseFloat(input.max);
         max = isFinite(max) ? max : 1;
@@ -768,6 +794,91 @@
         }
         var scale = box.querySelector(".g-slider-scale");
         if (scale) buildSliderScale(scale, min, max, step);
+    }
+
+    /* A range box's client-kept layers: two bubbles, yielding end
+       chips, the [lo, hi] fill, the shared scale. `moved` is the end
+       input that changed, so a crossing drag clamps the end the user
+       is holding rather than shoving its partner. */
+    function syncRangeLabels(box, moved) {
+        if (!box.classList || !box.classList.contains("g-range-box")) {
+            box = box.closest(".g-range-box");
+            if (!box) return;
+        }
+        var ends = box.querySelectorAll(".g-range-end");
+        if (ends.length !== 2) return;
+        var loEl = ends[0];
+        var hiEl = ends[1];
+        var min = parseFloat(loEl.min) || 0;
+        var max = parseFloat(loEl.max);
+        max = isFinite(max) ? max : 1;
+        var step = parseFloat(loEl.step) || 0;
+        var lo = parseFloat(loEl.value);
+        lo = isFinite(lo) ? lo : min;
+        var hi = parseFloat(hiEl.value);
+        hi = isFinite(hi) ? hi : max;
+        if (lo > hi) {
+            if (moved === hiEl) {
+                hi = lo;
+                hiEl.value = hi;
+            } else {
+                lo = hi;
+                loEl.value = lo;
+            }
+        }
+        var span = max > min ? max - min : 1;
+        var p1 = Math.min(1, Math.max(0, (lo - min) / span));
+        var p2 = Math.min(1, Math.max(0, (hi - min) / span));
+        var bubLo = box.querySelector(".g-range-bubble-lo");
+        if (bubLo) {
+            bubLo.textContent = numLabel(lo);
+            bubLo.style.left = numLabel(Math.round(p1 * 100000) / 1000) + "%";
+        }
+        var bubHi = box.querySelector(".g-range-bubble-hi");
+        if (bubHi) {
+            bubHi.textContent = numLabel(hi);
+            bubHi.style.left = numLabel(Math.round(p2 * 100000) / 1000) + "%";
+        }
+        var chipMin = box.querySelector(".g-slider-chip-min");
+        if (chipMin) {
+            chipMin.textContent = numLabel(min);
+            chipMin.style.visibility = p1 < 0.1 ? "hidden" : "";
+        }
+        var chipMax = box.querySelector(".g-slider-chip-max");
+        if (chipMax) {
+            chipMax.textContent = numLabel(max);
+            chipMax.style.visibility = p2 > 0.9 ? "hidden" : "";
+        }
+        var fill = box.querySelector(".g-range-fill");
+        if (fill) {
+            fill.style.left = numLabel(Math.round(p1 * 100000) / 1000) + "%";
+            fill.style.width =
+                numLabel(Math.round((p2 - p1) * 100000) / 1000) + "%";
+        }
+        var scale = box.querySelector(".g-slider-scale");
+        if (scale) buildSliderScale(scale, min, max, step);
+    }
+
+    function rangeValue(box) {
+        var ends = box.querySelectorAll(".g-range-end");
+        var lo = parseFloat(ends[0].value);
+        var hi = parseFloat(ends[1].value);
+        return [Math.min(lo, hi), Math.max(lo, hi)];
+    }
+
+    function sendRange(box) {
+        var value = rangeValue(box);
+        noteInput(box.dataset.gTarget, value);
+        send({ type: "input", id: box.dataset.gTarget, value: value });
+    }
+
+    function sendRangeDebounced(box) {
+        var id = box.dataset.gTarget;
+        if (debounceTimers.has(id)) clearTimeout(debounceTimers.get(id));
+        debounceTimers.set(id, setTimeout(function () {
+            debounceTimers.delete(id);
+            sendRange(box);
+        }, DEBOUNCE_MS));
     }
 
     function el(tag, attrs) {
@@ -1244,6 +1355,46 @@
             sbox.appendChild(el("div", { "class": "g-slider-scale" }));
             syncSliderLabels(input, sbox);
             return fieldGroup(c, sbox);
+        }
+        case "range_slider": {
+            /* Mirrors html_range_slider() in R: two stacked native
+               inputs over one drawn rail, thumbs pointer-active, the
+               binding on the box because the server keeps one pair. */
+            var rbox = el("div", assign(bindAttrs(c, "input"),
+                { "class": "g-slider-box g-range-box" }));
+            var rtop = el("div", { "class": "g-slider-top" });
+            rtop.appendChild(el("span",
+                { "class": "g-slider-chip g-slider-chip-min" }));
+            rtop.appendChild(el("output", { "class":
+                "g-slider-chip g-slider-bubble g-range-bubble-lo" }));
+            rtop.appendChild(el("output", { "class":
+                "g-slider-chip g-slider-bubble g-range-bubble-hi" }));
+            rtop.appendChild(el("span",
+                { "class": "g-slider-chip g-slider-chip-max" }));
+            rbox.appendChild(rtop);
+            var rstep = c.step;
+            if (!(rstep > 0) && c.max > c.min) {
+                rstep = sliderImpliedStep(c.min, c.max);
+            }
+            var pair = c.value || [c.min, c.max];
+            var track = el("div", { "class": "g-range-track" });
+            track.appendChild(el("div", { "class": "g-range-rail" }));
+            track.appendChild(el("div", { "class": "g-range-fill" }));
+            ["lo", "hi"].forEach(function (end, i) {
+                track.appendChild(el("input", {
+                    type: "range",
+                    "class": "g-slider g-range-end",
+                    "data-g-range-end": end,
+                    min: c.min,
+                    max: c.max,
+                    value: pair[i],
+                    step: rstep
+                }));
+            });
+            rbox.appendChild(track);
+            rbox.appendChild(el("div", { "class": "g-slider-scale" }));
+            syncRangeLabels(rbox);
+            return fieldGroup(c, rbox);
         }
         case "file_input":
             return buildFile(c);

@@ -94,6 +94,13 @@ input_seed_value <- function(x) {
         } else {
             x$value
         },
+           range_slider = if (is.null(x$value)) {
+            c(x$min, x$max)
+        } else {
+            # the validated tree holds list(lo, hi) (JSON array shape);
+            # the server-side value is the numeric pair
+            as.numeric(unlist(x$value))
+        },
            select_input = select_seed(x),
            tabset = tabset_seed(x),
            NULL

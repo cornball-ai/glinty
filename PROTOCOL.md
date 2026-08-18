@@ -292,7 +292,7 @@ them.
 
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
 `number_input`, `select_input`, `checkbox_input`, `radio_buttons`,
-`slider_input`, `date_input`, `file_input`, `button`,
+`slider_input`, `range_slider`, `date_input`, `file_input`, `button`,
 `download_button`, `shortcut`
 
 `shortcut` is a button you cannot see: it emits the same `event` frame,
@@ -374,6 +374,7 @@ same as safe to add.
 | `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
 | `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
+| `range_slider` | `id`, `min: num`, `max: num` | `label`, `value: [lo, hi]`, `step` |
 | `button` | `id`, `label` | `variant`, `icon`, `value: string` |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
@@ -399,6 +400,11 @@ including one element and none:
 string makes a client parse a list on Tuesday and a string on
 Wednesday, and every lowering then grows its own guess about which
 it got. The same rule holds for `input` and `input_update`.
+
+`range_slider` is array-valued unconditionally: its `value` is the
+pair `[lo, hi]` in the tree, in every `input` frame, and in the
+server's seeded state — ordered, inside `[min, max]`, both ends on
+the same grid a single slider's thumb rests on.
 
 ### The Flutter column
 
@@ -427,6 +433,7 @@ rather than an intention.
 | `checkbox_input` | `CheckboxListTile` | |
 | `radio_buttons` | `RadioGroup` + `RadioListTile` | |
 | `slider_input` | `Slider` | `divisions` = range / step; `settle` reports on `onChangeEnd` |
+| `range_slider` | `RangeSlider` | one input whose value is always the pair `[lo, hi]`; both ends quantize like a single slider's value |
 | `date_input` | `showDatePicker` | a dialog, not an inline field: **refused by name** |
 | `file_input` | `file_picker` package | not in the SDK: **refused by name** |
 | `button` | `FilledButton` etc. | variant selects the constructor |

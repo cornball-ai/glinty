@@ -512,6 +512,82 @@ h1, h2, h3, h4 {
     background: color-mix(in srgb, var(--g-border) 30%, var(--g-surface));
 }
 
+/* ---------- range slider ---------- */
+
+/* Two native range inputs stacked over one drawn rail. The inputs
+   are invisible and pointer-inert except at their thumbs, so each
+   thumb drags its own end while the rail, the [lo, hi] fill and the
+   number layers are glinty's own elements -- the browser has no
+   native two-thumb control to style. */
+.g-range-track {
+    position: relative;
+    height: 28px;
+}
+
+.g-range-rail,
+.g-range-fill {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.g-range-rail {
+    left: 0;
+    right: 0;
+    background: color-mix(in srgb, var(--g-border) 55%, var(--g-surface));
+}
+
+.g-range-fill {
+    background: var(--g-primary);
+}
+
+.g-range-track .g-range-end {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: none;
+}
+
+.g-range-track .g-range-end::-webkit-slider-runnable-track {
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.g-range-track .g-range-end::-moz-range-track {
+    background: transparent;
+}
+
+.g-range-track .g-range-end::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: var(--g-primary);
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.g-range-track .g-range-end::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: var(--g-primary);
+    pointer-events: auto;
+    cursor: pointer;
+}
+
 /* numeric columns (align: "num" on the wire) read down the decimal */
 .g-table th.g-num,
 .g-table td.g-num {

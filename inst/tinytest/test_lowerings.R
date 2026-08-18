@@ -126,7 +126,7 @@ for (nm in names(INPUT_META)) {
     if (nm %in% c("select_input", "radio_buttons")) {
         args$choices <- c("a", "b")
     }
-    if (identical(nm, "slider_input")) {
+    if (nm %in% c("slider_input", "range_slider")) {
         args$min <- 0
         args$max <- 1
     }
@@ -448,7 +448,7 @@ r_type <- function(v) {
     } else if (is.logical(v)) {
         "bool"
     } else if (is.numeric(v)) {
-        "number"
+        if (length(v) == 1L) "number" else "numbers"
     } else if (length(v) == 1L) {
         "string"
     } else {
@@ -464,7 +464,7 @@ for (nm in names(INPUT_META)) {
     if (nm %in% c("select_input", "radio_buttons")) {
         args$choices <- c("a", "b")
     }
-    if (identical(nm, "slider_input")) {
+    if (nm %in% c("slider_input", "range_slider")) {
         args$min <- 0
         args$max <- 1
     }

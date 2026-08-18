@@ -264,6 +264,17 @@ COMPONENT_SCHEMA <- list(
         step = field("number"),
         emit = field("enum", default = "live", values = c("live", "settle"))
     ),
+                         range_slider = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        min = field("number", required = TRUE),
+        max = field("number", required = TRUE),
+        # exactly [lo, hi]; the pair rule lives in check_component()
+        # the way select_input's multiple/selected rule does
+        value = field("numbers"),
+        step = field("number"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
                          date_input = list(
         id = field("string", required = TRUE),
         label = field("string", default = ""),
@@ -415,6 +426,7 @@ INPUT_META <- list(
                    checkbox_input = list(message = "input", value_type = "bool"),
                    radio_buttons = list(message = "input", value_type = "string"),
                    slider_input = list(message = "input", value_type = "number"),
+                   range_slider = list(message = "input", value_type = "numbers"),
                    date_input = list(message = "input", value_type = "string"),
                    file_input = list(message = "input", value_type = "files"),
                    # A button's event carries a value when the component
@@ -615,6 +627,17 @@ check_field <- function(value, spec, type, nm) {
         }
         return(unname(value))
     },
+           numbers = {
+        # Zero or more finite numbers; arity rules that depend on the
+        # component (a range's exactly-two) live in check_component().
+        if (is.list(value)) {
+            value <- unlist(value, use.names = FALSE)
+        }
+        if (!is.numeric(value) || anyNA(value) || !all(is.finite(value))) {
+            stop(where, " must be finite numbers", call. = FALSE)
+        }
+        return(as.numeric(value))
+    },
            strings = {
         # Zero or more strings. A field whose arity depends on a
         # sibling field cannot be settled here -- see
@@ -703,6 +726,25 @@ check_component <- function(type, out) {
                      call. = FALSE)
             }
             out$selected <- selected[[1L]]
+        }
+    }
+    if (identical(type, "range_slider")) {
+        v <- out$value
+        if (!is.null(v)) {
+            if (length(v) != 2L) {
+                stop("range_slider(value=) must be c(lo, hi) ",
+                     "(got length ", length(v), ")", call. = FALSE)
+            }
+            if (v[[1L]] > v[[2L]]) {
+                stop("range_slider(value=) must have lo <= hi", call. = FALSE)
+            }
+            if (v[[1L]] < out$min || v[[2L]] > out$max) {
+                stop("range_slider(value=) must sit within [min, max]",
+                     call. = FALSE)
+            }
+            # as.list() so toJSON() emits an array, the wire shape a
+            # client expects for a pair
+            out$value <- as.list(v)
         }
     }
     out
