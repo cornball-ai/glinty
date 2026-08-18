@@ -306,6 +306,36 @@ vocabulary and semantics glinty already had:
   button; blob-returning captures stay DLP-blocked, so numeric
   probes are the unit for viewer liveness now.
 
+## Round 8: Uploading Files (shiny-examples 009, 2026-08-17)
+
+The CSV-upload app: file_input feeds read.csv steered by
+header/sep/quote radios, req() keeps the table silent until a file
+exists. Zero framework changes again.
+
+- **The upload value is Shiny's shape already**: a data.frame with
+  name/size/type/datapath, one row per file, so the server code
+  ports line for line. An empty-string radio value (the None quote)
+  works on the wire.
+- **Live over real HTTP**: the extension's file_upload set the file
+  on the input, the browser POSTed against the transfer ticket, and
+  the table appeared -- head 6 of 8 with mixed alignment (city
+  left, numbers right: the align wire on real data), Display = All
+  showed all 8. In-process check covers sep/header/disp
+  re-parses and the boot silence.
+- **Flutter viewer: the named-gap path, working as designed.** The
+  library carries uploads through the onUpload embedder seam; the
+  viewer passes none, so file_input renders the pale-yellow "[no
+  file picker wired: pass onUpload to send files]" banner while
+  every sibling control renders normally. Wiring a picker
+  (file_picker package) is embedder work for the viewer, tracked
+  here rather than hidden.
+- **The frozen-capture saga resolved into a rule**: the freeze is
+  tab-sticky, not page-sticky. The wedged tab also stops
+  repainting new frames (its canvas pixel-counts stayed
+  byte-identical across an app swap -- that staleness is itself
+  the tell). A recreated tab captured fine immediately. Recreate,
+  don't rehabilitate.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
