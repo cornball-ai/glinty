@@ -378,7 +378,12 @@ COMPONENT_SCHEMA <- list(
         controls = field("bool", default = TRUE),
         autoplay = field("bool", default = FALSE),
         muted = field("bool", default = FALSE),
-        loop = field("bool", default = FALSE)
+        loop = field("bool", default = FALSE),
+        # Opt-in, because most videos never need to phone home and a
+        # report per timeupdate for every player is noise. With it the
+        # player reports position and state through the input channel:
+        # input[[id]] holds list(current_time =, playing =).
+        report = field("bool", default = FALSE)
     ),
                          # Browser-only, like tag(): raw markup has no widget equivalent.
                          html_output = list(id = field("string", required = TRUE)),

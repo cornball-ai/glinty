@@ -153,6 +153,15 @@ component_fixtures <- function() {
                       notes = "autoplay rides muted, the one combination browsers allow"
         ),
                  list(
+                      name = "video-output-reporting",
+                      component = component("video_output", id = "monitor",
+                report = TRUE),
+                      notes = paste("report = TRUE: the player sends",
+                                    "{current_time, playing} as input under",
+                                    "its id, throttled, deduplicated, and",
+                                    "never echoing a server set back")
+        ),
+                 list(
                       name = "text-input",
                       component = component("text_input", id = "name", label = "Name:"),
                       notes = "emit defaults to live; browser debounces, Flutter uses onChanged"

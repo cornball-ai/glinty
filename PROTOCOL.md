@@ -400,7 +400,7 @@ same as safe to add.
 | `data_table` | `id` | `page_length: int` (10), `length_menu: [num]` (always an array; `[10,25,50,100]`), `searchable: bool` (true), `sortable: bool` (true) |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
-| `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false) |
+| `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false), `report: bool` (false) |
 | `tabset` | `id`, `panels: [{title, children}]` | `selected` |
 | `conditional_panel` | `condition`, `children: []` | — |
 
@@ -481,7 +481,7 @@ rather than an intention.
 | `image_output` | `Image.memory` / `Image.network` | sized from the value's logical `width`/`height`; data: and http(s) only, any other scheme is named |
 | `ui_output` | the same `build()`, on a subtree that arrived as a value | seeds the input store the way `welcome` does, and takes those inputs back when the slot stops carrying them |
 | `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
-| `video_output` | the embedder's player, through `videoBuilder` | the same seam as audio (video_player, media_kit: the embedder's pick); src and poster resolved, `mime` passed on |
+| `video_output` | the embedder's player, through `videoBuilder` | the same seam as audio (video_player, media_kit: the embedder's pick); src and poster resolved, `mime` passed on; `report` hands the player an `onReport` whose throttle glinty owns |
 | `file_input` | the embedder.s picker and POST, through `onUpload` | glinty owns the ticket in between, and asks for it only once files are in hand |
 | `html_output`, `raw_html` | — | **refused by name**; see below |
 
@@ -629,9 +629,27 @@ browser client declares the `video_control` feature; a client
 without it ignores the message the way every client ignores message
 types it does not know.
 
-The reporting direction -- the component telling the server its
-position and playing state -- is deliberately absent for now; it is
-input-shaped and wants designing as one.
+The reporting direction is opt-in on the component:
+`video_output(report = TRUE)`. A reporting player sends ordinary
+input frames under its own id -- a position stream is semantically a
+slider the user drags by watching, so it rides the input channel
+rather than growing a frame type:
+
+```json
+{"type": "input", "id": "preview",
+ "value": {"current_time": 1.5, "playing": true}}
+```
+
+Server-side that is `input[[id]]` holding
+`list(current_time =, playing =)`, with the reactivity every input
+has. The client owes the wire discipline: reports are deduplicated
+on rounded position (a paused player is silent), floored at 250ms
+apart while playing, and immediate on play, pause, seek and ended. A
+state the server just set through `video_update` must not bounce
+back as a fresh report -- the same no-echo rule `input_update`
+keeps; the browser client recognizes the set coming back by position
+epsilon and suppresses it. Most videos never need to phone home,
+which is why the default is off.
 
 ### Client measurement
 

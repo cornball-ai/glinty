@@ -131,20 +131,32 @@ audio_output <- function(id, controls = TRUE, autoplay = FALSE) {
 #' keeps the video's own aspect. Playback can also be driven from the
 #' server with [update_video()].
 #'
+#' With `report = TRUE` the player also reports back: `input[[id]]`
+#' holds `list(current_time =, playing =)`, throttled while playing
+#' and immediate on play, pause and seek, so an external playhead (a
+#' timeline, a transport slider) can follow the player the same way
+#' [update_video()] lets the player follow it. A position the server
+#' just set does not bounce back as a fresh report. Opt-in, because
+#' most videos never need to phone home.
+#'
 #' @param id character output ID
 #' @param controls logical show the player's transport controls
 #' @param autoplay logical begin playing on arrival. Browsers block
 #'   autoplay with sound, so autoplay wants `muted = TRUE`
 #' @param muted logical start muted
 #' @param loop logical start over at the end
+#' @param report logical report position and playing state to the
+#'   server through `input[[id]]`
 #' @return A UI component
 #' @examples
 #' video_output("preview")
+#' video_output("preview", report = TRUE)
 #' @export
 video_output <- function(id, controls = TRUE, autoplay = FALSE,
-                         muted = FALSE, loop = FALSE) {
+                         muted = FALSE, loop = FALSE, report = FALSE) {
     component("video_output", id = id, controls = controls,
-              autoplay = autoplay, muted = muted, loop = loop)
+              autoplay = autoplay, muted = muted, loop = loop,
+              report = report)
 }
 
 #' Create a dynamic UI slot

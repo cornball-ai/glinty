@@ -166,7 +166,8 @@
             "controls": true,
             "autoplay": false,
             "muted": false,
-            "loop": false
+            "loop": false,
+            "report": false
           }
         ],
         "variant": "plain",
@@ -250,7 +251,8 @@
         "controls": true,
         "autoplay": false,
         "muted": false,
-        "loop": false
+        "loop": false,
+        "report": false
       }
     },
     {
@@ -262,7 +264,21 @@
         "controls": false,
         "autoplay": true,
         "muted": true,
-        "loop": true
+        "loop": true,
+        "report": false
+      }
+    },
+    {
+      "name": "video-output-reporting",
+      "notes": "report = TRUE: the player sends {current_time, playing} as input under its id, throttled, deduplicated, and never echoing a server set back",
+      "component": {
+        "component": "video_output",
+        "id": "monitor",
+        "controls": true,
+        "autoplay": false,
+        "muted": false,
+        "loop": false,
+        "report": true
       }
     },
     {

@@ -584,6 +584,13 @@ expect_true(grepl('autoplay="autoplay"', wall, fixed = TRUE))
 expect_true(grepl('muted="muted"', wall, fixed = TRUE))
 expect_true(grepl('loop="loop"', wall, fixed = TRUE))
 
+# report = TRUE marks the element for the client's position wiring;
+# the default carries no mark, because most videos never phone home
+reporting <- component_to_html(component("video_output", id = "m",
+                                         report = TRUE))
+expect_true(grepl("data-g-report", reporting, fixed = TRUE))
+expect_false(grepl("data-g-report", vid, fixed = TRUE))
+
 # --- tabset marks exactly one panel open ---
 tabs <- component_to_html(component("tabset", id = "t", panels = list(
     list(title = "One", children = list(component("text", value = "a"))),

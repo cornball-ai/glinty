@@ -280,6 +280,12 @@
        ResizeObserver keep working on them alone. */
     var resizeObserver = null;
     function observeMeasured() {
+        /* Not measurement, but the call sites -- welcome, a rebuilt
+           root, a dynamic subtree, a modal -- are exactly the points
+           where a new player can have entered the DOM, so the video
+           wiring rides here rather than growing five parallel calls.
+           Before the ResizeObserver gate: reports do not need it. */
+        wireVideoReports();
         if (typeof ResizeObserver === "undefined") return;
         if (!resizeObserver) {
             resizeObserver = new ResizeObserver(scheduleMeasure);
@@ -287,6 +293,72 @@
         resizeObserver.disconnect();
         document.querySelectorAll("img.g-plot-output").forEach(function (el) {
             resizeObserver.observe(el);
+        });
+    }
+
+    /* ---------- video position reports ---------- */
+
+    /* video_output(report = TRUE): the player tells the server where
+       the playhead is and whether it is playing, as an ordinary input
+       -- {current_time, playing} under the component's id, the same
+       channel a slider would use, which is what a position stream
+       semantically is. Throttled on timeupdate's own cadence with a
+       250ms floor, immediate on play/pause/seek/ended, deduplicated
+       on rounded position so a paused player is silent. */
+    var videoEcho = {};
+    var videoSent = {};
+    var videoLastAt = {};
+
+    function reportVideo(el, force) {
+        if (!el.id) return;
+        var t = el.currentTime || 0;
+        var playing = !(el.paused || el.ended);
+        /* No-echo: a state the server just set through video_update
+           must not bounce back as a fresh report. The expectation
+           outlives one event -- a set of both halves fires seeked AND
+           play -- and dies on divergence or a 1500ms window, so a
+           playing player only holds its tongue for the tick or two
+           that still match the set position. */
+        var echo = videoEcho[el.id];
+        if (echo) {
+            var match = (Date.now() - echo.at) < 1500 &&
+                (echo.time === undefined ||
+                    Math.abs(t - echo.time) < 0.35) &&
+                (echo.playing === undefined || echo.playing === playing);
+            if (match) return;
+            delete videoEcho[el.id];
+        }
+        var key = Math.round(t * 10) / 10 + "|" + playing;
+        if (!force && videoSent[el.id] === key) return;
+        var now = Date.now();
+        if (!force && videoLastAt[el.id] &&
+                now - videoLastAt[el.id] < 250) {
+            return;
+        }
+        videoSent[el.id] = key;
+        videoLastAt[el.id] = now;
+        send({ type: "input", id: el.id,
+               value: { current_time: t, playing: playing } });
+    }
+
+    /* Wired once per element. The element survives output messages --
+       a new value swaps src, not the node, precisely to keep playback
+       state -- so re-running this after DOM changes only ever picks
+       up players that are actually new. */
+    function wireVideoReports() {
+        document.querySelectorAll(
+            "video.g-video-output[data-g-report]"
+        ).forEach(function (el) {
+            if (el.dataset.gReportWired) return;
+            el.dataset.gReportWired = "1";
+            el.addEventListener("timeupdate", function () {
+                reportVideo(el, false);
+            });
+            ["play", "pause", "seeked", "ended"].forEach(function (ev) {
+                el.addEventListener(ev, function () {
+                    reportVideo(el, true);
+                });
+            });
         });
     }
 
@@ -1757,6 +1829,7 @@
                 autoplay: c.autoplay ? "autoplay" : null,
                 muted: c.muted ? "muted" : null,
                 loop: c.loop ? "loop" : null,
+                "data-g-report": c.report ? "1" : null,
                 preload: "metadata"
             }));
             /* The muted attribute only mutes an element the parser
@@ -2249,6 +2322,18 @@
     function applyVideoUpdate(msg) {
         elementsFor(msg.id).forEach(function (el) {
             if (el.tagName !== "VIDEO") return;
+            /* Remember what was set, so the events this application
+               fires read as the set coming back, not as fresh news
+               for a reporting player. Inert for a player that does
+               not report. */
+            videoEcho[msg.id] = {
+                time: (typeof msg.current_time === "number" &&
+                       isFinite(msg.current_time))
+                    ? msg.current_time : undefined,
+                playing: (msg.playing === true || msg.playing === false)
+                    ? msg.playing : undefined,
+                at: Date.now()
+            };
             if (typeof msg.current_time === "number" &&
                 isFinite(msg.current_time)) {
                 el.currentTime = msg.current_time;
