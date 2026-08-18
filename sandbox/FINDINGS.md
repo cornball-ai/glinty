@@ -371,6 +371,21 @@ download_button stop refusing there.
   rehabilitate rule held both times (second fresh tab captured
   fine).
 
+## Round 10: Timer (shiny-examples 011, 2026-08-17)
+
+The one-line clock: invalidate_later(1000) re-arms a render_text
+every second. Fourth straight zero-framework-change port.
+
+- The check drives run_due_timers() at chosen nows, so it is
+  deterministic -- three sweeps, three re-renders, re-armed each
+  time, and a not-due sweep stays quiet. No sleeps.
+- Live: both frontends tick in step from the one server render --
+  the browser tab and the flutter viewer each showed the current
+  second, and the viewer picked the new app up by reconnect alone
+  (no reload, no rebuild -- the smoothest app swap of the loop).
+- text_output(variant = "heading") earned its second use one round
+  after existing.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
