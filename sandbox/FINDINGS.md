@@ -573,6 +573,28 @@ Live: full-width page, tab strip, right-hand slider sidebar,
 histogram at measured full width; tab swap is pure visibility (zero
 re-renders, pinned in-process).
 
+## Rounds 16-21 skip sweep (2026-08-17, per Troy)
+
+Six examples skipped with reasons, not silence:
+
+- **016-knitr-pdf, 020-knit-html, 019-mathjax** — knitr/MathJax
+  document rendering inside the app: ecosystem embeds, outside the
+  closed vocabulary by design (the htmlwidgets boundary already in
+  the gap table). Skipped at Troy's direction.
+- **017-select-vs-selectize** — a behavior-comparison demo of
+  Shiny's two select widgets. glinty has one select (+ search flag,
+  round 13); the choose-prompt/clearability nuance it demos is
+  selectize-specific UI. Nothing to port that rounds 7/13 didn't.
+- **018-datatable-options** — the DT options tour. Round 12's
+  data_table covers display length, length menu and search toggle;
+  a paginate-off switch is a large page_length; the "function
+  callback" tab is raw-JS configuration, refused by design.
+- **021-selectize-plot** — the substance is
+  `session$registerDataObj`, a custom HTTP responder hanging off
+  Shiny internals (`shiny:::httpResponse`). glinty serves derived
+  media through render_image/render_plot and the ticket path
+  instead of handing apps raw HTTP; the selectize half is round 13.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
