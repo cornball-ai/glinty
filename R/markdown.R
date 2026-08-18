@@ -110,7 +110,7 @@ md_blocks <- function(text) {
             }
             i <- i + 1L # past the closing fence (or the end)
             blocks[[length(blocks) + 1L]] <-
-                txt(paste(body, collapse = "\n"), variant = "mono")
+            txt(paste(body, collapse = "\n"), variant = "mono")
             next
         }
         if (grepl("^\\s*$", line)) {
@@ -123,11 +123,11 @@ md_blocks <- function(text) {
             flush_para()
             # heading value is a plain string in the schema, so inline
             # marks are flattened to their text -- documented subset
-            plain <- paste(vapply(md_inline(h[[3L]]),
-                                  function(r) r$text, character(1L)),
+            plain <- paste(vapply(md_inline(h[[3L]]), function(r) r$text,
+                                  character(1L)),
                            collapse = "")
             blocks[[length(blocks) + 1L]] <-
-                heading(plain, level = min(nchar(h[[2L]]), 4L))
+            heading(plain, level = min(nchar(h[[2L]]), 4L))
             i <- i + 1L
             next
         }
@@ -138,8 +138,7 @@ md_blocks <- function(text) {
             next
         }
         li <- regmatches(line,
-                         regexec("^(\\s*)([-*+]|\\d+\\.)\\s+(.*)$",
-                                 line))[[1L]]
+                         regexec("^(\\s*)([-*+]|\\d+\\.)\\s+(.*)$", line))[[1L]]
         if (length(li) == 4L) {
             flush_para()
             marker <- li[[3L]]
@@ -195,7 +194,7 @@ md_scan <- function(s, marks) {
     emit_literal <- function() {
         if (length(literal) > 0L) {
             runs[[length(runs) + 1L]] <<-
-                c(list(text = paste(literal, collapse = "")), marks)
+            c(list(text = paste(literal, collapse = "")), marks)
             literal <<- character(0L)
         }
     }
@@ -206,7 +205,7 @@ md_scan <- function(s, marks) {
     while (i <= n) {
         ch <- chars[[i]]
         if (ch == "\\" && peek(1L) %in% c("*", "_", "`", "~", "[", "]",
-                                          "(", ")", "\\")) {
+                "(", ")", "\\")) {
             literal <- c(literal, peek(1L))
             i <- i + 2L
             next
@@ -218,9 +217,9 @@ md_scan <- function(s, marks) {
             if (close > i + 1L) {
                 emit_literal()
                 runs[[length(runs) + 1L]] <-
-                    c(list(text = paste(chars[(i + 1L):(close - 1L)],
-                                        collapse = ""),
-                           code = TRUE), marks)
+                c(list(text = paste(chars[(i + 1L):(close - 1L)],
+                                    collapse = ""),
+                        code = TRUE), marks)
                 i <- close + 1L
                 next
             }
@@ -244,10 +243,8 @@ md_scan <- function(s, marks) {
         if (ch %in% c("*", "_")) {
             # `_` only opens at a word edge, or snake_case italicizes
             # itself; `*` is safe to open anywhere
-            edge <- ch == "*" || i == 1L || grepl("\\s",
-                                                  chars[[i - 1L]])
-            close <- if (edge && !grepl("\\s", peek(1L)) &&
-                             nzchar(peek(1L))) {
+            edge <- ch == "*" || i == 1L || grepl("\\s", chars[[i - 1L]])
+            close <- if (edge && !grepl("\\s", peek(1L)) && nzchar(peek(1L))) {
                 md_find(chars, i + 1L, ch)
             } else {
                 -1L
@@ -255,8 +252,7 @@ md_scan <- function(s, marks) {
             if (close > i + 1L && !grepl("\\s", chars[[close - 1L]])) {
                 emit_literal()
                 inner <- paste(chars[(i + 1L):(close - 1L)], collapse = "")
-                runs <- c(runs, md_scan(inner, c(marks,
-                                                 list(italic = TRUE))))
+                runs <- c(runs, md_scan(inner, c(marks, list(italic = TRUE))))
                 i <- close + 1L
                 next
             }
@@ -264,8 +260,7 @@ md_scan <- function(s, marks) {
         if (ch == "[") {
             rest <- paste(chars[i:n], collapse = "")
             m <- regmatches(rest,
-                            regexec("^\\[([^]]*)\\]\\(([^)[:space:]]+)\\)",
-                                    rest))[[1L]]
+                            regexec("^\\[([^]]*)\\]\\(([^)[:space:]]+)\\)", rest))[[1L]]
             if (length(m) == 3L) {
                 emit_literal()
                 inner <- md_scan(m[[2L]], marks)
@@ -333,7 +328,7 @@ md_find2 <- function(chars, from, pair) {
 #' @keywords internal
 md_href_ok <- function(href) {
     is.character(href) && length(href) == 1L && !is.na(href) &&
-        grepl("^(https?://|mailto:|#|/)", href)
+    grepl("^(https?://|mailto:|#|/)", href)
 }
 
 #' Merge adjacent runs whose marks agree

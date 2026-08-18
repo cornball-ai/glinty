@@ -115,8 +115,8 @@ COMPONENT_SCHEMA <- list(
                          # produced by markdown(), whose block half lowers to
                          # components that already exist.
                          rich_text = list(
-                                          runs = field("runs", required = TRUE),
-                                          id = field("string")
+        runs = field("runs", required = TRUE),
+        id = field("string")
     ),
                          divider = list(
                                         label = field("string"),
@@ -182,8 +182,7 @@ COMPONENT_SCHEMA <- list(
                                       # inside whatever it gets, and a fixed
                                       # height would hold the panel tall when
                                       # its content is short.
-                                      max_height = field("int", min = 1,
-                                                         max = 4096),
+                                      max_height = field("int", min = 1, max = 4096),
                                       # The panel becomes a column that hands
                                       # its height to its children, so one of
                                       # them can grow and scroll. Without it a
@@ -726,12 +725,12 @@ check_field <- function(value, spec, type, nm) {
         out <- lapply(seq_along(value), function(i) {
             r <- value[[i]]
             if (!is.list(r) || is.null(r$text) || !is.character(r$text) ||
-                    length(r$text) != 1L || is.na(r$text)) {
+                      length(r$text) != 1L || is.na(r$text)) {
                 stop(where, " run ", i, " needs text (a single string)",
                      call. = FALSE)
             }
             extra <- setdiff(names(r), c("text", "bold", "italic", "code",
-                                         "strike", "href"))
+                    "strike", "href"))
             if (length(extra) > 0L) {
                 stop(where, " run ", i, " has unknown fields: ",
                      paste(extra, collapse = ", "), call. = FALSE)

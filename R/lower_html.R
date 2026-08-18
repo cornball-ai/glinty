@@ -218,11 +218,10 @@ html_heading <- function(x) {
 #' @keywords internal
 html_rich_text <- function(x) {
     spans <- vapply(x$runs, function(r) {
-        cls <- c("g-run",
-                 if (isTRUE(r$bold)) "g-run-b",
-                 if (isTRUE(r$italic)) "g-run-i",
-                 if (isTRUE(r$code)) "g-run-c",
-                 if (isTRUE(r$strike)) "g-run-s")
+        cls <- c("g-run", if (isTRUE(r$bold)) "g-run-b",
+            if (isTRUE(r$italic)) "g-run-i",
+            if (isTRUE(r$code)) "g-run-c",
+            if (isTRUE(r$strike)) "g-run-s")
         if (!is.null(r$href)) {
             html_el("a", list(class = paste(cls, collapse = " "),
                               href = r$href),
