@@ -34,9 +34,35 @@ conn_add <- function(con, state = "http_pending") {
     entry$session_id <- NULL
     entry$frag_opcode <- NULL
     entry$frag_buf <- raw(0L)
+    entry$upgrade_req <- NULL
     entry$opened_at <- Sys.time()
     REG$conns[[key]] <- entry
     key
+}
+
+#' The HTTP request that upgraded a session's connection
+#'
+#' The parsed head only (method, path, query, headers with lower-cased
+#' names) -- small and bounded by MAX_HTTP_HEAD, never the raw buffer.
+#' It lives as long as the connection, which is exactly the lifetime
+#' the hello gate needs it for: a verifier that reads cookie-carried
+#' credentials (see authenticate_hello()) runs on the first frame of
+#' the same connection.
+#'
+#' @param sid character session id
+#' @return the parsed upgrade request, or NULL when the session has
+#'   no live connection or the connection kept none
+#' @keywords internal
+upgrade_request_for <- function(sid) {
+    key <- REG$sessions[[sid]]
+    if (is.null(key)) {
+        return(NULL)
+    }
+    entry <- REG$conns[[key]]
+    if (is.null(entry)) {
+        return(NULL)
+    }
+    entry$upgrade_req
 }
 
 #' Close a connection and clean up

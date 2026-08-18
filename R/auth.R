@@ -4,6 +4,11 @@
 # refreshes the token -- it holds a string, hands it over, and keeps
 # what comes back. NULL from the verifier refuses the connection.
 #
+# A verifier that declares a second parameter also receives the HTTP
+# request that upgraded the connection, cookies included -- the only
+# way a session kept in an HttpOnly cookie can authenticate, since
+# page script cannot read that cookie to put it in the hello.
+#
 # jwt_auth() is the batteries for the likely case, not part of the
 # seam: if the account model lands somewhere other than JWTs, the
 # seam is unchanged and jwt_auth() is simply unused.
@@ -119,11 +124,13 @@ jwt_auth <- function(secret = NULL, pubkey = NULL,
 #' failing open on an exception would make a bug in the verifier a
 #' bypass of it.
 #'
-#' @param auth a function(token) or NULL
+#' @param auth a function(token) or function(token, req), or NULL
 #' @param msg decoded hello message
+#' @param req the parsed HTTP request that upgraded this connection
+#'   (method, path, query, headers), or NULL when none survives
 #' @return list(ok, principal)
 #' @keywords internal
-authenticate_hello <- function(auth, msg) {
+authenticate_hello <- function(auth, msg, req = NULL) {
     if (is.null(auth)) {
         return(list(ok = TRUE, principal = NULL))
     }
@@ -132,8 +139,32 @@ authenticate_hello <- function(auth, msg) {
     } else {
         NULL
     }
-    principal <- tryCatch(auth(token), error = function(e) NULL)
+    principal <- tryCatch(call_verifier(auth, token, req),
+                          error = function(e) NULL)
     list(ok = !is.null(principal), principal = principal)
+}
+
+#' Call a verifier with as much context as it accepts
+#'
+#' A one-argument verifier gets the token, as always. A verifier
+#' declaring a second parameter also gets the HTTP request that opened
+#' the connection (method, path, query, headers with lower-cased
+#' names). That request is how an HttpOnly-cookie session can
+#' authenticate at all: the page's script cannot read the cookie to
+#' put it in the hello, but the browser attached it to the upgrade
+#' request's Cookie header.
+#'
+#' @param auth the configured verifier function
+#' @param token character token from the hello, or NULL
+#' @param req the parsed upgrade request, or NULL
+#' @return whatever the verifier returns
+#' @keywords internal
+call_verifier <- function(auth, token, req) {
+    if (length(formals(auth)) >= 2L) {
+        auth(token, req)
+    } else {
+        auth(token)
+    }
 }
 
 #' Is this first frame a hello worth authenticating?
