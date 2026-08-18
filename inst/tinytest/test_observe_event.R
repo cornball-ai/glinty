@@ -127,3 +127,23 @@ expect_equal(isolate(s2$input$counted2()), 1L)
 # one client-to-server message that never checked
 dispatch(s2, j(type = "event", id = "..modal_close"))
 expect_false(exists("..modal_close", envir = s2$input_env))
+
+# --- frames coalesce; handlers still observe wire order ---
+#
+# The composer contract: clear_on emits input(draft), event(send),
+# input("") back to back, and one TCP read routinely delivers all
+# three before the loop's next flush. The event's handler must read
+# the draft as of the event, not as of the end of the batch -- which
+# means dispatch itself flushes, instead of letting the trailing ""
+# overwrite the store first. This is exactly the batch a browser
+# sends on Enter; no flush_reactions() between dispatches on purpose.
+s3 <- new_session("ev3")
+glinty:::handle_input(s3, "draft", "")
+seen <- NULL
+observe_event(s3$input$send, function() seen <<- s3$input$draft())
+flush_reactions()
+dispatch(s3, j(type = "input", id = "draft", value = "the full draft"))
+dispatch(s3, j(type = "event", id = "send"))
+dispatch(s3, j(type = "input", id = "draft", value = ""))
+expect_equal(seen, "the full draft")
+expect_equal(isolate(s3$input$draft()), "")

@@ -867,6 +867,12 @@ h1, h2, h3, h4 {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* feedTrim compensates scrollTop when history falls off the top;
+       Chrome and Firefox's native scroll anchoring would compensate a
+       second time and the view would creep upward one item per trim.
+       Safari has no anchoring, so the manual path is the one that
+       works everywhere and this opts the others into it. */
+    overflow-anchor: none;
 }
 
 .g-feed-items {

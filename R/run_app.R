@@ -256,7 +256,6 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
         }
         s <- start_session(sid, principal = gate$principal)
         dispatch_client_message(s, txt)
-        flush_reactions()
     },
                      on_close = function(sid) {
         s <- .globals$sessions[[sid]]

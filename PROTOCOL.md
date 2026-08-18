@@ -443,7 +443,11 @@ error, not a degraded render.
 when **this client** emits that event, it empties the field and
 reports `""` — after the event frame, never before, so a handler for
 the event reads the full draft and the store settles at `""` behind
-it. That frame order is the contract. The clear is client-side and
+it. That frame order is the contract, and it binds the server too:
+frames coalesce on the wire, so the server processes each one to
+quiescence in wire order — the event's handlers run before the
+trailing `""` is applied, rather than the whole batch flushing once
+at the end with the store already cleared. The clear is client-side and
 causally tied to the emit on purpose: a server round trip
 (`update_text_input(value = "")`) racing the next keystroke is
 exactly what the browser's never-stomp-live-typing guard on

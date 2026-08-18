@@ -207,7 +207,8 @@ welcome_msg <- function(session_id, resumed = NULL) {
 #' input values -- under v3 the server built the tree, so it seeded
 #' the defaults itself before the client ever connected.
 #' Malformed or unknown messages queue an error message instead of
-#' raising. Does not flush; the caller flushes after dispatch.
+#' raising. Flushes before returning, so each frame is processed to
+#' quiescence in wire order (see the comment at the flush).
 #'
 #' @param session a glinty_session
 #' @param txt character JSON from one WebSocket text frame
@@ -269,6 +270,16 @@ dispatch_client_message <- function(session, txt) {
         session$send(error_msg(NULL,
                                paste0("unknown message type: ", msg$type)))
     }
+    # Process this frame to quiescence before the caller can apply the
+    # next one. Frames coalesce on the wire -- a click's `event` and
+    # clear_on's trailing `input ""` routinely arrive in one TCP read
+    # -- and deferring the flush to the end of the batch lets a later
+    # frame overwrite the store BEFORE an earlier frame's handlers
+    # run: the event handler would read the cleared draft. Wire order
+    # is only causal order if each frame's consequences complete
+    # before the next frame is dispatched. An empty queue makes this
+    # a no-op, so quiet frames cost nothing.
+    flush_reactions()
     invisible(NULL)
 }
 

@@ -12,6 +12,16 @@ scroll-up with a "↓ Latest" chip back, and trim never shifts an
 unstuck reader's view. In a bounded spot the feed scrolls; on a
 plain page it shrink-wraps and the page does.
 
+**Frames dispatch to quiescence in wire order.** The event loop used
+to dispatch every frame in a TCP read before flushing once, so a
+click's `event` and `clear_on`'s trailing `input ""` -- which
+routinely coalesce -- let the clear overwrite the store before the
+event's handlers ran: the handler read an empty draft. Each frame now
+flushes before the next is applied, which is free when nothing is
+pending. Found live-driving the feed's composer; the browser also
+now opts out of native scroll anchoring in feeds, which was
+compensating trims a second time and creeping unstuck readers upward.
+
 **`clear_on`: emitting a named event empties the composer** (#60).
 `textarea_input("draft", clear_on = "send")` clears the field
 client-side when this client emits `send` -- after the event frame,
