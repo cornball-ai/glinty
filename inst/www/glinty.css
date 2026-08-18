@@ -318,6 +318,42 @@ h1, h2, h3, h4 {
     resize: vertical;
 }
 
+/* ---------- searchable select (combobox) ---------- */
+
+.g-combo {
+    position: relative;
+}
+
+.g-combo-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 16rem;
+    overflow-y: auto;
+    margin-top: 2px;
+    background: var(--g-surface);
+    border: 1px solid var(--g-border);
+    border-radius: var(--g-radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 800;
+}
+
+.g-combo-option {
+    padding: 0.35rem 0.6rem;
+    cursor: pointer;
+}
+
+.g-combo-option:hover,
+.g-combo-active {
+    background: color-mix(in srgb, var(--g-primary) 15%, var(--g-surface));
+}
+
+.g-combo-empty {
+    padding: 0.35rem 0.6rem;
+    color: var(--g-muted);
+}
+
 .g-check label,
 .g-radio-item label {
     margin-left: 0.35rem;
@@ -336,6 +372,77 @@ h1, h2, h3, h4 {
     width: 100%;
     max-width: 100%;
     accent-color: var(--g-primary);
+}
+
+/* The slider's three number layers (ionRangeSlider is the
+   reference): a value bubble riding the thumb, min/max chips at the
+   ends that yield when the bubble reaches them, and a graded scale
+   below -- minor ticks, major ticks every tenth with light numbers.
+   All client-tracked; the server renders the same DOM for first
+   paint. */
+.g-slider-box {
+    position: relative;
+    padding-top: 1.5rem;
+    padding-bottom: 1.45rem;
+}
+
+.g-slider-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1.3rem;
+}
+
+.g-slider-chip {
+    position: absolute;
+    top: 0;
+    padding: 0.05rem 0.4rem;
+    border-radius: var(--g-radius);
+    background: color-mix(in srgb, var(--g-border) 45%, var(--g-surface));
+    color: var(--g-text);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2rem;
+}
+
+.g-slider-chip-min { left: 0; }
+.g-slider-chip-max { right: 0; }
+
+.g-slider-bubble {
+    transform: translateX(-50%);
+    background: var(--g-primary);
+    color: var(--g-on-primary);
+}
+
+.g-slider-scale {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1.35rem;
+    pointer-events: none;
+}
+
+.g-tick {
+    position: absolute;
+    top: 0;
+    height: 0.28rem;
+    border-left: 1px solid var(--g-border);
+    transform: translateX(-50%);
+}
+
+.g-tick-major {
+    height: 0.45rem;
+    border-left-color: var(--g-muted);
+}
+
+.g-tick-label {
+    position: absolute;
+    top: 0.5rem;
+    transform: translateX(-50%);
+    color: var(--g-muted);
+    font-size: 0.7rem;
 }
 
 /* ---------- buttons ---------- */
@@ -439,6 +546,131 @@ h1, h2, h3, h4 {
 .g-table th,
 .g-table-output th {
     background: color-mix(in srgb, var(--g-border) 30%, var(--g-surface));
+}
+
+/* ---------- interactive table ---------- */
+
+.g-dt-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.5rem 0;
+}
+
+.g-dt-length {
+    width: auto;
+}
+
+.g-dt-search {
+    flex: 1;
+    max-width: 16rem;
+    margin-left: auto;
+}
+
+.g-dt-body {
+    overflow-x: auto;
+}
+
+.g-dt-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.g-dt-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.25rem 0 0.5rem;
+}
+
+.g-dt-info {
+    flex: 1;
+    color: var(--g-muted);
+    font-size: 0.9rem;
+}
+
+/* ---------- range slider ---------- */
+
+/* Two native range inputs stacked over one drawn rail. The inputs
+   are invisible and pointer-inert except at their thumbs, so each
+   thumb drags its own end while the rail, the [lo, hi] fill and the
+   number layers are glinty's own elements -- the browser has no
+   native two-thumb control to style. */
+.g-range-track {
+    position: relative;
+    height: 28px;
+}
+
+.g-range-rail,
+.g-range-fill {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+.g-range-rail {
+    left: 0;
+    right: 0;
+    background: color-mix(in srgb, var(--g-border) 55%, var(--g-surface));
+}
+
+.g-range-fill {
+    background: var(--g-primary);
+}
+
+.g-range-track .g-range-end {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: none;
+}
+
+.g-range-track .g-range-end::-webkit-slider-runnable-track {
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.g-range-track .g-range-end::-moz-range-track {
+    background: transparent;
+}
+
+.g-range-track .g-range-end::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: var(--g-primary);
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.g-range-track .g-range-end::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: var(--g-primary);
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* numeric columns (align: "num" on the wire) read down the decimal */
+.g-table th.g-num,
+.g-table td.g-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .g-plot-output,
@@ -578,12 +810,23 @@ h1, h2, h3, h4 {
     width: var(--g-width, auto);
 }
 
+/* A row is a row in both lowerings: Flutter's Row cannot wrap, so
+   the browser's must not either -- wrapping silently turns a sidebar
+   layout into a stack in one frontend only. min-width: 0 is the
+   horizontal twin of g-fill's min-height: 0: it lets a child shrink
+   below its content so a scroll container inside it (a verbatim
+   block, a wide table) can actually scroll instead of forcing the
+   row wide. */
 .g-layout-row {
     display: flex;
     flex-direction: row;
     align-items: flex-start;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: calc(var(--g-space) * 3);
+}
+
+.g-layout-row > * {
+    min-width: 0;
 }
 
 .g-layout-col {
@@ -629,7 +872,9 @@ h1, h2, h3, h4 {
     border-radius: var(--g-radius);
     font-family: var(--g-font-mono), SFMono-Regular, Menlo, monospace;
     font-size: 0.85rem;
-    white-space: pre-wrap;
+    /* pre, never pre-wrap: soft wrap shatters the column alignment
+       this component exists to preserve; wide content scrolls */
+    white-space: pre;
     overflow-x: auto;
 }
 

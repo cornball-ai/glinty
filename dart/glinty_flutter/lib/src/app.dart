@@ -345,15 +345,22 @@ class GlintyView extends StatelessWidget {
         ),
     ]);
 
-    // Not conditional in the same way: the theme arrives with the
-    // welcome, and the tree does not render before one.
-    final tokens = s.theme;
-    return tokens == null
-        ? stacked
-        : Theme(
-            data: glintyThemeDataFor(
-                tokens, MediaQuery.maybePlatformBrightnessOf(context)),
-            child: stacked);
+    // The theme arrives with the welcome; an app that sent none gets
+    // glinty's stock tokens, the same fallback the browser's
+    // stylesheet applies -- never Material's own defaults. The app
+    // paints its own background too: the embedder's Scaffold sits
+    // outside this Theme, so leaving the ground to it shows the
+    // embedder's Material surface through every margin.
+    final tokens = s.theme ?? glintyStockTheme;
+    final data = glintyThemeDataFor(
+        tokens, MediaQuery.maybePlatformBrightnessOf(context));
+    // Material rather than ColoredBox: list tiles and ink splashes
+    // paint on the nearest Material ancestor, and an opaque box
+    // above one swallows them (the framework asserts on it).
+    return Theme(
+        data: data,
+        child: Material(
+            color: data.scaffoldBackgroundColor, child: stacked));
   }
 }
 

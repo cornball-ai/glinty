@@ -162,6 +162,15 @@
       }
     },
     {
+      "name": "text-output-heading",
+      "notes": "a caption whose text is computed: the output slot styled like text's heading variant, same tokens in both lowerings",
+      "component": {
+        "component": "text_output",
+        "id": "caption",
+        "variant": "heading"
+      }
+    },
+    {
       "name": "plot-output-responsive",
       "notes": "no dimensions: the client reports its box via measure",
       "component": {
@@ -254,6 +263,34 @@
           }
         ],
         "multiple": false,
+        "search": false,
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "select-search",
+      "notes": "a combobox over the same closed choices: typing filters, only a real choice reports",
+      "component": {
+        "component": "select_input",
+        "id": "state",
+        "label": "",
+        "choices": [
+          {
+            "value": "AL",
+            "label": "Alabama"
+          },
+          {
+            "value": "AK",
+            "label": "Alaska"
+          },
+          {
+            "value": "AZ",
+            "label": "Arizona"
+          }
+        ],
+        "selected": "AK",
+        "multiple": false,
+        "search": true,
         "emit": "settle"
       }
     },
@@ -283,6 +320,7 @@
           "c"
         ],
         "multiple": true,
+        "search": false,
         "emit": "settle"
       }
     },
@@ -297,6 +335,23 @@
         "max": 2,
         "value": 1,
         "step": 0.1,
+        "emit": "live"
+      }
+    },
+    {
+      "name": "range-slider",
+      "notes": "one input, two thumbs; its value is the pair [lo, hi] on the wire, both ends on the step grid",
+      "component": {
+        "component": "range_slider",
+        "id": "years",
+        "label": "",
+        "min": 1990,
+        "max": 2030,
+        "value": [
+          2000,
+          2015
+        ],
+        "step": 1,
         "emit": "live"
       }
     },
@@ -524,6 +579,55 @@
       }
     },
     {
+      "name": "checkbox-group",
+      "notes": "one id, many boxes; the value is the checked members' values in choice order, an array at every length",
+      "component": {
+        "component": "checkbox_group",
+        "id": "toppings",
+        "label": "",
+        "choices": [
+          {
+            "value": "cheese",
+            "label": "Cheese"
+          },
+          {
+            "value": "mushroom",
+            "label": "Mushroom"
+          },
+          {
+            "value": "onion",
+            "label": "Onion"
+          }
+        ],
+        "selected": [
+          "cheese",
+          "onion"
+        ],
+        "emit": "settle"
+      }
+    },
+    {
+      "name": "checkbox-group-empty",
+      "notes": "nothing selected is a real state: character(0) on the server, [] on the wire, never NULL",
+      "component": {
+        "component": "checkbox_group",
+        "id": "extras",
+        "label": "",
+        "choices": [
+          {
+            "value": "a",
+            "label": "A"
+          },
+          {
+            "value": "b",
+            "label": "B"
+          }
+        ],
+        "emit": "settle",
+        "selected": []
+      }
+    },
+    {
       "name": "date-input",
       "notes": "a date is a YYYY-MM-DD string on the wire, not a class",
       "component": {
@@ -571,6 +675,39 @@
       "component": {
         "component": "table_output",
         "id": "results"
+      }
+    },
+    {
+      "name": "data-table",
+      "notes": "same table value, interactive shell: options ride as data attributes, length_menu always an array",
+      "component": {
+        "component": "data_table",
+        "id": "grid",
+        "page_length": 5,
+        "length_menu": [
+          5,
+          30,
+          50
+        ],
+        "searchable": false,
+        "sortable": true
+      }
+    },
+    {
+      "name": "data-table-defaults",
+      "notes": "defaults spelled out on the wire, nothing implied",
+      "component": {
+        "component": "data_table",
+        "id": "grid2",
+        "page_length": 10,
+        "length_menu": [
+          10,
+          25,
+          50,
+          100
+        ],
+        "searchable": true,
+        "sortable": true
       }
     },
     {

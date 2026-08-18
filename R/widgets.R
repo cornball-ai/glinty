@@ -85,21 +85,33 @@ number_input <- function(id, label = "", value = NULL, min = NULL,
 
 #' Create a select dropdown
 #'
+#' With `search = TRUE` the control is a combobox: typing filters the
+#' same closed choice list, and only picking a real choice reports a
+#' value -- the typed text is a view, never a value, so the input's
+#' domain stays exactly the declared choices. Single-select only;
+#' a multiple select already filters by scrolling and refuses the
+#' flag. Long lists (dozens up) are where it earns the extra control.
+#'
 #' @param id character input ID
 #' @param label character label text
 #' @param choices character vector of choices; names are display
 #'   labels. A list of value/label pairs also works.
 #' @param selected character value selected initially
 #' @param multiple logical allow several selections
+#' @param search logical filter-as-you-type over the choices
+#'   (single-select only)
 #' @param emit character "live" or "settle"
 #' @return A UI component
 #' @examples
 #' select_input("engine", "Engine:", c(Fast = "fast", Slow = "slow"))
+#' select_input("state", "State:", datasets::state.name, search = TRUE)
 #' @export
 select_input <- function(id, label = "", choices = character(0),
-                         selected = NULL, multiple = FALSE, emit = "settle") {
+                         selected = NULL, multiple = FALSE, search = FALSE,
+                         emit = "settle") {
     component("select_input", id = id, label = label, choices = choices,
-              selected = selected, multiple = multiple, emit = emit)
+              selected = selected, multiple = multiple, search = search,
+              emit = emit)
 }
 
 #' Create a checkbox
@@ -139,6 +151,31 @@ radio_buttons <- function(id, label = "", choices = character(0),
               selected = selected, emit = emit)
 }
 
+#' Create a checkbox group input
+#'
+#' One id, many boxes: the value is the array of checked members'
+#' values, an array at every length -- `["a"]`, never `"a"` -- the
+#' same rule as a multiple select. Order follows the choices, not
+#' the clicks. Unlike [radio_buttons()], nothing is selected unless
+#' `selected` says so: an empty selection is a real state here.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param choices choices in any of the usual shapes
+#' @param selected character values checked at start; NULL for none
+#' @param emit character "settle" (default) or "live"
+#' @return A UI component
+#' @examples
+#' checkbox_group("show_vars", "Columns:",
+#'     choices = c("carat", "cut", "color"),
+#'     selected = c("carat", "cut"))
+#' @export
+checkbox_group <- function(id, label = "", choices = character(0),
+                           selected = NULL, emit = "settle") {
+    component("checkbox_group", id = id, label = label, choices = choices,
+              selected = selected, emit = emit)
+}
+
 #' Create a range slider
 #'
 #' @param id character input ID
@@ -162,6 +199,34 @@ slider_input <- function(id, label = "", min = 0, max = 1, value = NULL,
         value <- slider_default(min, max)
     }
     component("slider_input", id = id, label = label, min = min, max = max,
+              value = value, step = step, emit = emit)
+}
+
+#' Create a two-thumb range slider
+#'
+#' One component, two thumbs: its value is the pair `c(lo, hi)` and
+#' arrives server-side as a length-2 numeric vector. With no `value`
+#' the thumbs start at the ends. `step` and `emit` behave exactly as
+#' in [slider_input()]; a stepless range still drags at the implied
+#' precision.
+#'
+#' @param id character input ID
+#' @param label character label text
+#' @param min,max numeric bounds
+#' @param value numeric `c(lo, hi)` initial pair; NULL means the ends
+#' @param step numeric step size; NULL for the implied precision
+#' @param emit character "live" (default) or "settle"
+#' @return A UI component
+#' @examples
+#' range_slider("years", "Years:", min = 1990, max = 2030,
+#'     value = c(2000, 2015), step = 1)
+#' @export
+range_slider <- function(id, label = "", min = 0, max = 1, value = NULL,
+                         step = NULL, emit = "live") {
+    if (is.null(value)) {
+        value <- c(min, max)
+    }
+    component("range_slider", id = id, label = label, min = min, max = max,
               value = value, step = step, emit = emit)
 }
 

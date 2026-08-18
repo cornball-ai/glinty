@@ -82,12 +82,15 @@ render_table <- function(fn) {
 #' Convert a data.frame to the wire table structure
 #'
 #' I() wrappers keep length-1 headers and single-cell rows as JSON
-#' arrays under auto_unbox.
+#' arrays under auto_unbox. `align` marks each column "num" or
+#' "text": values become strings on the wire, so numeric-ness must
+#' travel alongside or the frontends can't right-align numbers.
 #'
 #' @param df a data.frame
-#' @return list(header, rows) of character vectors
+#' @return list(header, rows, align) of character vectors
 #' @keywords internal
 df_to_table <- function(df) {
+    num <- vapply(df, is.numeric, logical(1L), USE.NAMES = FALSE)
     cols <- lapply(df, function(col) {
         if (is.numeric(col)) format(col, trim = TRUE) else as.character(col)
     })
@@ -95,7 +98,8 @@ df_to_table <- function(df) {
         I(vapply(cols, function(col) col[[i]], character(1L),
                  USE.NAMES = FALSE))
     })
-    list(header = I(names(df)), rows = rows)
+    list(header = I(names(df)), rows = rows,
+         align = I(ifelse(num, "num", "text")))
 }
 
 #' Render a base graphics plot

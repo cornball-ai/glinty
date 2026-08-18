@@ -9,10 +9,12 @@ df_to_table(df)
 \item{df}{a data.frame}
 }
 \value{
-list(header, rows) of character vectors
+list(header, rows, align) of character vectors
 }
 \description{
 I() wrappers keep length-1 headers and single-cell rows as JSON
-arrays under auto_unbox.
+arrays under auto_unbox. `align` marks each column "num" or
+"text": values become strings on the wire, so numeric-ness must
+travel alongside or the frontends can't right-align numbers.
 }
 \keyword{internal}

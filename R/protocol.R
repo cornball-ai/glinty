@@ -399,6 +399,15 @@ measured_box <- function(session, id) {
 #' @keywords internal
 normalize_value <- function(value) {
     if (is.list(value) && is.null(names(value))) {
+        # An empty JSON array is an empty collection, not an absence:
+        # unlist(list()) gives NULL, which made deselecting the last
+        # item of a multi select set the server's value to NULL where
+        # the seed for the identical state is character(0). Both
+        # list-valued inputs are string-typed, so the empty array
+        # continues as the empty character vector.
+        if (length(value) == 0L) {
+            return(character(0))
+        }
         atomic <- all(vapply(value, function(v) {
             is.atomic(v) && length(v) == 1L
         }, logical(1L)))

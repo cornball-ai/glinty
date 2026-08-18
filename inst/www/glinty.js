@@ -14,12 +14,14 @@
        exists so the server can log what a lesser client will show as
        a placeholder. The browser renders the full set. */
     var SUPPORTED_COMPONENTS = [
-        "audio_output", "button", "checkbox_input", "column",
+        "audio_output", "button", "checkbox_group", "checkbox_input",
+        "column", "data_table",
         "conditional_panel", "date_input", "divider", "download_button",
         "collapse", "file_input", "heading", "html_output", "icon",
         "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
-        "plot_output", "radio_buttons", "raw_html", "row", "select_input",
+        "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
+        "select_input",
         "slider_input", "spacer", "tabset", "text", "text_input",
         "text_output", "textarea_input", "ui_output", "verbatim_output",
         "video_output"
@@ -74,6 +76,20 @@
     /* ---------- value extraction ---------- */
 
     function extractValue(el) {
+        /* box-bound inputs: the binding sits on a div whose value is
+           computed from its members, so a bare el.value would
+           harvest undefined */
+        if (el.classList && el.classList.contains("g-checkgroup-box")) {
+            return groupValue(el);
+        }
+        if (el.classList && el.classList.contains("g-range-box")) {
+            return rangeValue(el);
+        }
+        if (el.classList && el.classList.contains("g-combo")) {
+            /* the current value rides on the box; the text input is
+               a filter view, never the value */
+            return el.dataset.gSelected || "";
+        }
         if (el.type === "checkbox") return el.checked;
         if (el.type === "radio") {
             var checked = document.querySelector(
@@ -163,7 +179,15 @@
                 }
                 el._gCond = cond;
             }
-            el.classList.toggle("g-hidden", !evalCondition(cond));
+            var hide = !evalCondition(cond);
+            var was = el.classList.contains("g-hidden");
+            el.classList.toggle("g-hidden", hide);
+            /* a reveal gives sliders inside their first real width;
+               rebuild their scales to the measured label budget */
+            if (was && !hide) {
+                el.querySelectorAll('input[type="range"]')
+                    .forEach(function (r) { syncSliderLabels(r); });
+            }
         });
         /* a panel toggling can reveal a plot that has never had a
            real box to report */
@@ -185,7 +209,13 @@
         });
         set.querySelectorAll(".g-tab-body").forEach(function (p) {
             if (p.closest(".g-tabset") !== set) return;
-            p.classList.toggle("g-hidden", p.dataset.gTabPanel !== name);
+            var show = p.dataset.gTabPanel === name;
+            p.classList.toggle("g-hidden", !show);
+            /* first reveal gives sliders inside their real width */
+            if (show) {
+                p.querySelectorAll('input[type="range"]')
+                    .forEach(function (r) { syncSliderLabels(r); });
+            }
         });
         /* the newly shown panel may hold a plot that was 0x0 while
            hidden and has never reported a real box */
@@ -399,6 +429,98 @@
        handlers" structural: hydration touches the DOM, never the
        listeners, so there is no second registration to forget to
        skip. */
+    /* ---------- searchable select (combobox) ---------- */
+
+    /* All state lives in the DOM: the box's data-g-selected is the
+       value, hidden attributes are open/closed and filtered-out, and
+       .g-combo-active is the keyboard highlight. Nothing to rebuild,
+       nothing lost when the page was adopted rather than built. */
+
+    function comboLabel(box) {
+        var sel = box.dataset.gSelected;
+        var lab = "";
+        box.querySelectorAll(".g-combo-option").forEach(function (o) {
+            if (o.dataset.gValue === sel) lab = o.textContent;
+        });
+        return lab;
+    }
+
+    function comboActive(box, opt) {
+        box.querySelectorAll(".g-combo-active").forEach(function (o) {
+            o.classList.remove("g-combo-active");
+        });
+        if (opt) {
+            opt.classList.add("g-combo-active");
+            opt.scrollIntoView({ block: "nearest" });
+        }
+    }
+
+    function comboVisible(box) {
+        return Array.prototype.filter.call(
+            box.querySelectorAll(".g-combo-option"),
+            function (o) { return !o.hasAttribute("hidden"); }
+        );
+    }
+
+    function comboOpen(box) {
+        var input = box.querySelector(".g-combo-input");
+        var list = box.querySelector(".g-combo-list");
+        list.removeAttribute("hidden");
+        input.setAttribute("aria-expanded", "true");
+        /* opening shows everything: the field text is the current
+           label, not a filter yet. Select it so typing replaces. */
+        box.querySelectorAll(".g-combo-option").forEach(function (o) {
+            o.removeAttribute("hidden");
+        });
+        box.querySelector(".g-combo-empty").setAttribute("hidden", "hidden");
+        comboActive(box, null);
+        input.select();
+    }
+
+    function comboClose(box) {
+        var input = box.querySelector(".g-combo-input");
+        box.querySelector(".g-combo-list").setAttribute("hidden", "hidden");
+        input.setAttribute("aria-expanded", "false");
+        /* typed text was a view; the label snaps back to the value */
+        input.value = comboLabel(box);
+        comboActive(box, null);
+    }
+
+    function comboFilter(box) {
+        var input = box.querySelector(".g-combo-input");
+        var list = box.querySelector(".g-combo-list");
+        if (list.hasAttribute("hidden")) comboOpen(box);
+        var q = input.value.toLowerCase();
+        var first = null;
+        box.querySelectorAll(".g-combo-option").forEach(function (o) {
+            var hit = o.textContent.toLowerCase().indexOf(q) !== -1;
+            if (hit) {
+                o.removeAttribute("hidden");
+                if (!first) first = o;
+            } else {
+                o.setAttribute("hidden", "hidden");
+            }
+        });
+        var none = box.querySelector(".g-combo-empty");
+        if (first) {
+            none.setAttribute("hidden", "hidden");
+        } else {
+            none.removeAttribute("hidden");
+        }
+        comboActive(box, first);
+    }
+
+    function comboPick(box, opt) {
+        box.dataset.gSelected = opt.dataset.gValue;
+        comboClose(box);
+        noteInput(box.dataset.gTarget, opt.dataset.gValue);
+        send({
+            type: "input",
+            id: box.dataset.gTarget,
+            value: opt.dataset.gValue
+        });
+    }
+
     function bindEvents(root) {
         root.addEventListener("click", function (ev) {
             var el = ev.target.closest("[data-g-target]");
@@ -454,18 +576,127 @@
 
         root.addEventListener("input", function (ev) {
             var el = ev.target;
+            /* a group member routes through its box: one server
+               value, many boxes to tick */
+            if (el.dataset.gGroupMember) {
+                var gbox = el.closest(".g-checkgroup-box");
+                if (gbox && gbox.dataset.gEvent === "input") {
+                    sendGroup(gbox);
+                }
+                return;
+            }
+            /* a range end routes through its box: one server value,
+               two thumbs. The box carries the binding attributes. */
+            if (el.dataset.gRangeEnd) {
+                var rbox = el.closest(".g-range-box");
+                if (!rbox) return;
+                syncRangeLabels(rbox, el);
+                if (rbox.dataset.gEvent === "input") {
+                    sendRangeDebounced(rbox);
+                }
+                return;
+            }
+            /* the readout tracks the thumb regardless of emit: a
+               settle slider still shows where the finger is */
+            if (el.type === "range") syncSliderLabels(el);
             if (el.dataset.gEvent !== "input") return;
             sendInputDebounced(el);
         });
 
         root.addEventListener("change", function (ev) {
             var el = ev.target;
+            if (el.dataset.gGroupMember) {
+                var gbox = el.closest(".g-checkgroup-box");
+                if (gbox && gbox.dataset.gEvent === "change") {
+                    sendGroup(gbox);
+                }
+                return;
+            }
+            if (el.dataset.gRangeEnd) {
+                var rbox = el.closest(".g-range-box");
+                if (rbox && rbox.dataset.gEvent === "change") {
+                    syncRangeLabels(rbox, el);
+                    sendRange(rbox);
+                }
+                return;
+            }
             if (el.dataset.gUpload) {
                 uploadFiles(el);
                 return;
             }
             if (el.dataset.gEvent !== "change") return;
             sendInput(el);
+        });
+
+        /* combobox: open on click, pick on option click. Options
+           preventDefault on mousedown so the input keeps focus and
+           focusout does not close the list before the click arrives
+           -- the classic combobox race. */
+        root.addEventListener("mousedown", function (ev) {
+            if (ev.target.closest(".g-combo-option")) ev.preventDefault();
+        });
+        root.addEventListener("click", function (ev) {
+            var opt = ev.target.closest(".g-combo-option");
+            if (opt) {
+                comboPick(opt.closest(".g-combo"), opt);
+                return;
+            }
+            var ci = ev.target.closest(".g-combo-input");
+            if (ci) comboOpen(ci.closest(".g-combo"));
+        });
+        root.addEventListener("input", function (ev) {
+            if (ev.target.classList &&
+                    ev.target.classList.contains("g-combo-input")) {
+                comboFilter(ev.target.closest(".g-combo"));
+            }
+        });
+        root.addEventListener("focusout", function (ev) {
+            var box = ev.target.closest && ev.target.closest(".g-combo");
+            if (!box) return;
+            /* only when focus truly leaves the box */
+            if (ev.relatedTarget && box.contains(ev.relatedTarget)) return;
+            comboClose(box);
+        });
+        root.addEventListener("keydown", function (ev) {
+            if (!ev.target.classList ||
+                    !ev.target.classList.contains("g-combo-input")) {
+                return;
+            }
+            var box = ev.target.closest(".g-combo");
+            var open = !box.querySelector(".g-combo-list")
+                .hasAttribute("hidden");
+            if (ev.key === "Escape") {
+                if (open) {
+                    /* the list eats this Escape; a modal behind the
+                       combobox stays put */
+                    ev.stopPropagation();
+                    comboClose(box);
+                }
+                return;
+            }
+            if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+                ev.preventDefault();
+                if (!open) {
+                    comboOpen(box);
+                    return;
+                }
+                var vis = comboVisible(box);
+                if (!vis.length) return;
+                var cur = box.querySelector(".g-combo-active");
+                var i = vis.indexOf(cur);
+                var next = ev.key === "ArrowDown"
+                    ? vis[Math.min(i + 1, vis.length - 1)]
+                    : vis[Math.max(i - 1, 0)];
+                comboActive(box, next);
+                return;
+            }
+            if (ev.key === "Enter") {
+                if (!open) return;
+                ev.preventDefault();
+                var act = box.querySelector(".g-combo-active") ||
+                    comboVisible(box)[0];
+                if (act) comboPick(box, act);
+            }
         });
     }
 
@@ -587,10 +818,12 @@
         normal: "g-output",
         muted: "g-output g-muted",
         strong: "g-output g-strong",
+        heading: "g-output g-text-heading",
         mono: "g-output g-mono",
         small: "g-output g-small"
     };
     var OUTPUT_KIND_OF = {
+        data_table: "table",
         text_output: "text",
         verbatim_output: "text",
         table_output: "table",
@@ -601,6 +834,263 @@
         html_output: "html",
         ui_output: "ui"
     };
+
+    /* The shortest plain rendering of a number: parse, strip float
+       noise (0.6000000000000001 from range stepping), print. Must
+       agree with num_label() in lower_html.R for tree values. */
+    function numLabel(v) {
+        var n = parseFloat(Number(v).toPrecision(12));
+        return String(n);
+    }
+
+    /* A scale label at fraction f, snapped to the step grid when
+       there is one -- scale numbers should be values the thumb can
+       actually take. Mirrors slider_snap() in R. */
+    /* The precision a stepless slider still has: Shiny's
+       findStepSize rule. Integer ends spanning >= 2 mean whole
+       numbers; otherwise a 1/2/5-ladder decimal near range/100.
+       Mirrors slider_implied_step() in R. */
+    function sliderImpliedStep(min, max) {
+        var range = max - min;
+        if (range >= 2 && min % 1 === 0 && max % 1 === 0) return 1;
+        var raw = range / 100;
+        var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+        var norm = raw / mag;
+        return mag * (norm <= 1.5 ? 1 : norm <= 3.5 ? 2 :
+                      norm <= 7.5 ? 5 : 10);
+    }
+
+    function sliderSnap(f, min, max, step) {
+        var v = min + f * (max - min);
+        if (!(step > 0) && max > min) {
+            step = sliderImpliedStep(min, max);
+        }
+        if (step > 0) {
+            v = min + Math.round((v - min) / step) * step;
+            v = Math.min(Math.max(v, min), max);
+        }
+        return v;
+    }
+
+    /* The scale as {f, major, label} ticks: on the stops when the
+       step grid is coarse enough to see, a fixed tenths grid when
+       the slider reads as continuous. maxLab caps the numbered
+       majors so a narrow track stays legible; thinned positions
+       keep their tick at minor size. Mirrors slider_ticks() in R;
+       the two must agree. */
+    function sliderTicks(min, max, step, maxLab) {
+        maxLab = Math.max(2, maxLab || 11);
+        var ticks = [];
+        var n = step > 0 ? Math.round((max - min) / step) : 0;
+        if (n >= 1 && n <= 20 &&
+                Math.abs(min + n * step - max) < 1e-9 * Math.max(1, Math.abs(max))) {
+            /* at the default budget this is the old rule: every stop
+               to 10, every 2nd for 11-20 */
+            var every = Math.ceil((n + 1) / maxLab);
+            for (var i = 0; i <= n; i++) {
+                /* a regular label within one gap of the always-
+                   labeled last stop yields to it */
+                var major = (i % every === 0 && n - i >= every) ||
+                    i === n;
+                ticks.push({ f: i * step / (max - min), major: major,
+                             label: major ? numLabel(min + i * step) : "" });
+                if (i < n && n <= 10 && every === 1) {
+                    ticks.push({ f: (i + 0.5) * step / (max - min),
+                                 major: false, label: "" });
+                }
+            }
+            return ticks;
+        }
+        var labelEvery = Math.ceil(11 / maxLab);
+        var prevLabel = "";
+        for (var j = 0; j <= 40; j++) {
+            var m = Math.floor(j / 4);
+            var isMajor = j % 4 === 0 &&
+                ((m % labelEvery === 0 && 10 - m >= labelEvery) ||
+                 m === 10);
+            var lab = "";
+            if (isMajor) {
+                lab = numLabel(sliderSnap(j / 40, min, max, step));
+                /* a snap can land two majors on one value */
+                if (lab === prevLabel) {
+                    lab = "";
+                } else {
+                    prevLabel = lab;
+                }
+            }
+            ticks.push({ f: j / 40, major: isMajor, label: lab });
+        }
+        return ticks;
+    }
+
+    /* (Re)draw a slider's scale. Cheap enough to run on build and
+       whenever min/max/step change; the drag path never lands here
+       because the signature is unchanged. The label budget comes
+       from the measured width (server HTML is width-blind), so the
+       signature carries it: a slider hydrated before layout, or
+       revealed by a conditional panel, rebuilds on its next sync. */
+    function buildSliderScale(scale, min, max, step) {
+        var w = scale.offsetWidth;
+        var maxLab = w > 0 ? Math.max(2, Math.floor(w / 70)) : 11;
+        var sig = min + ":" + max + ":" + step + ":" + maxLab;
+        if (scale.dataset.gScaleSig === sig) return;
+        scale.dataset.gScaleSig = sig;
+        scale.textContent = "";
+        sliderTicks(min, max, step, maxLab).forEach(function (tk) {
+            var left = "left:" +
+                numLabel(Math.round(tk.f * 1000000) / 10000) + "%";
+            scale.appendChild(el("span", {
+                "class": tk.major ? "g-tick g-tick-major" : "g-tick",
+                style: left
+            }));
+            if (tk.major) {
+                var lab = el("span",
+                             { "class": "g-tick-label", style: left });
+                lab.textContent = tk.label;
+                scale.appendChild(lab);
+            }
+        });
+    }
+
+    /* The thumb moves client-side, so every number layer is
+       client-kept: bubble text and position, end chips yielding to
+       the bubble, scale labels tracking min/max/step. */
+    function syncSliderLabels(input, box) {
+        box = box || input.closest(".g-slider-box");
+        if (!box) return;
+        /* a range box shares the slider classes so the chips, bubble
+           and scale styling carry over; its sync is its own */
+        if (box.classList.contains("g-range-box")) {
+            syncRangeLabels(box);
+            return;
+        }
+        var min = parseFloat(input.min) || 0;
+        var max = parseFloat(input.max);
+        max = isFinite(max) ? max : 1;
+        var step = parseFloat(input.step) || 0;
+        var v = parseFloat(input.value);
+        v = isFinite(v) ? v : min;
+        var pct = max > min
+            ? Math.min(1, Math.max(0, (v - min) / (max - min)))
+            : 0;
+        var bub = box.querySelector(".g-slider-bubble");
+        if (bub) {
+            bub.textContent = numLabel(v);
+            bub.style.left = numLabel(Math.round(pct * 100000) / 1000) + "%";
+        }
+        var chipMin = box.querySelector(".g-slider-chip-min");
+        if (chipMin) {
+            chipMin.textContent = numLabel(min);
+            chipMin.style.visibility = pct < 0.1 ? "hidden" : "";
+        }
+        var chipMax = box.querySelector(".g-slider-chip-max");
+        if (chipMax) {
+            chipMax.textContent = numLabel(max);
+            chipMax.style.visibility = pct > 0.9 ? "hidden" : "";
+        }
+        var scale = box.querySelector(".g-slider-scale");
+        if (scale) buildSliderScale(scale, min, max, step);
+    }
+
+    /* A range box's client-kept layers: two bubbles, yielding end
+       chips, the [lo, hi] fill, the shared scale. `moved` is the end
+       input that changed, so a crossing drag clamps the end the user
+       is holding rather than shoving its partner. */
+    function syncRangeLabels(box, moved) {
+        if (!box.classList || !box.classList.contains("g-range-box")) {
+            box = box.closest(".g-range-box");
+            if (!box) return;
+        }
+        var ends = box.querySelectorAll(".g-range-end");
+        if (ends.length !== 2) return;
+        var loEl = ends[0];
+        var hiEl = ends[1];
+        var min = parseFloat(loEl.min) || 0;
+        var max = parseFloat(loEl.max);
+        max = isFinite(max) ? max : 1;
+        var step = parseFloat(loEl.step) || 0;
+        var lo = parseFloat(loEl.value);
+        lo = isFinite(lo) ? lo : min;
+        var hi = parseFloat(hiEl.value);
+        hi = isFinite(hi) ? hi : max;
+        if (lo > hi) {
+            if (moved === hiEl) {
+                hi = lo;
+                hiEl.value = hi;
+            } else {
+                lo = hi;
+                loEl.value = lo;
+            }
+        }
+        var span = max > min ? max - min : 1;
+        var p1 = Math.min(1, Math.max(0, (lo - min) / span));
+        var p2 = Math.min(1, Math.max(0, (hi - min) / span));
+        var bubLo = box.querySelector(".g-range-bubble-lo");
+        if (bubLo) {
+            bubLo.textContent = numLabel(lo);
+            bubLo.style.left = numLabel(Math.round(p1 * 100000) / 1000) + "%";
+        }
+        var bubHi = box.querySelector(".g-range-bubble-hi");
+        if (bubHi) {
+            bubHi.textContent = numLabel(hi);
+            bubHi.style.left = numLabel(Math.round(p2 * 100000) / 1000) + "%";
+        }
+        var chipMin = box.querySelector(".g-slider-chip-min");
+        if (chipMin) {
+            chipMin.textContent = numLabel(min);
+            chipMin.style.visibility = p1 < 0.1 ? "hidden" : "";
+        }
+        var chipMax = box.querySelector(".g-slider-chip-max");
+        if (chipMax) {
+            chipMax.textContent = numLabel(max);
+            chipMax.style.visibility = p2 > 0.9 ? "hidden" : "";
+        }
+        var fill = box.querySelector(".g-range-fill");
+        if (fill) {
+            fill.style.left = numLabel(Math.round(p1 * 100000) / 1000) + "%";
+            fill.style.width =
+                numLabel(Math.round((p2 - p1) * 100000) / 1000) + "%";
+        }
+        var scale = box.querySelector(".g-slider-scale");
+        if (scale) buildSliderScale(scale, min, max, step);
+    }
+
+    function rangeValue(box) {
+        var ends = box.querySelectorAll(".g-range-end");
+        var lo = parseFloat(ends[0].value);
+        var hi = parseFloat(ends[1].value);
+        return [Math.min(lo, hi), Math.max(lo, hi)];
+    }
+
+    /* the checked members' values in choice order -- an array at
+       every length, like a multiple select's */
+    function groupValue(box) {
+        return Array.prototype.map.call(
+            box.querySelectorAll("input[type=checkbox]:checked"),
+            function (m) { return m.value; }
+        );
+    }
+
+    function sendGroup(box) {
+        var value = groupValue(box);
+        noteInput(box.dataset.gTarget, value);
+        send({ type: "input", id: box.dataset.gTarget, value: value });
+    }
+
+    function sendRange(box) {
+        var value = rangeValue(box);
+        noteInput(box.dataset.gTarget, value);
+        send({ type: "input", id: box.dataset.gTarget, value: value });
+    }
+
+    function sendRangeDebounced(box) {
+        var id = box.dataset.gTarget;
+        if (debounceTimers.has(id)) clearTimeout(debounceTimers.get(id));
+        debounceTimers.set(id, setTimeout(function () {
+            debounceTimers.delete(id);
+            sendRange(box);
+        }, DEBOUNCE_MS));
+    }
 
     function el(tag, attrs) {
         var node = document.createElement(tag);
@@ -617,7 +1107,8 @@
        one release newer may know variants this client does not. */
     var KNOWN_VARIANTS = {
         text: ["normal", "muted", "strong", "heading", "mono", "small"],
-        text_output: ["normal", "muted", "strong", "mono", "small"],
+        text_output: ["normal", "muted", "strong", "heading", "mono",
+                      "small"],
         button: ["default", "primary", "secondary", "danger", "ghost",
                  "listing"],
         download_button: ["default", "primary", "secondary", "danger",
@@ -752,6 +1243,7 @@
     }
 
     function buildSelect(c) {
+        if (c.search) return buildCombo(c);
         var attrs = assign(bindAttrs(c, "input"), { "class": "g-select" });
         if (c.multiple) attrs.multiple = "multiple";
         var sel = el("select", attrs);
@@ -774,6 +1266,52 @@
             sel.appendChild(opt);
         });
         return fieldGroup(c, sel);
+    }
+
+    /* The searchable select, mirroring html_combo() in R: binding
+       and current value on the box, a text input as the filter view,
+       the full option list pre-rendered so an adopted page needs
+       nothing built. */
+    function buildCombo(c) {
+        var chosen = c.selected === null || c.selected === undefined
+            ? ((c.choices || []).length ? String(c.choices[0].value) : "")
+            : String(c.selected);
+        var lab = "";
+        (c.choices || []).forEach(function (ch) {
+            if (String(ch.value) === chosen) lab = ch.label;
+        });
+        var box = el("div", assign(bindAttrs(c, "input"), {
+            "class": "g-combo",
+            "data-g-selected": chosen
+        }));
+        box.appendChild(el("input", {
+            type: "text",
+            "class": "g-input g-combo-input",
+            role: "combobox",
+            "aria-expanded": "false",
+            autocomplete: "off",
+            value: lab
+        }));
+        var list = el("div", {
+            "class": "g-combo-list",
+            hidden: "hidden"
+        });
+        (c.choices || []).forEach(function (ch) {
+            var o = el("div", {
+                "class": "g-combo-option",
+                "data-g-value": ch.value
+            });
+            o.textContent = ch.label;
+            list.appendChild(o);
+        });
+        var none = el("div", {
+            "class": "g-combo-empty",
+            hidden: "hidden"
+        });
+        none.textContent = "No matches";
+        list.appendChild(none);
+        box.appendChild(list);
+        return fieldGroup(c, box);
     }
 
     function buildCheckbox(c) {
@@ -1039,15 +1577,110 @@
             return buildCheckbox(c);
         case "radio_buttons":
             return buildRadio(c);
-        case "slider_input":
-            return fieldGroup(c, el("input", assign(bindAttrs(c, "input"), {
+        case "checkbox_group": {
+            /* mirrors html_checkbox_group() in R: the binding sits
+               on the box, members carry only their marker */
+            var cgSel = (c.selected || []).map(String);
+            var cgBox = el("div", assign(bindAttrs(c, "input"), {
+                "class": "g-checkgroup-box"
+            }));
+            (c.choices || []).forEach(function (ch, i) {
+                var item = el("div", { "class": "g-check" });
+                var itemId = c.id + "_" + (i + 1);
+                item.appendChild(el("input", {
+                    id: itemId,
+                    type: "checkbox",
+                    value: ch.value,
+                    "class": "g-checkbox",
+                    "data-g-group-member": "1",
+                    checked: cgSel.indexOf(String(ch.value)) !== -1
+                        ? "checked" : null
+                }));
+                var cgLab = el("label", { "for": itemId });
+                cgLab.textContent = ch.label;
+                item.appendChild(cgLab);
+                cgBox.appendChild(item);
+            });
+            return fieldGroup(c, cgBox);
+        }
+        case "slider_input": {
+            /* Three number layers, mirroring html_slider() in R --
+               the two must agree: a bubble above the thumb, min/max
+               chips at the ends, a graded scale below. The sync in
+               syncSliderLabels() keeps every layer current. */
+            var sbox = el("div", { "class": "g-slider-box" });
+            var stop = el("div", { "class": "g-slider-top" });
+            var mkChip = function (cls) {
+                var s = el("span", { "class": "g-slider-chip " + cls });
+                stop.appendChild(s);
+                return s;
+            };
+            var chipMin = mkChip("g-slider-chip-min");
+            var bub = el("output", { "class":
+                "g-slider-chip g-slider-bubble", "for": c.id });
+            stop.appendChild(bub);
+            var chipMax = mkChip("g-slider-chip-max");
+            sbox.appendChild(stop);
+            /* a stepless slider still drags at the implied
+               precision (mirrors html_slider in R); the tree keeps
+               step null, only the granularity materializes */
+            var cstep = c.step;
+            if (!(cstep > 0) && c.max > c.min) {
+                cstep = sliderImpliedStep(c.min, c.max);
+            }
+            var input = el("input", assign(bindAttrs(c, "input"), {
                 type: "range",
                 "class": "g-slider",
                 min: c.min,
                 max: c.max,
                 value: c.value,
-                step: c.step
-            })));
+                step: cstep
+            }));
+            sbox.appendChild(input);
+            sbox.appendChild(el("div", { "class": "g-slider-scale" }));
+            syncSliderLabels(input, sbox);
+            return fieldGroup(c, sbox);
+        }
+        case "range_slider": {
+            /* Mirrors html_range_slider() in R: two stacked native
+               inputs over one drawn rail, thumbs pointer-active, the
+               binding on the box because the server keeps one pair. */
+            var rbox = el("div", assign(bindAttrs(c, "input"),
+                { "class": "g-slider-box g-range-box" }));
+            var rtop = el("div", { "class": "g-slider-top" });
+            rtop.appendChild(el("span",
+                { "class": "g-slider-chip g-slider-chip-min" }));
+            rtop.appendChild(el("output", { "class":
+                "g-slider-chip g-slider-bubble g-range-bubble-lo" }));
+            rtop.appendChild(el("output", { "class":
+                "g-slider-chip g-slider-bubble g-range-bubble-hi" }));
+            rtop.appendChild(el("span",
+                { "class": "g-slider-chip g-slider-chip-max" }));
+            rbox.appendChild(rtop);
+            var rstep = c.step;
+            if (!(rstep > 0) && c.max > c.min) {
+                rstep = sliderImpliedStep(c.min, c.max);
+            }
+            var pair = c.value || [c.min, c.max];
+            var track = el("div", { "class": "g-range-track" });
+            track.appendChild(el("div", { "class": "g-range-rail" }));
+            track.appendChild(el("div", { "class": "g-range-fill" }));
+            ["lo", "hi"].forEach(function (end, i) {
+                track.appendChild(el("input", {
+                    type: "range",
+                    "class": "g-slider g-range-end",
+                    "data-g-range-end": end,
+                    min: c.min,
+                    max: c.max,
+                    value: pair[i],
+                    step: rstep
+                }));
+            });
+            rbox.appendChild(track);
+            rbox.appendChild(el("div", { "class": "g-slider-scale" }));
+            syncRangeLabels(rbox);
+            return fieldGroup(c, rbox);
+        }
         case "file_input":
             return buildFile(c);
         case "button":
@@ -1065,6 +1698,17 @@
         case "table_output":
             return el("div", assign(slotAttrs(c), {
                 "class": "g-table-output"
+            }));
+        case "data_table":
+            /* mirrors the R lowering: an empty shell carrying the
+               display options as data; the interactive build happens
+               when the value arrives */
+            return el("div", assign(slotAttrs(c), {
+                "class": "g-table-output g-datatable",
+                "data-g-page-length": c.page_length,
+                "data-g-length-menu": (c.length_menu || []).join(","),
+                "data-g-searchable": c.searchable === false ? "0" : "1",
+                "data-g-sortable": c.sortable === false ? "0" : "1"
             }));
         case "plot_output":
             return el("img", assign(slotAttrs(c), {
@@ -1231,13 +1875,17 @@
 
     function buildTable(el, data) {
         el.textContent = "";
+        /* align marks numeric columns; values travel as strings so
+           the wire carries the type the layout needs */
+        var align = data.align || [];
         var tbl = document.createElement("table");
         tbl.className = "g-table";
         var thead = document.createElement("thead");
         var hr = document.createElement("tr");
-        (data.header || []).forEach(function (h) {
+        (data.header || []).forEach(function (h, i) {
             var th = document.createElement("th");
             th.textContent = h;
+            if (align[i] === "num") th.className = "g-num";
             hr.appendChild(th);
         });
         thead.appendChild(hr);
@@ -1245,15 +1893,195 @@
         var tbody = document.createElement("tbody");
         (data.rows || []).forEach(function (r) {
             var tr = document.createElement("tr");
-            r.forEach(function (c) {
+            r.forEach(function (c, i) {
                 var td = document.createElement("td");
                 td.textContent = c; /* structural escaping */
+                if (align[i] === "num") td.className = "g-num";
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
         });
         tbl.appendChild(tbody);
         el.appendChild(tbl);
+    }
+
+    /* ---------- interactive data table ---------- */
+
+    /* Client-side sort, filter and pagination over the same table
+       value a plain table_output receives. The client holds the
+       whole value and rearranges it locally; the server never hears
+       about a sort. Numeric columns (align === "num") sort
+       numerically, the rest as text -- the alignment the wire
+       already carries doubles as the type signal. Mirrors
+       _GlintyDataTable in dart: the two must agree.
+
+       The controls are built once and persist across value updates
+       and re-renders -- rebuilding them would steal focus from the
+       search box on every keystroke. Only the table and footer
+       rebuild. */
+
+    function dataTableState(el) {
+        var st = el._gdt;
+        if (st) return st;
+        st = el._gdt = {
+            page: 0,
+            search: "",
+            sortCol: -1,
+            sortAsc: true,
+            pageLength: Number(el.dataset.gPageLength) || 10,
+            menu: (el.dataset.gLengthMenu || "10,25,50,100")
+                .split(",").map(Number),
+            searchable: el.dataset.gSearchable !== "0",
+            sortable: el.dataset.gSortable !== "0",
+            data: {}
+        };
+
+        var controls = document.createElement("div");
+        controls.className = "g-dt-controls";
+        var lenSel = document.createElement("select");
+        lenSel.className = "g-select g-dt-length";
+        st.menu.forEach(function (n) {
+            var o = document.createElement("option");
+            o.value = String(n);
+            o.textContent = n + " rows";
+            if (n === st.pageLength) o.selected = true;
+            lenSel.appendChild(o);
+        });
+        lenSel.addEventListener("change", function () {
+            st.pageLength = Number(lenSel.value);
+            st.page = 0;
+            renderDataTable(el);
+        });
+        controls.appendChild(lenSel);
+        if (st.searchable) {
+            var box = document.createElement("input");
+            box.type = "search";
+            box.placeholder = "Search";
+            box.className = "g-input g-dt-search";
+            box.addEventListener("input", function () {
+                st.search = box.value;
+                st.page = 0;
+                renderDataTable(el);
+            });
+            controls.appendChild(box);
+        }
+        el.appendChild(controls);
+
+        st.body = document.createElement("div");
+        st.body.className = "g-dt-body";
+        el.appendChild(st.body);
+        st.footer = document.createElement("div");
+        st.footer.className = "g-dt-footer";
+        el.appendChild(st.footer);
+        return st;
+    }
+
+    function dataTableValue(el, data) {
+        var st = dataTableState(el);
+        st.data = data || {};
+        renderDataTable(el);
+    }
+
+    function renderDataTable(el) {
+        var st = dataTableState(el);
+        var align = st.data.align || [];
+        var header = st.data.header || [];
+        var rows = st.data.rows || [];
+
+        var q = st.search.toLowerCase();
+        var filtered = !q ? rows : rows.filter(function (r) {
+            return r.some(function (c) {
+                return String(c).toLowerCase().indexOf(q) !== -1;
+            });
+        });
+        if (st.sortCol >= 0) {
+            var ci = st.sortCol;
+            var numCol = align[ci] === "num";
+            filtered = filtered.slice().sort(function (a, b) {
+                var d;
+                if (numCol) {
+                    d = Number(a[ci]) - Number(b[ci]);
+                } else {
+                    var x = String(a[ci]);
+                    var y = String(b[ci]);
+                    d = x < y ? -1 : x > y ? 1 : 0;
+                }
+                return st.sortAsc ? d : -d;
+            });
+        }
+        var total = filtered.length;
+        var pages = Math.max(1, Math.ceil(total / st.pageLength));
+        /* clamp rather than reset: a value update keeps the reader's
+           place unless the place stopped existing */
+        if (st.page >= pages) st.page = pages - 1;
+        if (st.page < 0) st.page = 0;
+        var from = st.page * st.pageLength;
+        var pageRows = filtered.slice(from, from + st.pageLength);
+
+        st.body.textContent = "";
+        var tbl = document.createElement("table");
+        tbl.className = "g-table";
+        var thead = document.createElement("thead");
+        var hr = document.createElement("tr");
+        header.forEach(function (h, i) {
+            var th = document.createElement("th");
+            th.textContent = h
+                + (st.sortCol === i ? (st.sortAsc ? " ▴" : " ▾")
+                                    : "");
+            if (align[i] === "num") th.className = "g-num";
+            if (st.sortable) {
+                th.classList.add("g-dt-sortable");
+                th.addEventListener("click", function () {
+                    if (st.sortCol === i) {
+                        st.sortAsc = !st.sortAsc;
+                    } else {
+                        st.sortCol = i;
+                        st.sortAsc = true;
+                    }
+                    renderDataTable(el);
+                });
+            }
+            hr.appendChild(th);
+        });
+        thead.appendChild(hr);
+        tbl.appendChild(thead);
+        var tbody = document.createElement("tbody");
+        pageRows.forEach(function (r) {
+            var tr = document.createElement("tr");
+            r.forEach(function (c, i) {
+                var td = document.createElement("td");
+                td.textContent = c;
+                if (align[i] === "num") td.className = "g-num";
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        st.body.appendChild(tbl);
+
+        st.footer.textContent = "";
+        var info = document.createElement("span");
+        info.className = "g-dt-info";
+        var last = Math.min(from + st.pageLength, total);
+        info.textContent = total === 0 ? "No rows"
+            : "Showing " + (from + 1) + "–" + last + " of " + total
+              + (q && rows.length !== total
+                    ? " (filtered from " + rows.length + ")" : "");
+        st.footer.appendChild(info);
+        var mkNav = function (label, delta, enabled) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "g-btn g-btn-ghost g-dt-nav";
+            b.textContent = label;
+            b.disabled = !enabled;
+            b.addEventListener("click", function () {
+                st.page += delta;
+                renderDataTable(el);
+            });
+            st.footer.appendChild(b);
+        };
+        mkNav("‹ Prev", -1, st.page > 0);
+        mkNav("Next ›", 1, st.page < pages - 1);
     }
 
     /* Apply an output message: the value is typed by kind (what the
@@ -1273,7 +2101,11 @@
             el.innerHTML = msg.value === null ? "" : msg.value;
             break;
         case "table":
-            buildTable(el, msg.value || {});
+            if (el.classList.contains("g-datatable")) {
+                dataTableValue(el, msg.value || {});
+            } else {
+                buildTable(el, msg.value || {});
+            }
             break;
         case "image": {
             var v = msg.value || {};
@@ -1440,6 +2272,11 @@
             return;
         }
 
+        if (el.classList && el.classList.contains("g-combo")) {
+            applyComboUpdate(el, msg);
+            return;
+        }
+
         if (msg.label !== undefined) {
             var lab = document.querySelector('label[for="' + msg.id + '"]');
             if (lab) lab.textContent = msg.label;
@@ -1486,6 +2323,39 @@
             }
         }
         /* deliberately no synthetic events: the server already knows */
+        if (el.type === "range") syncSliderLabels(el);
+    }
+
+    /* update_select_input() against a searchable select. Choices
+       rebuild the option nodes (the plain select's rule applied to
+       divs); a pushed selection updates the box value and label. An
+       open list is never stomped, like a focused input. */
+    function applyComboUpdate(box, msg) {
+        if (msg.label !== undefined) {
+            var lab = document.querySelector('label[for="' + msg.id + '"]');
+            if (lab) lab.textContent = msg.label;
+        }
+        var list = box.querySelector(".g-combo-list");
+        var open = !list.hasAttribute("hidden");
+        if (msg.choices !== undefined && !open) {
+            box.querySelectorAll(".g-combo-option").forEach(function (o) {
+                o.remove();
+            });
+            var none = box.querySelector(".g-combo-empty");
+            msg.choices.forEach(function (c) {
+                var o = document.createElement("div");
+                o.className = "g-combo-option";
+                o.dataset.gValue = c.value;
+                o.textContent = c.label;
+                list.insertBefore(o, none);
+            });
+        }
+        if (msg.selected !== undefined && !open) {
+            box.dataset.gSelected = String(msg.selected);
+        }
+        if (!open) {
+            box.querySelector(".g-combo-input").value = comboLabel(box);
+        }
     }
 
     function applyError(msg) {
@@ -1672,6 +2542,13 @@
             reportPlotDims();
             observeMeasured();
         }
+        /* Server HTML is width-blind: its slider scales carry the
+           default label budget. One pass on live layout rebuilds
+           each to its measured width (the scale signature makes
+           this a no-op when nothing changes). */
+        Array.prototype.forEach.call(
+            document.querySelectorAll('input[type="range"]'),
+            function (r) { syncSliderLabels(r); });
         /* On resume the DOM is live client state, not the initial
            tree; the welcome's ui rides along and is ignored. */
         flushPending();

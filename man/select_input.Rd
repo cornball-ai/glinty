@@ -9,6 +9,7 @@ select_input(
   choices = character(0),
   selected = NULL,
   multiple = FALSE,
+  search = FALSE,
   emit = "settle"
 )
 }
@@ -24,14 +25,23 @@ labels. A list of value/label pairs also works.}
 
 \item{multiple}{logical allow several selections}
 
+\item{search}{logical filter-as-you-type over the choices
+(single-select only)}
+
 \item{emit}{character "live" or "settle"}
 }
 \value{
 A UI component
 }
 \description{
-Create a select dropdown
+With `search = TRUE` the control is a combobox: typing filters the
+same closed choice list, and only picking a real choice reports a
+value -- the typed text is a view, never a value, so the input's
+domain stays exactly the declared choices. Single-select only;
+a multiple select already filters by scrolling and refuses the
+flag. Long lists (dozens up) are where it earns the extra control.
 }
 \examples{
 select_input("engine", "Engine:", c(Fast = "fast", Slow = "slow"))
+select_input("state", "State:", datasets::state.name, search = TRUE)
 }

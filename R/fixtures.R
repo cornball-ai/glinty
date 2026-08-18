@@ -103,6 +103,14 @@ component_fixtures <- function() {
                       notes = "an empty slot; the value arrives later, tagged by kind"
         ),
                  list(
+                      name = "text-output-heading",
+                      component = component("text_output", id = "caption",
+                variant = "heading"),
+                      notes = paste("a caption whose text is computed: the",
+                                    "output slot styled like text's heading",
+                                    "variant, same tokens in both lowerings")
+        ),
+                 list(
                       name = "plot-output-responsive",
                       component = component("plot_output", id = "scatter"),
                       notes = "no dimensions: the client reports its box via measure"
@@ -146,6 +154,15 @@ component_fixtures <- function() {
                       notes = "choices normalize to value/label however they were written"
         ),
                  list(
+                      name = "select-search",
+                      component = component("select_input", id = "state",
+                choices = c(Alabama = "AL", Alaska = "AK", Arizona = "AZ"),
+                search = TRUE, selected = "AK"),
+                      notes = paste("a combobox over the same closed choices:",
+                                    "typing filters, only a real choice",
+                                    "reports")
+        ),
+                 list(
                       name = "select-multiple",
                       component = component("select_input", id = "tags",
                 choices = c("Alpha" = "a", "Beta" = "b", "Gamma" = "c"),
@@ -159,6 +176,14 @@ component_fixtures <- function() {
                       component = component("slider_input", id = "speed", min = 0.5,
                 max = 2, value = 1, step = 0.1),
                       notes = "numbers, not CSS strings: Flutter derives Slider divisions from step"
+        ),
+                 list(
+                      name = "range-slider",
+                      component = component("range_slider", id = "years",
+                min = 1990, max = 2030, value = c(2000, 2015), step = 1),
+                      notes = paste("one input, two thumbs; its value is the",
+                                    "pair [lo, hi] on the wire, both ends on",
+                                    "the step grid")
         ),
                  list(
                       name = "button-primary",
@@ -266,6 +291,24 @@ component_fixtures <- function() {
                       notes = "one value for the group, from the selected member"
         ),
                  list(
+                      name = "checkbox-group",
+                      component = component("checkbox_group", id = "toppings",
+                choices = c(Cheese = "cheese", Mushroom = "mushroom",
+                            Onion = "onion"),
+                selected = c("cheese", "onion")),
+                      notes = paste("one id, many boxes; the value is the",
+                                    "checked members' values in choice",
+                                    "order, an array at every length")
+        ),
+                 list(
+                      name = "checkbox-group-empty",
+                      component = component("checkbox_group", id = "extras",
+                choices = c(A = "a", B = "b")),
+                      notes = paste("nothing selected is a real state:",
+                                    "character(0) on the server, [] on",
+                                    "the wire, never NULL")
+        ),
+                 list(
                       name = "date-input",
                       component = component("date_input", id = "start",
                 label = "Start:", value = "2026-07-27",
@@ -295,6 +338,20 @@ component_fixtures <- function() {
                       name = "table-output",
                       component = component("table_output", id = "results"),
                       notes = "structure on the wire (header + rows), never markup"
+        ),
+                 list(
+                      name = "data-table",
+                      component = component("data_table", id = "grid",
+                page_length = 5L, length_menu = c(5, 30, 50),
+                searchable = FALSE),
+                      notes = paste("same table value, interactive shell: options",
+                                    "ride as data attributes, length_menu always",
+                                    "an array")
+        ),
+                 list(
+                      name = "data-table-defaults",
+                      component = component("data_table", id = "grid2"),
+                      notes = "defaults spelled out on the wire, nothing implied"
         ),
                  list(
                       name = "image-output",

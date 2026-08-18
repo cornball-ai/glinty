@@ -52,6 +52,8 @@ expect_equal(m$kind, "table")
 expect_equal(unlist(m$value$header), c("name", "n"))
 expect_equal(unlist(m$value$rows[[1L]]), c("a<b", "1.5"))
 expect_equal(unlist(m$value$rows[[2L]]), c("c", "2.0"))
+# numeric-ness travels alongside the stringified values
+expect_equal(unlist(m$value$align), c("text", "num"))
 # no markup, no escaping on the wire: strings travel raw
 expect_false(grepl("<td>", raw_json, fixed = TRUE))
 expect_true(grepl("a<b", rawToChar(charToRaw(raw_json)), fixed = TRUE) ||

@@ -102,3 +102,67 @@ expect_null(s6$input[["dyn"]]())
 handle_input(s6, "dyn", 42)
 expect_equal(isolate(s6$input[["dyn"]]()), 42)
 session_end(s6)
+
+# --- on_flushed: once, after the drain, session-scoped ---
+#
+# Registration is inert through any number of flushes; the event
+# loop's post-drain fire_on_flushed() is what runs it, exactly once.
+# That "after the drain" placement is the whole point: the callback
+# runs only when the flush's messages have left for the client.
+s7 <- new_session("s7")
+hits <- 0L
+s7$on_flushed(function() hits <<- hits + 1L)
+expect_equal(hits, 0L)
+flush_reactions()
+expect_equal(hits, 0L)
+expect_equal(glinty:::fire_on_flushed(), 1L)
+expect_equal(hits, 1L)
+# once means once
+expect_equal(glinty:::fire_on_flushed(), 0L)
+expect_equal(hits, 1L)
+
+# a callback registering another defers it to the NEXT fire -- the
+# re-register idiom for every-flush behavior terminates each round
+s7$on_flushed(function() {
+    hits <<- hits + 1L
+    s7$on_flushed(function() hits <<- hits + 100L)
+})
+glinty:::fire_on_flushed()
+expect_equal(hits, 2L)
+glinty:::fire_on_flushed()
+expect_equal(hits, 102L)
+
+# one failing callback warns and does not eat its neighbors
+s7$on_flushed(function() stop("boom"))
+s7$on_flushed(function() hits <<- hits + 1L)
+expect_warning(glinty:::fire_on_flushed(), "on_flushed callback failed")
+expect_equal(hits, 103L)
+session_end(s7)
+
+# an ended session's callbacks never fire
+s8 <- new_session("s8")
+s8$on_flushed(function() hits <<- hits + 1000L)
+session_end(s8)
+expect_equal(glinty:::fire_on_flushed(), 0L)
+expect_equal(hits, 103L)
+
+# the deferred-render pattern end to end: placeholder first, the
+# expensive value only after the flush that carried the placeholder
+s9 <- new_session("s9")
+with_session(s9, {
+    starting <- glinty::reactive_val(TRUE)
+    s9$on_flushed(function() starting(FALSE))
+    s9$output$slow <- glinty::render_text(function() {
+        if (starting()) "placeholder" else "expensive"
+    })
+})
+flush_reactions()
+vals <- function() vapply(Filter(function(m) grepl('"id":"slow"', m),
+                                 s9$outgoing),
+                          function(m) jsonlite::fromJSON(m)$value,
+                          character(1L))
+expect_equal(vals(), "placeholder")
+glinty:::fire_on_flushed()
+flush_reactions()
+expect_equal(vals(), c("placeholder", "expensive"))
+session_end(s9)

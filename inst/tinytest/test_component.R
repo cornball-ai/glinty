@@ -135,9 +135,10 @@ for (nm in names(COMPONENT_SCHEMA)) {
     for (fname in names(COMPONENT_SCHEMA[[nm]])) {
         spec <- COMPONENT_SCHEMA[[nm]][[fname]]
         expect_true(is.character(spec$type))
-        expect_true(spec$type %in% c("string", "strings", "number", "int",
-                                     "bool", "enum", "choices", "panels",
-                                     "condition", "children", "any"))
+        expect_true(spec$type %in% c("string", "strings", "number",
+                                     "numbers", "int", "bool", "enum",
+                                     "choices", "panels", "condition",
+                                     "children", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)
@@ -211,6 +212,86 @@ expect_true(grepl('"selected":"b"', as_json(one), fixed = TRUE))
 expect_error(component("select_input", id = "s", choices = c("a", "b"),
                        selected = c("a", NA), multiple = TRUE),
              "must be strings")
+
+# --- a range slider's value is exactly the pair [lo, hi] ---
+#
+# One input, one server value, two thumbs. The arity rule lives in
+# check_component() like select_input's, because field types cannot
+# say "exactly two".
+rng <- component("range_slider", id = "yrs", min = 1990, max = 2030,
+                 value = c(2000, 2015))
+expect_equal(unlist(rng$value), c(2000, 2015))
+# the wire form is an array, never a collapsed scalar
+expect_true(grepl('"value":[2000,2015]', as_json(rng), fixed = TRUE))
+
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = 5),
+             "must be c\\(lo, hi\\)")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(1, 2, 3)),
+             "must be c\\(lo, hi\\)")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(7, 3)),
+             "lo <= hi")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(-1, 5)),
+             "within \\[min, max\\]")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(3, 11)),
+             "within \\[min, max\\]")
+expect_error(component("range_slider", id = "r", min = 0, max = 10,
+                       value = c(1, NA)),
+             "finite numbers")
+
+# the widget defaults an omitted value to the full span, so a bare
+# range_slider(id) is usable the way slider_input(id) is
+full <- range_slider("span", min = 5, max = 50)
+expect_equal(unlist(full$value), c(5, 50))
+
+# --- a checkbox group's selection is plural at every length ---
+grp <- component("checkbox_group", id = "tops",
+                 choices = c(A = "a", B = "b", C = "c"),
+                 selected = c("a", "c"))
+expect_equal(unlist(grp$selected), c("a", "c"))
+expect_true(grepl('"selected":["a","c"]', as_json(grp), fixed = TRUE))
+# one selection stays an array; none is [], never NULL
+one_g <- component("checkbox_group", id = "t", choices = c("a", "b"),
+                   selected = "a")
+expect_true(grepl('"selected":["a"]', as_json(one_g), fixed = TRUE))
+none_g <- component("checkbox_group", id = "t", choices = c("a", "b"))
+expect_true(grepl('"selected":[]', as_json(none_g), fixed = TRUE))
+# unlike radio_buttons, the widget selects nothing by default
+expect_equal(length(checkbox_group("x", choices = c("a", "b"))$selected), 0L)
+expect_error(component("checkbox_group", id = "t", choices = c("a", "b"),
+                       selected = c("a", NA)),
+             "must be strings")
+
+# --- a searchable select is the same select, single only ---
+srch <- component("select_input", id = "state",
+                  choices = c(A = "a", B = "b"), search = TRUE)
+expect_true(srch$search)
+expect_false(component("select_input", id = "s",
+                       choices = "a")$search)
+# the combobox is a view over the same value semantics, so selected
+# stays a bare string exactly like a plain single select
+srch2 <- component("select_input", id = "s", choices = c("a", "b"),
+                   search = TRUE, selected = "b")
+expect_equal(srch2$selected, "b")
+expect_error(component("select_input", id = "s", choices = c("a", "b"),
+                       search = TRUE, multiple = TRUE),
+             "single-select")
+
+# --- a data table's length menu is an array at every length ---
+dt <- component("data_table", id = "grid")
+expect_equal(dt$page_length, 10L)
+expect_true(grepl('"length_menu":[10,25,50,100]', as_json(dt), fixed = TRUE))
+expect_true(dt$searchable)
+expect_true(dt$sortable)
+# one menu entry stays an array
+one_dt <- component("data_table", id = "g", length_menu = 25)
+expect_true(grepl('"length_menu":[25]', as_json(one_dt), fixed = TRUE))
+expect_error(component("data_table", id = "g", page_length = 0L),
+             "must be >= 1")
 
 # --- fixtures ---
 fx <- component_fixtures()

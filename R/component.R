@@ -240,6 +240,10 @@ COMPONENT_SCHEMA <- list(
         # `multiple`, which check_component() enforces.
         selected = field("strings"),
         multiple = field("bool", default = FALSE),
+        # A filter-as-you-type view over the same closed choices: the
+        # typed text filters, only a real choice ever reports. Single
+        # only -- check_component() refuses search + multiple.
+        search = field("bool", default = FALSE),
         emit = field("enum", default = "settle", values = c("live", "settle"))
     ),
                          checkbox_input = list(
@@ -255,12 +259,32 @@ COMPONENT_SCHEMA <- list(
         selected = field("string"),
         emit = field("enum", default = "settle", values = c("live", "settle"))
     ),
+                         checkbox_group = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        choices = field("choices", required = TRUE),
+        # the array of checked members' values -- at every length,
+        # like a multiple select's `selected`
+        selected = field("strings"),
+        emit = field("enum", default = "settle", values = c("live", "settle"))
+    ),
                          slider_input = list(
         id = field("string", required = TRUE),
         label = field("string", default = ""),
         min = field("number", required = TRUE),
         max = field("number", required = TRUE),
         value = field("number"),
+        step = field("number"),
+        emit = field("enum", default = "live", values = c("live", "settle"))
+    ),
+                         range_slider = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = ""),
+        min = field("number", required = TRUE),
+        max = field("number", required = TRUE),
+        # exactly [lo, hi]; the pair rule lives in check_component()
+        # the way select_input's multiple/selected rule does
+        value = field("numbers"),
         step = field("number"),
         emit = field("enum", default = "live", values = c("live", "settle"))
     ),
@@ -312,10 +336,18 @@ COMPONENT_SCHEMA <- list(
                          text_output = list(
         id = field("string", required = TRUE),
         variant = field("enum", default = "normal",
-                        values = c("normal", "muted", "strong", "mono", "small"))
+                        values = c("normal", "muted", "strong", "heading", "mono", "small"))
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),
+                         data_table = list(
+        id = field("string", required = TRUE),
+        page_length = field("int", default = 10L, min = 1),
+        # page-size options offered; always an array on the wire
+        length_menu = field("numbers", default = c(10, 25, 50, 100)),
+        searchable = field("bool", default = TRUE),
+        sortable = field("bool", default = TRUE)
+    ),
                          plot_output = list(
         id = field("string", required = TRUE),
         width = field("int", min = 1, max = 8192),
@@ -384,9 +416,10 @@ COMPONENT_SCHEMA <- list(
 #'
 #' @keywords internal
 OUTPUT_KINDS <- list(text_output = "text", verbatim_output = "text",
-                     table_output = "table", plot_output = "image",
-                     image_output = "image", audio_output = "audio",
-                     video_output = "video", ui_output = "ui")
+                     table_output = "table", data_table = "table",
+                     plot_output = "image", image_output = "image",
+                     audio_output = "audio", video_output = "video",
+                     ui_output = "ui")
 
 #' What each input emits, and of what type
 #'
@@ -414,7 +447,9 @@ INPUT_META <- list(
                                        value_type_multiple = "strings"),
                    checkbox_input = list(message = "input", value_type = "bool"),
                    radio_buttons = list(message = "input", value_type = "string"),
+                   checkbox_group = list(message = "input", value_type = "strings"),
                    slider_input = list(message = "input", value_type = "number"),
+                   range_slider = list(message = "input", value_type = "numbers"),
                    date_input = list(message = "input", value_type = "string"),
                    file_input = list(message = "input", value_type = "files"),
                    # A button's event carries a value when the component
@@ -615,6 +650,17 @@ check_field <- function(value, spec, type, nm) {
         }
         return(unname(value))
     },
+           numbers = {
+        # Zero or more finite numbers; arity rules that depend on the
+        # component (a range's exactly-two) live in check_component().
+        if (is.list(value)) {
+            value <- unlist(value, use.names = FALSE)
+        }
+        if (!is.numeric(value) || anyNA(value) || !all(is.finite(value))) {
+            stop(where, " must be finite numbers", call. = FALSE)
+        }
+        return(as.numeric(value))
+    },
            strings = {
         # Zero or more strings. A field whose arity depends on a
         # sibling field cannot be settled here -- see
@@ -703,6 +749,45 @@ check_component <- function(type, out) {
                      call. = FALSE)
             }
             out$selected <- selected[[1L]]
+        }
+        if (isTRUE(out$search) && isTRUE(out$multiple)) {
+            # explicit refusal, not silent degradation: the combobox
+            # is single-select, a multiple select filters natively
+            stop("select_input(search=) is single-select; ",
+                 "drop multiple = TRUE", call. = FALSE)
+        }
+    }
+    if (identical(type, "data_table")) {
+        # as.list() so a one-option menu still emits an array
+        out$length_menu <- as.list(out$length_menu)
+    }
+    if (identical(type, "checkbox_group")) {
+        # as.list() so toJSON() emits an array at every length --
+        # select_input's multiple rule; the group's value is always
+        # plural even when one or zero boxes are checked
+        out$selected <- as.list(if (is.null(out$selected)) {
+                character(0L)
+            } else {
+                as.character(out$selected)
+            })
+    }
+    if (identical(type, "range_slider")) {
+        v <- out$value
+        if (!is.null(v)) {
+            if (length(v) != 2L) {
+                stop("range_slider(value=) must be c(lo, hi) ",
+                     "(got length ", length(v), ")", call. = FALSE)
+            }
+            if (v[[1L]] > v[[2L]]) {
+                stop("range_slider(value=) must have lo <= hi", call. = FALSE)
+            }
+            if (v[[1L]] < out$min || v[[2L]] > out$max) {
+                stop("range_slider(value=) must sit within [min, max]",
+                     call. = FALSE)
+            }
+            # as.list() so toJSON() emits an array, the wire shape a
+            # client expects for a pair
+            out$value <- as.list(v)
         }
     }
     out

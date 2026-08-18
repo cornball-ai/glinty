@@ -123,10 +123,10 @@ expect_error(component_to_html(list(component = "text")), "expects a component")
 # callback can be fired directly.
 for (nm in names(INPUT_META)) {
     args <- list(nm, id = "probe")
-    if (nm %in% c("select_input", "radio_buttons")) {
+    if (nm %in% c("select_input", "radio_buttons", "checkbox_group")) {
         args$choices <- c("a", "b")
     }
-    if (identical(nm, "slider_input")) {
+    if (nm %in% c("slider_input", "range_slider")) {
         args$min <- 0
         args$max <- 1
     }
@@ -448,7 +448,7 @@ r_type <- function(v) {
     } else if (is.logical(v)) {
         "bool"
     } else if (is.numeric(v)) {
-        "number"
+        if (length(v) == 1L) "number" else "numbers"
     } else if (length(v) == 1L) {
         "string"
     } else {
@@ -461,10 +461,10 @@ for (nm in names(INPUT_META)) {
         next
     }
     args <- list(nm, id = "probe")
-    if (nm %in% c("select_input", "radio_buttons")) {
+    if (nm %in% c("select_input", "radio_buttons", "checkbox_group")) {
         args$choices <- c("a", "b")
     }
-    if (identical(nm, "slider_input")) {
+    if (nm %in% c("slider_input", "range_slider")) {
         args$min <- 0
         args$max <- 1
     }
@@ -577,3 +577,68 @@ expect_equal(lengths(regmatches(tabs, gregexpr("g-hidden", tabs))), 1L)
 # an immediate-mode renderer would not
 expect_true(grepl(">a<", tabs, fixed = TRUE))
 expect_true(grepl(">b<", tabs, fixed = TRUE))
+
+# --- a checkbox group binds the box, never the members ---
+#
+# A member carrying data-g-target would send a scalar boolean where
+# the server keeps a list, so the binding sits on the box and the
+# members carry only their marker. Mirrors range_slider's rule.
+grp <- component_to_html(component("checkbox_group", id = "tops",
+                                   choices = c(A = "a", B = "b", C = "c"),
+                                   selected = c("a", "c")))
+expect_equal(lengths(regmatches(grp,
+    gregexpr('data-g-target="tops"', grp, fixed = TRUE))), 1L)
+expect_equal(lengths(regmatches(grp,
+    gregexpr("data-g-group-member", grp, fixed = TRUE))), 3L)
+expect_equal(lengths(regmatches(grp,
+    gregexpr('checked="checked"', grp, fixed = TRUE))), 2L)
+expect_false(grepl('type="checkbox"[^>]*data-g-target', grp))
+
+# --- a searchable select lowers to a combobox, value on the box ---
+#
+# No <select> at all: a text input filters a pre-rendered option
+# list, the binding and current value sit on the box so an adopted
+# page recovers everything from the DOM, and the input shows the
+# selected label rather than the value.
+cmb <- component_to_html(component("select_input", id = "state",
+                                   choices = c(Alabama = "AL",
+                                               Alaska = "AK"),
+                                   search = TRUE, selected = "AK"))
+expect_false(grepl("<select", cmb, fixed = TRUE))
+expect_true(grepl('class="g-combo"', cmb, fixed = TRUE))
+expect_true(grepl('data-g-selected="AK"', cmb, fixed = TRUE))
+expect_equal(lengths(regmatches(cmb,
+    gregexpr('data-g-target="state"', cmb, fixed = TRUE))), 1L)
+expect_equal(lengths(regmatches(cmb,
+    gregexpr("g-combo-option", cmb, fixed = TRUE))), 2L)
+expect_true(grepl('value="Alaska"', cmb, fixed = TRUE))
+expect_true(grepl("No matches", cmb, fixed = TRUE))
+# unselected defaults to the first choice, the plain select's rule
+cmb2 <- component_to_html(component("select_input", id = "s",
+                                    choices = c(A = "a", B = "b"),
+                                    search = TRUE))
+expect_true(grepl('data-g-selected="a"', cmb2, fixed = TRUE))
+expect_true(grepl('value="A"', cmb2, fixed = TRUE))
+# a plain select is untouched by the flag's existence
+plain <- component_to_html(component("select_input", id = "s",
+                                     choices = c(A = "a")))
+expect_true(grepl("<select", plain, fixed = TRUE))
+expect_false(grepl("g-combo", plain, fixed = TRUE))
+
+# --- a data table lowers to an empty shell carrying its options ---
+#
+# The interactive build happens client-side when the value arrives,
+# so the server emits only the slot plus the display options as data
+# attributes -- the exact shell glinty.js builds, or hydration lies.
+dtab <- component_to_html(component("data_table", id = "grid",
+                                    page_length = 5L,
+                                    length_menu = c(5, 30, 50),
+                                    searchable = FALSE))
+expect_true(grepl('class="g-table-output g-datatable"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-page-length="5"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-length-menu="5,30,50"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-searchable="0"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-sortable="1"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-output="grid"', dtab, fixed = TRUE))
+# empty: no table markup until a value arrives
+expect_false(grepl("<table", dtab, fixed = TRUE))

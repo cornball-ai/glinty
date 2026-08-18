@@ -114,8 +114,9 @@ void main() {
       expect(s.inputs['save'], true);
 
       await pumpSession(tester, s);
-      final box = tester.widget<CheckboxListTile>(
-          find.byKey(const Key('save')));
+      final box = tester.widget<Checkbox>(find.descendant(
+          of: find.byKey(const Key('save')),
+          matching: find.byType(Checkbox)));
       expect(box.value, isTrue,
           reason: 'reading value from the component would reset it');
     });

@@ -11,6 +11,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,9 +25,9 @@ const supportedComponents = <String>{
   'text', 'heading', 'link', 'icon', 'divider', 'spacer',
   'page', 'row', 'column', 'panel',
   'text_input', 'password_input', 'textarea_input', 'number_input',
-  'select_input', 'checkbox_input', 'radio_buttons', 'slider_input',
-  'button', 'download_button',
-  'text_output', 'verbatim_output', 'table_output',
+  'select_input', 'checkbox_input', 'checkbox_group', 'radio_buttons',
+  'slider_input', 'range_slider', 'button', 'download_button',
+  'text_output', 'verbatim_output', 'table_output', 'data_table',
   'plot_output', 'image_output', 'image',
   'tabset', 'conditional_panel', 'collapse', 'ui_output',
   // Drawn by the embedder's player, through audioBuilder. Declared
@@ -323,7 +324,7 @@ class GlintyRenderer {
   /// client does not.
   static const _knownVariants = <String, List<String>>{
     'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
-    'text_output': ['normal', 'muted', 'strong', 'mono', 'small'],
+    'text_output': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
     'button': ['default', 'primary', 'secondary', 'danger', 'ghost', 'listing'],
     'download_button': [
       'default', 'primary', 'secondary', 'danger', 'ghost', 'listing'
@@ -463,7 +464,20 @@ class GlintyRenderer {
       // page is never a flex child -- it is the root -- so it skips
       // the sizing wrapper the other three take.
       case 'page':
-        return _column(context, c);
+        {
+          if (c.str('width') == 'full') return _column(context, c);
+          // The browser's reading column (.g-page: 760px, centered,
+          // padded, the page is what scrolls). Width is tightened to
+          // the cap so the column fills it the way the CSS box does,
+          // rather than shrink-wrapping its widest child.
+          return SingleChildScrollView(
+              child: Center(
+                  child: Container(
+                      constraints: const BoxConstraints(maxWidth: 760),
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 48),
+                      child: _column(context, c))));
+        }
       case 'column':
         // scroll: overflow scrolls instead of growing the page. Grown
         // children inside stop growing, which _spaced documents -- a
@@ -491,8 +505,12 @@ class GlintyRenderer {
         return _checkbox(c);
       case 'radio_buttons':
         return _radios(context, c);
+      case 'checkbox_group':
+        return _checkboxGroup(context, c);
       case 'slider_input':
         return _slider(context, c);
+      case 'range_slider':
+        return _rangeSlider(context, c);
       case 'button':
       case 'download_button':
         return _button(context, c);
@@ -503,6 +521,8 @@ class GlintyRenderer {
         return _slot(context, c, 'text', () => _verbatim(context, c));
       case 'table_output':
         return _slot(context, c, 'table', () => _table(c));
+      case 'data_table':
+        return _slot(context, c, 'table', () => _dataTable(c));
       case 'plot_output':
         return _slot(context, c, 'image', () => _plot(context, c));
       case 'image_output':
@@ -982,6 +1002,26 @@ class GlintyRenderer {
     if (c.boolean('multiple')) return _multiSelect(context, c, id, choices);
     final current = _value(id, c.str('selected'))?.toString() ??
         (choices.isNotEmpty ? choices.first.value : null);
+    if (c.boolean('search')) {
+      // The searchable select. Material's DropdownMenu filters its
+      // entries as the user types -- the same contract as the
+      // browser's combobox: typed text is a view, only picking a
+      // real entry reports. Selection state lives in the menu's own
+      // controller keyed by id; the reported value is the entry's.
+      return _labelled(context, c, DropdownMenu<String>(
+        key: Key(id),
+        enableFilter: true,
+        requestFocusOnTap: true,
+        initialSelection:
+            choices.any((ch) => ch.value == current) ? current : null,
+        dropdownMenuEntries: choices
+            .map((ch) => DropdownMenuEntry(value: ch.value, label: ch.label))
+            .toList(),
+        onSelected: (v) {
+          if (v != null) onInput?.call(id, v);
+        },
+      ));
+    }
     return _labelled(context, c, DropdownButton<String>(
       key: Key(id),
       // a value the choices no longer contain would assert; fall
@@ -1039,11 +1079,26 @@ class GlintyRenderer {
 
   Widget _checkbox(GlintyComponent c) {
     final id = c.str('id')!;
-    return CheckboxListTile(
+    final checked = _value(id, c.boolean('value')) == true;
+    // Box then word at natural width, the browser's shape. A
+    // CheckboxListTile is a full-width row with a trailing box --
+    // a settings screen, not a form control -- and the same tree
+    // must read the same way in both lowerings.
+    // One gesture path: the box is display-only under IgnorePointer
+    // and every tap -- box or label -- lands on the InkWell. Nesting
+    // two live tap targets put box-clicks into a gesture arena that
+    // could fizzle with neither firing (seen live on CanvasKit).
+    return InkWell(
       key: Key(id),
-      value: _value(id, c.boolean('value')) == true,
-      title: Text(_label(c) ?? ""),
-      onChanged: (v) => onInput?.call(id, v ?? false),
+      onTap: () => onInput?.call(id, !checked),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        IgnorePointer(
+            child: Checkbox(
+                value: checked,
+                visualDensity: VisualDensity.compact,
+                onChanged: (_) {})),
+        Text(_label(c) ?? ""),
+      ]),
     );
   }
 
@@ -1071,6 +1126,46 @@ class GlintyRenderer {
         ));
   }
 
+  /// One id, many boxes: the group's value is the array of checked
+  /// members' values in choice order, at every length -- the
+  /// multiple-select rule. Each toggle emits the whole array.
+  Widget _checkboxGroup(BuildContext context, GlintyComponent c) {
+    final id = c.str('id')!;
+    final raw = _value(id, c.fields['selected']);
+    final checked = raw is List ? raw.map((v) => '$v').toSet() : <String>{};
+    final choices = _choices(c);
+    return _labelled(
+        context,
+        c,
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: choices
+              .map((ch) => CheckboxListTile(
+                    key: Key('${id}_${ch.value}'),
+                    value: checked.contains(ch.value),
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(ch.label),
+                    onChanged: (v) {
+                      final next = checked.toSet();
+                      if (v == true) {
+                        next.add(ch.value);
+                      } else {
+                        next.remove(ch.value);
+                      }
+                      // choice order, never click order
+                      onInput?.call(
+                          id,
+                          choices
+                              .map((o) => o.value)
+                              .where(next.contains)
+                              .toList());
+                    },
+                  ))
+              .toList(),
+        ));
+  }
+
   Widget _slider(BuildContext context, GlintyComponent c) {
     final id = c.str('id')!;
     final min = _numField(c, "min") ?? 0;
@@ -1079,28 +1174,333 @@ class GlintyRenderer {
     final raw = _value(id, c.number('value'));
     final current = raw is num ? raw.toDouble() : min;
     final settle = GlintyEmit.parse(c.str('emit')) == GlintyEmit.settle;
+    final theme = Theme.of(context);
+    final value = current.clamp(min, max);
+    final pct = max > min ? ((value - min) / (max - min)).clamp(0.0, 1.0) : 0.0;
+    // The browser's three number layers, mirrored: a value bubble
+    // riding the thumb, min/max chips at the ends that yield when
+    // the bubble reaches them, and a graded scale below the track.
+    // Local edits rebuild this subtree, so every layer tracks the
+    // finger under `settle` too.
+    final chipRow = SizedBox(
+        height: 22,
+        child: LayoutBuilder(
+            builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
+                  if (pct >= 0.1)
+                    Positioned(left: 0, top: 0,
+                        child: _sliderChip(theme, _numLabel(min),
+                            primary: false)),
+                  if (pct <= 0.9)
+                    Positioned(right: 0, top: 0,
+                        child: _sliderChip(theme, _numLabel(max),
+                            primary: false)),
+                  Positioned(
+                      left: _trackX(pct, box.maxWidth), top: 0,
+                      child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: _sliderChip(theme, _numLabel(value),
+                              primary: true))),
+                ])));
+    // ticks take the materialized step: they sit where the thumb can
+    // actually rest, and the thumb rests on the implied grid
+    final effStep = step != null && step > 0
+        ? step
+        : (max > min ? _sliderImpliedStep(min, max) : null);
+    final scale = _sliderScale(theme, min, max, effStep);
     return _labelled(
         context,
         c,
-        Slider(
-          key: Key(id),
-          min: min,
-          max: max,
-          // Flutter wants a division count where the protocol says
-          // step size. Derivable because step is a number.
-          divisions:
-              step != null && step > 0 ? ((max - min) / step).round() : null,
-          value: current.clamp(min, max),
-          // Where `emit` is spent for a slider. A drag is one
-          // gesture producing hundreds of onChanged calls; under
-          // `settle` the server wants the number the user landed on,
-          // not the sweep. Local edits keep the thumb (and any panel
-          // keyed on it) tracking the finger in the meantime.
-          onChanged: settle
-              ? (v) => (onLocalInput ?? onInput)?.call(id, v)
-              : (v) => onInput?.call(id, v),
-          onChangeEnd: settle ? (v) => onInput?.call(id, v) : null,
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          chipRow,
+          Slider(
+            key: Key(id),
+            min: min,
+            max: max,
+            // Flutter wants a division count where the protocol says
+            // step size. Derivable because step is a number.
+            divisions:
+                step != null && step > 0 ? ((max - min) / step).round() : null,
+            value: value,
+            // Where `emit` is spent for a slider. A drag is one
+            // gesture producing hundreds of onChanged calls; under
+            // `settle` the server wants the number the user landed on,
+            // not the sweep. Local edits keep the thumb (and any panel
+            // keyed on it) tracking the finger in the meantime.
+            // Every emitted value goes through _sliderQuantize: with
+            // no divisions Material drags continuously, and a
+            // sample-count slider must not report 394.326 samples --
+            // the browser's range input quantizes to its step, so
+            // this side quantizes to the same implied precision.
+            onChanged: settle
+                ? (v) => (onLocalInput ?? onInput)
+                    ?.call(id, _sliderQuantize(v, min, max, step))
+                : (v) => onInput?.call(id, _sliderQuantize(v, min, max, step)),
+            onChangeEnd: settle
+                ? (v) => onInput?.call(id, _sliderQuantize(v, min, max, step))
+                : null,
+          ),
+          scale,
+        ]));
+  }
+
+  /// Material's track is inset by max(overlay, thumb)/2 = 24 on each
+  /// side (BaseSliderTrackShape.getPreferredRect); every overlay
+  /// layer maps through the track's coordinate space or it only
+  /// lines up with the thumb at the midpoint. Pinned by
+  /// slider_geometry_probe_test so a Material redesign fails loud.
+  static const double _trackInset = 24.0;
+
+  static double _trackX(double f, double w) =>
+      w > 2 * _trackInset ? _trackInset + f * (w - 2 * _trackInset) : f * w;
+
+  Widget _sliderChip(ThemeData theme, String text, {required bool primary}) =>
+      Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+              color: primary
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outline.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(4)),
+          child: Text(text,
+              style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: primary
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurface)));
+
+  /// The graded scale under a track, shared by _slider and
+  /// _rangeSlider. Takes the EFFECTIVE step (materialized when the
+  /// app set none), the grid the thumb actually rests on.
+  Widget _sliderScale(
+          ThemeData theme, double min, double max, double? effStep) =>
+      SizedBox(
+          height: 20,
+          child: LayoutBuilder(builder: (context, box) {
+            // the label budget comes from the measured track width,
+            // the same floor(width / 70) the browser client uses
+            final maxLab = box.maxWidth.isFinite
+                ? ((box.maxWidth - 2 * _trackInset) / 70).floor().clamp(2, 11)
+                : 11;
+            final marks = <Widget>[];
+            for (final tk in _sliderTicks(min, max, effStep, maxLab)) {
+              marks.add(Positioned(
+                  left: _trackX(tk.f, box.maxWidth), top: 0,
+                  child: Container(
+                      width: 1,
+                      height: tk.major ? 7 : 4,
+                      color: tk.major
+                          ? theme.colorScheme.onSurfaceVariant
+                          : theme.colorScheme.outlineVariant)));
+              if (tk.major) {
+                marks.add(Positioned(
+                    left: _trackX(tk.f, box.maxWidth), top: 8,
+                    child: FractionalTranslation(
+                        translation: const Offset(-0.5, 0),
+                        child: Text(tk.label,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color:
+                                    theme.colorScheme.onSurfaceVariant)))));
+              }
+            }
+            return Stack(clipBehavior: Clip.none, children: marks);
+          }));
+
+  /// One component, two thumbs: Material's RangeSlider under the
+  /// same three number layers as _slider, emitting the pair
+  /// [lo, hi]. The server keeps one value; every emitted end is
+  /// quantized exactly as a single slider's would be.
+  Widget _rangeSlider(BuildContext context, GlintyComponent c) {
+    final id = c.str('id')!;
+    final min = _numField(c, "min") ?? 0;
+    final max = _numField(c, "max") ?? 1;
+    final step = _numField(c, "step");
+    final raw = _value(id, c.fields['value']);
+    var lo = min;
+    var hi = max;
+    if (raw is List && raw.length == 2) {
+      lo = (raw[0] as num?)?.toDouble() ?? min;
+      hi = (raw[1] as num?)?.toDouble() ?? max;
+    }
+    lo = lo.clamp(min, max);
+    hi = hi.clamp(lo, max);
+    final settle = GlintyEmit.parse(c.str('emit')) == GlintyEmit.settle;
+    final theme = Theme.of(context);
+    final span = max > min ? max - min : 1;
+    final p1 = ((lo - min) / span).clamp(0.0, 1.0);
+    final p2 = ((hi - min) / span).clamp(0.0, 1.0);
+    final chipRow = SizedBox(
+        height: 22,
+        child: LayoutBuilder(
+            builder: (context, box) => Stack(clipBehavior: Clip.none, children: [
+                  if (p1 >= 0.1)
+                    Positioned(left: 0, top: 0,
+                        child: _sliderChip(theme, _numLabel(min),
+                            primary: false)),
+                  if (p2 <= 0.9)
+                    Positioned(right: 0, top: 0,
+                        child: _sliderChip(theme, _numLabel(max),
+                            primary: false)),
+                  Positioned(
+                      left: _trackX(p1, box.maxWidth), top: 0,
+                      child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: _sliderChip(theme, _numLabel(lo),
+                              primary: true))),
+                  Positioned(
+                      left: _trackX(p2, box.maxWidth), top: 0,
+                      child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: _sliderChip(theme, _numLabel(hi),
+                              primary: true))),
+                ])));
+    final effStep = step != null && step > 0
+        ? step
+        : (max > min ? _sliderImpliedStep(min, max) : null);
+    List<double> quantized(RangeValues v) {
+      final a = _sliderQuantize(v.start, min, max, step);
+      final b = _sliderQuantize(v.end, min, max, step);
+      return a <= b ? [a, b] : [b, a];
+    }
+
+    return _labelled(
+        context,
+        c,
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          chipRow,
+          RangeSlider(
+            key: Key(id),
+            min: min,
+            max: max,
+            divisions:
+                step != null && step > 0 ? ((max - min) / step).round() : null,
+            values: RangeValues(lo, hi),
+            onChanged: settle
+                ? (v) => (onLocalInput ?? onInput)?.call(id, quantized(v))
+                : (v) => onInput?.call(id, quantized(v)),
+            onChangeEnd:
+                settle ? (v) => onInput?.call(id, quantized(v)) : null,
+          ),
+          _sliderScale(theme, min, max, effStep),
+        ]));
+  }
+
+  /// A dragged value quantized to the slider's real granularity:
+  /// its step, or the implied step when the app set none. What the
+  /// browser's range input does natively.
+  static double _sliderQuantize(
+      double v, double min, double max, double? step) {
+    var s = step ?? 0;
+    if (s <= 0 && max > min) s = _sliderImpliedStep(min, max);
+    if (s <= 0) return v;
+    final q = min + ((v - min) / s).round() * s;
+    // step 1 must give exact integers, not 393.99999999999994
+    final r = q.roundToDouble();
+    return ((q - r).abs() < 1e-9 ? r : q).clamp(min, max);
+  }
+
+  /// The precision a stepless slider still has: Shiny's findStepSize
+  /// rule. Integer ends spanning >= 2 mean whole numbers; otherwise
+  /// a 1/2/5-ladder decimal near range/100. Mirrors
+  /// slider_implied_step() in R and sliderImpliedStep() in glinty.js.
+  static double _sliderImpliedStep(double min, double max) {
+    final range = max - min;
+    if (range >= 2 && min % 1 == 0 && max % 1 == 0) return 1;
+    final raw = range / 100;
+    final mag = math.pow(10, (math.log(raw) / math.ln10).floor()).toDouble();
+    final norm = raw / mag;
+    return mag *
+        (norm <= 1.5
+            ? 1
+            : norm <= 3.5
+                ? 2
+                : norm <= 7.5
+                    ? 5
+                    : 10);
+  }
+
+  static double _sliderSnap(double f, double min, double max, double? step) {
+    var v = min + f * (max - min);
+    var s = step ?? 0;
+    if (s <= 0 && max > min) s = _sliderImpliedStep(min, max);
+    if (s > 0) {
+      v = min + ((v - min) / s).round() * s;
+      v = v.clamp(min, max);
+    }
+    return v;
+  }
+
+  /// The scale as (fraction, major, label) ticks: on the stops when
+  /// the step grid is coarse enough to see (ticks must sit where the
+  /// thumb can rest), a fixed tenths grid when the slider reads as
+  /// continuous. maxLabels caps the numbered majors so a narrow
+  /// track stays legible; thinned positions keep their tick at
+  /// minor size. Mirrors slider_ticks() in R and sliderTicks() in
+  /// glinty.js; the three must agree.
+  static List<({double f, bool major, String label})> _sliderTicks(
+      double min, double max, double? step,
+      [int maxLabels = 11]) {
+    if (maxLabels < 2) maxLabels = 2;
+    final ticks = <({double f, bool major, String label})>[];
+    final n = step != null && step > 0 ? ((max - min) / step).round() : 0;
+    if (n >= 1 &&
+        n <= 20 &&
+        (min + n * step! - max).abs() <
+            1e-9 * (max.abs() > 1 ? max.abs() : 1)) {
+      // at the default budget this is the old rule: every stop to
+      // 10, every 2nd for 11-20
+      final every = ((n + 1) / maxLabels).ceil();
+      for (var i = 0; i <= n; i++) {
+        // a regular label within one gap of the always-labeled last
+        // stop yields to it
+        final major = (i % every == 0 && n - i >= every) || i == n;
+        ticks.add((
+          f: i * step / (max - min),
+          major: major,
+          label: major ? _numLabel(min + i * step) : ''
         ));
+        if (i < n && n <= 10 && every == 1) {
+          ticks.add((f: (i + 0.5) * step / (max - min), major: false,
+                     label: ''));
+        }
+      }
+      return ticks;
+    }
+    final labelEvery = (11 / maxLabels).ceil();
+    var prevLabel = '';
+    for (var j = 0; j <= 40; j++) {
+      final m = j ~/ 4;
+      final major = j % 4 == 0 &&
+          ((m % labelEvery == 0 && 10 - m >= labelEvery) || m == 10);
+      var lab = '';
+      if (major) {
+        lab = _numLabel(_sliderSnap(j / 40, min, max, step));
+        // a snap can land two majors on one value; a number printed
+        // twice is the tick without the label
+        if (lab == prevLabel) {
+          lab = '';
+        } else {
+          prevLabel = lab;
+        }
+      }
+      ticks.add((f: j / 40, major: major, label: lab));
+    }
+    return ticks;
+  }
+
+  /// The shortest plain rendering of a number: strip float noise
+  /// (0.6000000000000001 from division stepping), no trailing zeros.
+  /// Agrees with the browser's numLabel() and R's num_label().
+  static String _numLabel(num v) {
+    final d = v.toDouble();
+    if (d == d.roundToDouble() && d.abs() < 1e15) {
+      return d.round().toString();
+    }
+    var s = d.toStringAsPrecision(12);
+    if (s.contains('.') && !s.contains('e')) {
+      s = s.replaceAll(RegExp(r'0+$'), '');
+      s = s.replaceAll(RegExp(r'\.$'), '');
+    }
+    return s;
   }
 
   Widget _button(BuildContext context, GlintyComponent c) {
@@ -1242,23 +1642,55 @@ class GlintyRenderer {
         width: double.infinity,
         padding: const EdgeInsets.all(8),
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Text(_outputText(c),
-            style: TextStyle(
-                fontFamily: monoStack.first,
-                fontFamilyFallback: monoStack.sublist(1))),
+        // no soft wrap: wrapping shatters the column alignment this
+        // component exists to preserve; wide content scrolls
+        child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Text(_outputText(c),
+                softWrap: false,
+                style: TextStyle(
+                    fontFamily: monoStack.first,
+                    fontFamilyFallback: monoStack.sublist(1)))),
       );
 
   Widget _table(GlintyComponent c) {
     final v = values[c.str('id')];
     if (v is! Map || v['header'] is! List) return const SizedBox.shrink();
     final header = (v['header'] as List).map((h) => h.toString()).toList();
+    // align marks numeric columns; DataColumn(numeric:) is
+    // Material's own right-alignment for them
+    final align =
+        (v['align'] as List? ?? const []).map((a) => a.toString()).toList();
+    bool numAt(int i) => i < align.length && align[i] == 'num';
     final rows = (v['rows'] as List? ?? const []).map((r) {
       final cells = (r as List).map((cell) => cell.toString()).toList();
       return DataRow(cells: cells.map((s) => DataCell(Text(s))).toList());
     }).toList();
     return DataTable(
-      columns: header.map((h) => DataColumn(label: Text(h))).toList(),
+      columns: [
+        for (var i = 0; i < header.length; i++)
+          DataColumn(label: Text(header[i]), numeric: numAt(i))
+      ],
       rows: rows,
+    );
+  }
+
+  /// The interactive table: same value as [_table], plus client-side
+  /// sort, filter and pagination held in a stateful widget keyed by
+  /// id. Mirrors renderDataTable in glinty.js: the two must agree.
+  Widget _dataTable(GlintyComponent c) {
+    final id = c.str('id')!;
+    final v = values[id];
+    final menu = (c.fields['length_menu'] as List? ?? const [10, 25, 50, 100])
+        .whereType<num>()
+        .toList();
+    return _GlintyDataTable(
+      key: Key(id),
+      value: v is Map ? v : null,
+      pageLength: c.integer('page_length') ?? 10,
+      menu: menu,
+      searchable: c.boolean('searchable', fallback: true),
+      sortable: c.boolean('sortable', fallback: true),
     );
   }
 
@@ -1283,19 +1715,29 @@ class GlintyRenderer {
           // Unlike flitR, every panel is built and Flutter retains the
           // state of the ones not on screen. That divergence is in
           // PROTOCOL.md; it is not something this renderer can hide.
-          SizedBox(
-            height: 200,
-            child: TabBarView(
-              children: panels
-                  .map((p) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children:
-                            p.children.map((k) => build(context, k)).toList(),
-                      ))
-                  .toList(),
-            ),
-          ),
+          // IndexedStack rather than a fixed-height TabBarView: the
+          // set sizes to its largest panel, so a plot living in a tab
+          // keeps its real height instead of clipping at a hardcoded
+          // viewport. (No swipe -- the browser's tabs don't swipe
+          // either.)
+          Builder(builder: (context) {
+            final ctl = DefaultTabController.of(context);
+            return AnimatedBuilder(
+              animation: ctl,
+              builder: (context, _) => IndexedStack(
+                index: ctl.index,
+                children: panels
+                    .map((p) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: p.children
+                              .map((k) => build(context, k))
+                              .toList(),
+                        ))
+                    .toList(),
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -1783,6 +2225,171 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
         onChanged: _onChanged,
         onSubmitted: _onSubmitted,
       );
+}
+
+/// The interactive table. Sort, filter and page state live here, in
+/// the client, where the click happened -- the server never hears
+/// about a sort. Keyed by id, so the state survives value updates and
+/// re-renders; a new value clamps the page instead of resetting it,
+/// keeping the reader's place unless the place stopped existing.
+///
+/// Must agree with renderDataTable in glinty.js: case-insensitive
+/// contains filter across all columns, numeric sort where the value's
+/// align says "num" (a non-number in a numeric column compares equal,
+/// as JS Number() -> NaN does), text sort elsewhere by code unit like
+/// JS < on strings.
+class _GlintyDataTable extends StatefulWidget {
+  const _GlintyDataTable({
+    super.key,
+    required this.value,
+    required this.pageLength,
+    required this.menu,
+    required this.searchable,
+    required this.sortable,
+  });
+
+  final Map? value;
+  final int pageLength;
+  final List<num> menu;
+  final bool searchable;
+  final bool sortable;
+
+  @override
+  State<_GlintyDataTable> createState() => _GlintyDataTableState();
+}
+
+class _GlintyDataTableState extends State<_GlintyDataTable> {
+  final _search = TextEditingController();
+  late int _pageLength = widget.pageLength;
+  int _page = 0;
+  int? _sortCol;
+  bool _sortAsc = true;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  int _compare(String a, String b, bool numeric) {
+    if (numeric) {
+      final x = num.tryParse(a);
+      final y = num.tryParse(b);
+      if (x == null || y == null) return 0;
+      return x.compareTo(y);
+    }
+    return a.compareTo(b);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.value;
+    final header =
+        (v?['header'] as List? ?? const []).map((h) => h.toString()).toList();
+    // No value yet: an empty shell, like the browser's, and like
+    // _table. (Material's DataTable asserts columns.isNotEmpty, so
+    // this branch is not merely cosmetic.)
+    if (header.isEmpty) return const SizedBox.shrink();
+    final align =
+        (v?['align'] as List? ?? const []).map((a) => a.toString()).toList();
+    bool numAt(int i) => i < align.length && align[i] == 'num';
+    final all = (v?['rows'] as List? ?? const [])
+        .map((r) => (r as List).map((c) => c.toString()).toList())
+        .toList();
+
+    final q = _search.text.toLowerCase();
+    var rows = q.isEmpty
+        ? all
+        : all.where((r) => r.any((c) => c.toLowerCase().contains(q))).toList();
+    final sc = _sortCol;
+    if (sc != null && sc < header.length) {
+      rows = List.of(rows)
+        ..sort((a, b) {
+          final d = _compare(a[sc], b[sc], numAt(sc));
+          return _sortAsc ? d : -d;
+        });
+    }
+
+    final total = rows.length;
+    final pages = (total / _pageLength).ceil().clamp(1, 1 << 30);
+    final page = _page.clamp(0, pages - 1);
+    final from = page * _pageLength;
+    final last = (from + _pageLength).clamp(0, total);
+    final pageRows = rows.sublist(from, last);
+
+    final controls = Row(children: [
+      DropdownButton<int>(
+        value: widget.menu.map((n) => n.toInt()).contains(_pageLength)
+            ? _pageLength
+            : null,
+        items: [
+          for (final n in widget.menu)
+            DropdownMenuItem(value: n.toInt(), child: Text('$n rows'))
+        ],
+        onChanged: (n) => setState(() {
+          if (n != null) _pageLength = n;
+          _page = 0;
+        }),
+      ),
+      if (widget.searchable) ...[
+        const SizedBox(width: 12),
+        Expanded(
+            child: TextField(
+          controller: _search,
+          decoration: const InputDecoration(
+              hintText: 'Search', isDense: true, prefixIcon: Icon(Icons.search)),
+          onChanged: (_) => setState(() => _page = 0),
+        )),
+      ],
+    ]);
+
+    final table = DataTable(
+      sortColumnIndex: sc != null && sc < header.length ? sc : null,
+      sortAscending: _sortAsc,
+      columns: [
+        for (var i = 0; i < header.length; i++)
+          DataColumn(
+            label: Text(header[i]),
+            numeric: numAt(i),
+            onSort: widget.sortable
+                ? (i, asc) => setState(() {
+                      _sortCol = i;
+                      _sortAsc = asc;
+                    })
+                : null,
+          )
+      ],
+      rows: [
+        for (final r in pageRows)
+          DataRow(cells: [for (final c in r) DataCell(Text(c))])
+      ],
+    );
+
+    final info = total == 0
+        ? 'No rows'
+        : 'Showing ${from + 1}–$last of $total'
+            '${q.isNotEmpty && all.length != total ? ' (filtered from ${all.length})' : ''}';
+    final footer = Row(children: [
+      Expanded(child: Text(info)),
+      TextButton(
+          onPressed: page > 0 ? () => setState(() => _page = page - 1) : null,
+          child: const Text('‹ Prev')),
+      TextButton(
+          onPressed: page < pages - 1
+              ? () => setState(() => _page = page + 1)
+              : null,
+          child: const Text('Next ›')),
+    ]);
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      controls,
+      SizedBox(
+          width: double.infinity,
+          child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal, child: table)),
+      footer,
+    ]);
+  }
 }
 
 /// A download button that owns the answer to its own request.

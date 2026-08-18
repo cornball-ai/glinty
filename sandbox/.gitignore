@@ -1,0 +1,9 @@
+# Working material the gallery loop generates or clones; none of it
+# is source. Screenshots and logs stay reviewable on disk, out of git.
+# Anchored: /lib is the R library install target, not any lib/ dir.
+/lib/
+/shiny/
+/shiny-examples/
+*.log
+*.png
+flutter-viewer/linux/flutter/ephemeral/

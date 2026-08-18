@@ -46,6 +46,36 @@ table_output <- function(id) {
     component("table_output", id = id)
 }
 
+#' Create an interactive table output slot
+#'
+#' Takes the same table value as [table_output()] -- header, rows,
+#' alignment -- and adds client-side sorting, filtering and
+#' pagination. Interaction never touches the server: the client
+#' holds the whole value and rearranges it locally, so sort state
+#' lives where the click happened and a re-rendered value keeps the
+#' reader's page when it still exists. Numeric columns (the
+#' alignment the wire already carries) sort numerically; the rest
+#' sort as text. Feed it with [render_table()] like any table; keep
+#' the value at a size a client comfortably holds -- sample or
+#' pre-filter server-side above a few thousand rows.
+#'
+#' @param id character output ID
+#' @param page_length integer rows shown per page
+#' @param length_menu numeric page-size options offered
+#' @param searchable logical show the filter box
+#' @param sortable logical allow header-click sorting
+#' @return A UI component
+#' @examples
+#' data_table("results", page_length = 5)
+#' @export
+data_table <- function(id, page_length = 10L,
+                       length_menu = c(10, 25, 50, 100), searchable = TRUE,
+                       sortable = TRUE) {
+    component("data_table", id = id, page_length = page_length,
+              length_menu = length_menu, searchable = searchable,
+              sortable = sortable)
+}
+
 #' Create a plot output slot
 #'
 #' With NULL dimensions the slot fills its container and the client

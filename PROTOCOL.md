@@ -291,9 +291,9 @@ them.
 `tab_panel`, `conditional_panel`
 
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
-`number_input`, `select_input`, `checkbox_input`, `radio_buttons`,
-`slider_input`, `date_input`, `file_input`, `button`,
-`download_button`, `shortcut`
+`number_input`, `select_input`, `checkbox_input`, `checkbox_group`,
+`radio_buttons`, `slider_input`, `range_slider`, `date_input`,
+`file_input`, `button`, `download_button`, `shortcut`
 
 `shortcut` is a button you cannot see: it emits the same `event` frame,
 so one server handler serves the visible control and its accelerator
@@ -338,8 +338,15 @@ UI then has exactly the shortcuts its new tree declares, with none left
 over from the old one — the drift a `bind_key()` call could not avoid.
 
 **Outputs**: `text_output`, `verbatim_output`, `table_output`,
-`plot_output`, `image_output`, `audio_output`, `video_output`,
-`ui_output`
+`data_table`, `plot_output`, `image_output`, `audio_output`,
+`video_output`, `ui_output`
+
+`data_table` receives the same `table` value `table_output` does and
+adds client-side sorting, filtering and pagination. The interaction
+is entirely local: the client holds the whole value, so a sort click
+never reaches the server, and a value update clamps the reader's page
+instead of resetting it. The value's `align` doubles as the sort-type
+signal — `"num"` columns sort numerically, the rest as text.
 
 **Escape hatch**: `raw_html` — what `tag()` now produces:
 `{"component": "raw_html", "html": "<details>..."}`, a single opaque
@@ -371,10 +378,13 @@ same as safe to add.
 | `collapse` | `children: []`, `title: string` | `open: bool` (false), `id` |
 | `text_input` | `id` | `label`, `value` (""), `placeholder`, `variant` |
 | `password_input` | `id` | `label`, `placeholder` — **never `value`** |
-| `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool` |
+| `select_input` | `id`, `choices: [{value,label}]` | `label`, `selected`, `multiple: bool`, `search: bool` (false; single-select only) |
 | `radio_buttons` | `id`, `choices: [{value,label}]` | `label`, `selected: string` |
+| `checkbox_group` | `id`, `choices: [{value,label}]` | `label`, `selected: [string]` (always an array) |
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
+| `range_slider` | `id`, `min: num`, `max: num` | `label`, `value: [lo, hi]`, `step` |
 | `button` | `id`, `label` | `variant`, `icon`, `value: string` |
+| `data_table` | `id` | `page_length: int` (10), `length_menu: [num]` (always an array; `[10,25,50,100]`), `searchable: bool` (true), `sortable: bool` (true) |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
 | `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false) |
@@ -400,6 +410,20 @@ string makes a client parse a list on Tuesday and a string on
 Wednesday, and every lowering then grows its own guess about which
 it got. The same rule holds for `input` and `input_update`.
 
+`search: true` turns a single select into a combobox: typing filters
+the same closed choice list, and only picking a real choice reports
+a value — the typed text is a display-side view, never a value, so
+the input's domain stays exactly the declared choices and the server
+never sees free text. `search` with `multiple` is a validation
+error, not a degraded render.
+
+`range_slider` is array-valued unconditionally: its `value` is the
+pair `[lo, hi]` in the tree, in every `input` frame, and in the
+server's seeded state — ordered, inside `[min, max]`, both ends on
+the same grid a single slider's thumb rests on. `checkbox_group` is
+array-valued the same way: `selected` and every reported value are
+the checked members' values in choice order, `[]` included.
+
 ### The Flutter column
 
 Every component names the Flutter widget it lowers to. This started
@@ -424,9 +448,12 @@ rather than an intention.
 | `textarea_input` | `TextField(maxLines:)` | |
 | `number_input` | `TextField` + `TextInputType.number` | Flutter has no spinner; bounds show as helper text |
 | `select_input` | `DropdownButton`, or `FilterChip`s | `multiple` has no dropdown; chips carry the list |
+| `select_input` + `search` | `DropdownMenu(enableFilter:)` | Material's own filter-as-you-type; same contract as the browser combobox |
 | `checkbox_input` | `CheckboxListTile` | |
 | `radio_buttons` | `RadioGroup` + `RadioListTile` | |
+| `checkbox_group` | `CheckboxListTile` column | each toggle emits the whole array, in choice order |
 | `slider_input` | `Slider` | `divisions` = range / step; `settle` reports on `onChangeEnd` |
+| `range_slider` | `RangeSlider` | one input whose value is always the pair `[lo, hi]`; both ends quantize like a single slider's value |
 | `date_input` | `showDatePicker` | a dialog, not an inline field: **refused by name** |
 | `file_input` | `file_picker` package | not in the SDK: **refused by name** |
 | `button` | `FilledButton` etc. | variant selects the constructor |
@@ -434,6 +461,7 @@ rather than an intention.
 | `tabset` | `TabBar` + `TabBarView` | both retain hidden child state |
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
+| `data_table` | stateful `DataTable` + controls | sort/filter/page state lives in the client; must agree with the browser's `renderDataTable` |
 | `plot_output` | `LayoutBuilder` + `Image.memory` | always reports, fixed size included; a declared axis wins, an unbounded height becomes 4:3 |
 | `image` | `Image.memory` / `Image.network` | data:, http(s), or relative resolved against the server address |
 | `collapse` | `ExpansionTile` | `open` becomes `initiallyExpanded` |
@@ -527,7 +555,7 @@ side does not know is a button that renders and does nothing.
 | kind | value | from |
 |---|---|---|
 | `text` | string | `render_text()` |
-| `table` | `{header, rows}` | `render_table()` |
+| `table` | `{header, rows, align}` | `render_table()` |
 | `image` | `{src, width, height}` | `render_plot()` |
 | `audio` | `{src, mime, duration?}` | `render_audio()` |
 | `video` | `{src, mime, poster?, duration?}` | `render_video()` |
@@ -536,6 +564,11 @@ side does not know is a button that renders and does nothing.
 
 `kind` describes **the value**, and comes from the renderer. How it is
 displayed belongs to the receiving component.
+
+A table's `align` marks each column `"num"` or `"text"`: values
+travel as strings, so numeric-ness must ride alongside for the
+frontends to right-align number columns. A client that sees no
+`align` treats every column as text.
 
 So there is no `verbatim` kind. `render_text()` always produces
 `text`; `verbatim_output` is the component that chooses to display a
@@ -727,7 +760,7 @@ client is free to render `danger` however it likes.
 | `button`, `download_button` | `default`, `primary`, `secondary`, `danger`, `ghost`, `listing` |
 | `panel` | `plain`, `card`, `sidebar` |
 | `text` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
-| `text_output` | `normal`, `muted`, `strong`, `mono`, `small` |
+| `text_output` | `normal`, `muted`, `strong`, `heading`, `mono`, `small` |
 | `divider` | `line`, `labelled` |
 
 Unknown variants fall back to the first listed, with a console warning

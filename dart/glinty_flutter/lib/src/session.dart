@@ -760,8 +760,8 @@ class GlintySession {
   /// Callers deduplicate per id: send only when (width, height, dpr)
   /// changed, and never for a box that cannot be seen -- the server
   /// keeps the last real measurement across rebuilds.
-  void sendMeasure(String id, int width, int height, {num dpr = 1}) {
-    _emit(GlintyOutgoing('measure', {
+  bool sendMeasure(String id, int width, int height, {num dpr = 1}) {
+    return _emit(GlintyOutgoing('measure', {
       'type': 'measure',
       'id': id,
       'width': width,
@@ -791,8 +791,13 @@ class GlintySession {
     if (w <= 0 || h <= 0) return;
     final key = '$w:$h:$dpr';
     if (_measured[id] == key) return;
-    _measured[id] = key;
-    sendMeasure(id, w, h, dpr: dpr);
+    // Record only what the wire actually took: remembering the key
+    // before a send the transport drops (connecting, reconnecting)
+    // poisons the dedup, and a box that never changes size is then
+    // never reported at all -- a plot that stays empty forever.
+    if (sendMeasure(id, w, h, dpr: dpr)) {
+      _measured[id] = key;
+    }
   }
 
   /// Returns whether the wire took the frame. With no transport

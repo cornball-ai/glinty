@@ -89,10 +89,20 @@ input_seed_value <- function(x) {
            number_input = x$value,
            checkbox_input = isTRUE(x$value),
            radio_buttons = x$selected,
+           # always plural, character(0) when nothing is checked --
+           # the multiple-select rule
+           checkbox_group = as.character(unlist(x$selected, use.names = FALSE)),
            slider_input = if (is.null(x$value)) {
             slider_default(x$min, x$max)
         } else {
             x$value
+        },
+           range_slider = if (is.null(x$value)) {
+            c(x$min, x$max)
+        } else {
+            # the validated tree holds list(lo, hi) (JSON array shape);
+            # the server-side value is the numeric pair
+            as.numeric(unlist(x$value))
         },
            select_input = select_seed(x),
            tabset = tabset_seed(x),
