@@ -17,6 +17,16 @@ expect_equal(sn(1, 1, 1000, NULL), 1000)
 # a real step wins over the implied one
 expect_equal(sn(0.55, 0.2, 2, 0.2), 1.2)
 
+# --- a stepless slider's HTML materializes the implied step as its
+#     drag granularity (a sample-count slider must not produce
+#     394.326 samples); the tree field stays as the app set it
+h <- glinty:::component_to_html(
+    glinty::slider_input("n", "N:", min = 1, max = 1000, value = 500))
+expect_true(grepl('step="1"', h, fixed = TRUE))
+h2 <- glinty:::component_to_html(
+    glinty::slider_input("bw", "BW:", min = 0, max = 1, value = 0.5))
+expect_true(grepl('step="0.01"', h2, fixed = TRUE))
+
 # --- ticks: step grid sits ON the stops, labels every stop up to 10
 tk <- glinty:::slider_ticks(0.2, 2, 0.2)
 labs <- vapply(Filter(function(t) t$major, tk),

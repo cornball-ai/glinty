@@ -1225,13 +1225,20 @@
             stop.appendChild(bub);
             var chipMax = mkChip("g-slider-chip-max");
             sbox.appendChild(stop);
+            /* a stepless slider still drags at the implied
+               precision (mirrors html_slider in R); the tree keeps
+               step null, only the granularity materializes */
+            var cstep = c.step;
+            if (!(cstep > 0) && c.max > c.min) {
+                cstep = sliderImpliedStep(c.min, c.max);
+            }
             var input = el("input", assign(bindAttrs(c, "input"), {
                 type: "range",
                 "class": "g-slider",
                 min: c.min,
                 max: c.max,
                 value: c.value,
-                step: c.step
+                step: cstep
             }));
             sbox.appendChild(input);
             sbox.appendChild(el("div", { "class": "g-slider-scale" }));

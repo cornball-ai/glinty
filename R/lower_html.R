@@ -458,9 +458,19 @@ html_radio <- function(x) {
 # rather than 5.9, 10.8. The client keeps the bubble, chips and
 # labels current; this renders the same DOM for first paint.
 html_slider <- function(x) {
+    # A stepless slider still drags at Shiny's implied precision --
+    # a sample-count slider must not produce 394.326 samples. The
+    # tree keeps step NULL (the app set none); only the drag
+    # granularity materializes, identically in glinty.js and the
+    # Flutter renderer.
+    step <- x$step
+    if ((is.null(step) || !is.numeric(step) || step <= 0) &&
+        is.numeric(x$min) && is.numeric(x$max) && x$max > x$min) {
+        step <- slider_implied_step(x$min, x$max)
+    }
     attrs <- c(html_bind(x),
                list(type = "range", class = "g-slider", min = x$min, max = x$max,
-                    value = x$value, step = x$step))
+                    value = x$value, step = step))
     shown <- if (is.null(x$value)) x$min else x$value
     pct <- slider_pct(shown, x$min, x$max)
 
