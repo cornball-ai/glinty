@@ -52,12 +52,19 @@ loop_tick <- function(srv, handlers, max_tick) {
     run_due_timers()
     flush_reactions()
     drain_all_sessions()
+    # After the drain, so "flushed" means what it says: the messages
+    # are on (or queued into) the wire. A fired callback has changed
+    # state the client has not seen, so spin now rather than sleep.
+    fired <- fire_on_flushed()
 
     tmo <- next_timer_deadline()
     if (is.null(tmo)) {
         tmo <- max_tick
     } else {
         tmo <- min(max_tick, max(tmo, 0))
+    }
+    if (fired > 0L) {
+        tmo <- 0
     }
 
     conn_keys <- names(REG$conns)

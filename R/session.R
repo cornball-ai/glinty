@@ -17,6 +17,7 @@ new_session <- function(id, send_fn = NULL) {
     s$outgoing <- list()
     s$observers <- list()
     s$on_ended_cbs <- list()
+    s$on_flushed_cbs <- list()
     s$ended <- FALSE
     s$detached <- FALSE
     s$grace_timer <- NULL
@@ -58,6 +59,17 @@ new_session <- function(id, send_fn = NULL) {
 
     s$on_ended <- function(fn) {
         s$on_ended_cbs <- c(s$on_ended_cbs, list(fn))
+        invisible(NULL)
+    }
+
+    # Run fn once, after the next completed flush -- outputs computed
+    # AND handed to the transport. The deferred-expensive-render seam:
+    # render a placeholder now, flip a reactive_val in here, and the
+    # real work happens on the next flush, after the placeholder has
+    # actually left the building. Once per registration; re-register
+    # inside the callback for every-flush behavior.
+    s$on_flushed <- function(fn) {
+        s$on_flushed_cbs <- c(s$on_flushed_cbs, list(fn))
         invisible(NULL)
     }
 
@@ -179,6 +191,38 @@ session_end <- function(session) {
 #' @param expr expression to evaluate
 #' @return the result of expr
 #' @keywords internal
+#' Fire every session's pending on_flushed callbacks
+#'
+#' Called by the event loop after the flush's messages have been
+#' drained to the transports, and by the in-process driver after
+#' flush_reactions(). Each callback runs once with its session
+#' current (so reactive writes inside are attributed correctly) and
+#' outside any reactive context. Returns how many fired, so the loop
+#' can spin immediately instead of sleeping on state the client has
+#' not seen.
+#'
+#' @return integer count of callbacks fired, invisibly
+#' @keywords internal
+fire_on_flushed <- function() {
+    fired <- 0L
+    for (id in ls(.globals$sessions)) {
+        s <- .globals$sessions[[id]]
+        if (isTRUE(s$ended) || length(s$on_flushed_cbs) == 0L) {
+            next
+        }
+        cbs <- s$on_flushed_cbs
+        s$on_flushed_cbs <- list()
+        for (cb in cbs) {
+            with_session(s, tryCatch(cb(), error = function(e) {
+                warning("glinty on_flushed callback failed: ",
+                        conditionMessage(e), call. = FALSE)
+            }))
+            fired <- fired + 1L
+        }
+    }
+    invisible(fired)
+}
+
 with_session <- function(session, expr) {
     old <- .globals$current_session
     .globals$current_session <- session
