@@ -36,11 +36,11 @@ component_fixtures <- function() {
                  list(
                       name = "text-status",
                       component = component("column", children = list(
-                component("text", value = "healthy", variant = "success"),
-                component("text", value = "cert expires soon",
-                          variant = "warning"),
-                component("text", value = "unreachable", variant = "danger")
-        )),
+                    component("text", value = "healthy", variant = "success"),
+                    component("text", value = "cert expires soon",
+                              variant = "warning"),
+                    component("text", value = "unreachable", variant = "danger")
+                )),
                       notes = paste("the status trio colors from the theme's",
                                     "semantic tokens; what the colors are is",
                                     "the theme's decision")

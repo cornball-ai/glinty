@@ -122,8 +122,8 @@ app <- function(ui, server, theme = NULL) {
 #' @export
 run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
                     static_dir = "www", job_lanes = NULL,
-                    max_upload = 10485760L, check_secrets = TRUE,
-                    api = NULL, quiet = FALSE) {
+                    max_upload = 10485760L, check_secrets = TRUE, api = NULL,
+                    quiet = FALSE) {
     if (!inherits(app_obj, "glinty_app")) {
         stop("app_obj must be a glinty_app (see app())", call. = FALSE)
     }
@@ -383,8 +383,8 @@ refuse_conn <- function(sid, message) {
 #' @return raw HTTP response
 #' @keywords internal
 route_http <- function(req, page_html, pkg_www, static_dir,
-                       started = as.numeric(Sys.time()),
-                       api = NULL, auth = NULL) {
+                       started = as.numeric(Sys.time()), api = NULL,
+                       auth = NULL) {
     if (identical(req$method, "POST") && identical(req$path, "/upload")) {
         return(handle_upload(req))
     }
@@ -408,8 +408,7 @@ route_http <- function(req, page_html, pkg_www, static_dir,
         # has to reach serve_static() or every scrub costs a whole file.
         range <- get_header(req, "range")
         if (startsWith(req$path, "/glinty/")) {
-            return(serve_static(sub("^/glinty/", "", req$path), pkg_www,
-                                range))
+            return(serve_static(sub("^/glinty/", "", req$path), pkg_www, range))
         }
         if (!is.null(static_dir) && startsWith(req$path, "/static/")) {
             return(serve_static(sub("^/static/", "", req$path), static_dir,
