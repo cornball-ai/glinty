@@ -386,6 +386,29 @@ every second. Fourth straight zero-framework-change port.
 - text_output(variant = "heading") earned its second use one round
   after existing.
 
+## Round 11: HTML UI (shiny-examples 008, 2026-08-17)
+
+The gallery entry whose point is htmlTemplate(): the UI is a
+hand-written index.html wearing shiny classes. **Ported deliberately
+unfaithfully** — same app, expressed in vocabulary — because
+page-level raw HTML is the escape hatch glinty exists to remove: a
+raw page renders in exactly one frontend, and the whole bet is
+one tree, every frontend. glinty's raw_html/html_output remain as
+browser-only VALUE escape valves that other frontends refuse by
+name; there is no page-level template on purpose, and this round
+records that as a boundary, not a gap.
+
+Worth noting from the side-by-side: the vocabulary port renders
+better than the original in the original's own frontend (the raw
+template has no styling beyond browser defaults), and the same tree
+came up in the flutter viewer with the number field's bounds
+rendered as Material helper text — the frontend spending schema
+data its own way, which is the argument for the boundary in one
+screenshot. Fifth straight port with zero framework changes. Also
+filed this round, from the loop's accumulated evidence: glinty #56
+(run_app loop waits on external fds) and #57 (client declaration
+tables derived from the R schema instead of hand-restated).
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
