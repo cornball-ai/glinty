@@ -62,6 +62,10 @@ field <- function(type, required = FALSE, default = NULL, values = NULL,
          values = values, min = min, max = max)
 }
 
+#' Default feed window, shared by the schema and the server-side log
+#' @keywords internal
+FEED_KEEP_DEFAULT <- 200L
+
 #' Component field schemas
 #'
 #' Every component's fields, with types, bounds and defaults.
@@ -70,10 +74,6 @@ field <- function(type, required = FALSE, default = NULL, values = NULL,
 #' client and not another.
 #'
 #' @keywords internal
-#' Default feed window, shared by the schema and the server-side log
-#' @keywords internal
-FEED_KEEP_DEFAULT <- 200L
-
 COMPONENT_SCHEMA <- list(
                          # static content
                          text = list(
