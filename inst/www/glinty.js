@@ -2254,6 +2254,57 @@
         mkNav("Next ›", 1, st.page < pages - 1);
     }
 
+    /* The never-stomp contract extends to tree swaps (#79). An
+       input_update may not rewrite a focused field's draft, and
+       neither may a `ui` frame that happens to contain the same
+       field: the app re-rendering a region around a composer is
+       redecorating, not dictating text. So before a container's
+       subtree is replaced, the focused text-ish field's live value
+       and caret are captured, and after the new tree stands they are
+       put back into the field with the same target id -- focus
+       included, since the swap destroyed the element that held it.
+       Only the FOCUSED field: everything else takes its declared
+       value, which is what a re-render means for a field nobody is
+       typing in. If the new tree no longer carries the field, the
+       draft dies with it -- the app removed the composer. */
+    function captureFocusedDraft(container) {
+        var a = document.activeElement;
+        if (!a || !container || !container.contains(a)) return null;
+        if (!a.dataset || !a.dataset.gTarget) return null;
+        var tag = a.tagName;
+        if (tag !== "TEXTAREA" &&
+            (tag !== "INPUT" ||
+             /^(checkbox|radio|button|submit|range|file|color)$/i
+                 .test(a.type || "text"))) {
+            return null;
+        }
+        return {
+            target: a.dataset.gTarget,
+            value: a.value,
+            /* selection is numeric only where the type supports it;
+               a date or number input reports null and gets value +
+               focus without a caret */
+            start: a.selectionStart,
+            end: a.selectionEnd
+        };
+    }
+
+    function restoreFocusedDraft(container, kept) {
+        if (!kept || !container) return;
+        var el = container.querySelector(
+            '[data-g-target="' + kept.target + '"]');
+        if (!el) return;
+        var tag = el.tagName;
+        if (tag !== "TEXTAREA" && tag !== "INPUT") return;
+        el.value = kept.value;
+        if (typeof kept.start === "number" &&
+            typeof el.setSelectionRange === "function" &&
+            el.selectionStart !== null) {
+            el.setSelectionRange(kept.start, kept.end);
+        }
+        el.focus();
+    }
+
     /* Apply an output message: the value is typed by kind (what the
        renderer produced), and the receiving element decides how to
        show it. The DOM property names of protocol 2 are gone from
@@ -2320,9 +2371,14 @@
             break;
         }
         case "ui": {
+            /* the focused draft survives the swap (#79); restored
+               before the harvest below, so the store reads the draft
+               rather than the rebuilt field's declared value */
+            var kept = captureFocusedDraft(el);
             el.textContent = "";
             var node = buildComponent(msg.value);
             if (node) el.appendChild(node);
+            restoreFocusedDraft(el, kept);
             /* The subtree's own controls have to reach the store, or
                a conditional panel keyed on one reads "unset matches
                nothing" and hides a section whose control is right
@@ -2959,6 +3015,10 @@
     }
 
     function showModal(msg) {
+        /* a second show replaces the first, and a per-step modal
+           (a picker, a filtered list) is a tree swap around whatever
+           the user is typing -- same draft contract as a ui slot */
+        var kept = captureFocusedDraft(document.getElementById("g-modal"));
         closeModal();
         var root = document.getElementById("glinty-root");
         if (!root) return;
@@ -3002,6 +3062,7 @@
 
         overlay.appendChild(box);
         root.appendChild(overlay);
+        restoreFocusedDraft(overlay, kept);
         refreshConditionals();
         /* a modal body can hold a plot too */
         observeMeasured();

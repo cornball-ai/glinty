@@ -209,6 +209,32 @@ class GlintySession {
   /// steal focus from an event that predates it.
   final Map<String, int> focuses = <String, int>{};
 
+  /// The id of the text field currently holding keyboard focus, as
+  /// reported by the renderer through [focusChanged]. What the
+  /// tree-swap draft guard keys on (#79): a slot replacement spares
+  /// exactly this field's value, because rewriting the draft someone
+  /// is typing is what the never-stomp rule refuses everywhere else.
+  String? focusedInput;
+
+  /// How many times each input has been re-declared by a slot
+  /// replacement. The fourth one-shot counter beside pushes, clears
+  /// and focuses: a re-rendered region's controls hold what the new
+  /// tree says -- but a surviving widget state never reruns initState
+  /// to find that out, so the tick tells it. Applied unless the field
+  /// is focused (the #79 draft guard), spent either way. Dropped when
+  /// the input leaves the store, like the others.
+  final Map<String, int> seedTicks = <String, int>{};
+
+  /// The renderer's focus report. Gain names the field; loss clears
+  /// it only if nothing else has claimed focus since.
+  void focusChanged(String id, bool focused) {
+    if (focused) {
+      focusedInput = id;
+    } else if (focusedInput == id) {
+      focusedInput = null;
+    }
+  }
+
   /// Bumped whenever the tree is replaced or the state is cleared.
   /// Widgets key off it so Flutter discards controllers and element
   /// state belonging to a tree that no longer exists.
@@ -285,7 +311,10 @@ class GlintySession {
       pushes.remove(key);
       clears.remove(key);
       focuses.remove(key);
-      if (!seeds.containsKey(key)) inputs.remove(key);
+      if (!seeds.containsKey(key)) {
+        seedTicks.remove(key);
+        inputs.remove(key);
+      }
     }
     _slotInputs[id] = seeds.keys.toSet();
     // Assigned, not filled in. A re-rendered slot is the server
@@ -299,10 +328,37 @@ class GlintySession {
     // Except an id the page itself declares, which is not this
     // slot's to set: that control is still there, showing its own
     // value, and would visibly contradict the change.
+    //
+    // And except the field the user is typing in (#79): the
+    // never-stomp contract extends to tree swaps, so the focused
+    // field keeps its live value across the replacement -- the app
+    // re-rendering a region around a composer is redecorating, not
+    // dictating text. Value only; the counters above still die with
+    // the region. The browser does the same by capturing the focused
+    // draft before the swap and restoring it after. If the new tree
+    // no longer carries the field, the draft died in the loop above
+    // with everything else: the app removed the composer.
+    final kept = focusedInput != null &&
+            seeds.containsKey(focusedInput) &&
+            !_staticInputs.contains(focusedInput)
+        ? focusedInput
+        : null;
     seeds.forEach((key, seed) {
       if (_staticInputs.contains(key)) return;
+      if (key == kept) return;
       inputs[key] = seed;
+      // A surviving widget state has no initState to reread the
+      // store, so the tick carries "your region was re-declared" to
+      // it; a reborn one reads the store at birth and the tick is
+      // moot on arrival.
+      seedTicks[key] = (seedTicks[key] ?? 0) + 1;
     });
+    // The swap may have rebuilt the widget that held focus, and a
+    // fresh FocusNode is born blurred. Re-handing focus through the
+    // focus-verb machinery covers both outcomes: a surviving state
+    // answers the tick with a requestFocus it already has, a reborn
+    // one answers it at birth.
+    if (kept != null) focuses[kept] = (focuses[kept] ?? 0) + 1;
   }
 
   /// Requests sent and not yet answered, in the order they went out,
@@ -699,6 +755,8 @@ class GlintySession {
       pushes.clear();
       clears.clear();
       focuses.clear();
+      focusedInput = null;
+      seedTicks.clear();
       uiValues.clear();
       feeds.clear();
       _slotInputs.clear();
@@ -764,6 +822,8 @@ class GlintySession {
       // the new one; carrying the count over would have a reborn
       // control steal focus from an event that predates the page.
       focuses.clear();
+      focusedInput = null;
+      seedTicks.clear();
     }
     // Invariant 2: nothing is emitted here. Adoption is not user
     // interaction, and the server built this tree, so it already knows
