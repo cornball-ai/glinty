@@ -237,6 +237,51 @@ Deferred gaps (still open after this round):
   bubbles overlap (ion merges them into one "430 — 500" chip).
   Cosmetic, both frontends, not yet handled.
 
+## Round 6: MPG (shiny-examples 004, 2026-08-17)
+
+A select picks the boxplot grouping, a checkbox toggles outliers,
+one reactive formula string feeds a caption and the plot. Small on
+purpose after the range build — the round's yield is a vocabulary
+asymmetry and a capture-infrastructure lesson.
+
+- **text_output had no heading variant** while text did, so Shiny's
+  h3(textOutput(...)) — a caption whose text is computed — was
+  inexpressible. Added to the enum; same tokens in every renderer
+  (g-text-heading / titleMedium); the css guard derives its probe
+  families from the schema, so it picked the new variant up with no
+  code change.
+- **check.R lesson**: "toggle outliers, assert pixels changed" is
+  only a test on a grouping that has outliers to hide. mpg ~ am and
+  mpg ~ gear have none — hiding nothing draws identical bytes — so
+  the check toggles on cyl (2 outliers) before switching variables.
+- **Live**: HTML side full round trip (form_input on the select →
+  caption "mpg ~ am" + factor-labelled boxplot; checkbox toggles
+  re-rendered the plot only, twice, per the trace). Flutter side
+  static-verified by canvas grab (heading caption, checked box,
+  plot); its interaction paths were live-verified in rounds 3-5 and
+  hold in the widget tests.
+
+Infrastructure learned the hard way this round:
+
+- **CDP Page.captureScreenshot can freeze on the CanvasKit tab**
+  (30s timeout, twice, on two fresh tabs) while the page thread
+  stays fully responsive — and the timed-out capture then leaves
+  the 784x370 device-metrics override behind, poisoning the tab's
+  coordinate space (the round-4 failure, now with its cause
+  observed). The app was never at fault: the server trace showed
+  welcome + outputs delivered throughout.
+- **Workaround that gets pixels anyway**: inside the page,
+  drawImage the flutter canvas (it lives in flt-glass-pane's shadow
+  root — walk shadowRoots to find it) onto a 2D canvas and
+  toDataURL. Full-page came out through a local listener;
+  region crops are the right unit when a listener is unavailable
+  (tool output truncates ~8K and the extension's DLP filter blocks
+  long base64 blobs — don't fight the filter, crop smaller or use
+  the a11y route).
+- **Native select popups are OS windows**: extension clicks cannot
+  reach the option list. form_input (or keyboard) is the way to
+  drive a select_input in the HTML frontend.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
