@@ -194,6 +194,49 @@ Framework yield, all fixed on this branch:
   (SliderThemeData.padding: zero) stopped painting the inactive
   track half, so it was reverted in favor of moving the layers.
 
+## Round 5: Sliders (shiny-examples 005, 2026-08-17)
+
+Five sliders feeding one table through a shared reactive. The point
+of this round was the gap-table #1 entry: **range mode is now
+`range_slider()`**, a real component in all three renderers rather
+than a slider variant.
+
+- **One input, two thumbs, value = the pair [lo, hi] everywhere**:
+  the tree, every input frame, the seed. The arity rule (exactly
+  two, ordered, in bounds) lives in check_component() beside
+  select_input's multiple/selected rule; a new "numbers" field type
+  carries the pair. normalize_value() already collapses the wire
+  array to a numeric vector, so the server sees the same shape from
+  the seed and from a client frame.
+- **Browser lowering**: two overlaid native range inputs
+  (data-g-range-end lo/hi) over one rail+fill, pointer-events only
+  on the thumbs; the binding sits on the box because an end input
+  carrying data-g-target would send a scalar where the server keeps
+  a pair. Crossing clamps to the other thumb.
+- **Flutter lowering**: Material RangeSlider under the same three
+  number layers as a single slider — chip/track-space/scale code
+  now shared as _sliderChip / _trackX / _sliderScale. Both ends
+  quantize through _sliderQuantize, so a stepless 1..1000 range
+  drags in whole numbers like the single slider does (drag test
+  pins ordered whole pairs; settle test pins one frame at release).
+- **Live check, both frontends against the running Shiny original**:
+  boot table seeds all five rows (Range "200 500"); an HTML thumb
+  drag lands 430 500, a flutter track click lands 200 723 — whole
+  numbers, ordered, one table re-emission each.
+
+Deferred gaps (still open after this round):
+
+- **Slider display formatting** — 005's Custom Format slider uses
+  pre = "$", sep = "," (ion's prettify). glinty sliders render the
+  bare number; a format vocabulary (prefix/suffix/thousands) would
+  have to hold across all three renderers. Ports as a plain slider.
+- **Slider animation** — animate = TRUE / animationOptions(): a play
+  button stepping the value on an interval, optionally looping.
+  Nothing in the vocabulary yet. Ports as a plain slider.
+- **Range bubble merge** — when lo and hi get close, the two value
+  bubbles overlap (ion merges them into one "430 — 500" chip).
+  Cosmetic, both frontends, not yet handled.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
@@ -229,7 +272,9 @@ radioButtons, textAreaInput (3), passwordInput -> see gaps.
 
 1. **slider range mode** — sliderInput(value = c(lo, hi)) two-handle;
    005-sliders demos it. Single-value covered. Also shiny has
-   animate; skip animate, range is the gap.
+   animate; skip animate, range is the gap. **CLOSED round 5:
+   range_slider() in all three renderers.** animate and pre/sep
+   formatting remain (see round 5 deferred gaps).
 2. **interactive table** — renderDataTable/dataTableOutput/DT
    (20+16+2): sort/filter/paginate. glinty table is static. Biggest
    strategic gap; whole "DataTables" demos rest on it.
