@@ -108,6 +108,35 @@ h1, h2, h3, h4 {
 .g-mono {
     font-family: var(--g-font-mono), SFMono-Regular, Menlo, monospace;
     font-size: 0.875em;
+    /* a fenced code block from markdown() lowers to text(variant =
+       "mono") and its newlines and indent are the content */
+    white-space: pre-wrap;
+}
+
+/* rich_text: one span (or anchor) per run, marks as classes -- the
+   element structure IS the wire form. pre-wrap because a run's
+   newlines and leading indent (markdown list nesting) are content. */
+.g-richtext {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+}
+
+.g-run-b { font-weight: 600; }
+.g-run-i { font-style: italic; }
+.g-run-s { text-decoration: line-through; }
+
+.g-run-c {
+    font-family: var(--g-font-mono), SFMono-Regular, Menlo, monospace;
+    font-size: 0.875em;
+    background: color-mix(in srgb, var(--g-text) 8%, transparent);
+    border-radius: 3px;
+    padding: 0.05em 0.3em;
+}
+
+a.g-run {
+    color: var(--g-primary);
+    text-decoration: underline;
 }
 
 .g-small {

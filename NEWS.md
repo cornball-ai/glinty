@@ -1,5 +1,17 @@
 # glinty (development version)
 
+**`markdown()` and `rich_text`: model output renders without the
+escape hatch** (#70). `rich_text` is the new inline-formatting leaf
+-- a flat list of styled runs (bold/italic/code/strike, optional
+scheme-restricted `href`), flat so clients loop rather than parse.
+`markdown()` is server-side sugar over it: a documented subset
+(emphasis, code, links, headings, fences, lists, rules, escapes)
+parsed at build time and lowered onto the existing vocabulary, so no
+markdown crosses the wire and neither client carries an engine.
+Out-of-subset syntax degrades to literal text -- a transcript
+renders whatever a model emitted. `javascript:` and friends are
+refused in the schema, so no client defends itself.
+
 **`run_app(api = )`: mount an application JSON API on the same
 origin** (#72). One pure function --
 `(method, path, body, query, principal) -> list(status, body | file,
