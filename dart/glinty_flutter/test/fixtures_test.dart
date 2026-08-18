@@ -44,6 +44,34 @@ void main() {
             'should be refused rather than half-rendered');
   });
 
+  test('the declaration tables restate the schema exactly (#57)', () {
+    // The vocabulary block is the schema as data. supported and
+    // unsupported are this client's own facts -- what it implements
+    // and what it refuses by name -- so they cannot be generated,
+    // only held to a complete, disjoint partition of the schema:
+    // a component in neither list is one this client never answered
+    // for, and that is the drift that used to be silent.
+    final vocab = loadFixtureFile()['vocabulary'] as Map<String, dynamic>;
+    final components =
+        (vocab['components'] as List).cast<String>().toSet();
+    expect(supportedComponents.intersection(unsupportedComponents), isEmpty,
+        reason: 'a component is rendered or refused, never both');
+    expect(supportedComponents.union(unsupportedComponents), components,
+        reason: 'every schema component is answered for, and no table '
+            'entry claims a component the schema does not declare');
+
+    // Variant lists gate this client's own style choices, so they too
+    // are restated -- and held equal per component, order included,
+    // because the first listed value is the fallback.
+    final variants = vocab['variants'] as Map<String, dynamic>;
+    expect(knownVariants.keys.toSet(), variants.keys.toSet(),
+        reason: 'the variant-bearing components are the schema\'s');
+    variants.forEach((component, values) {
+      expect(knownVariants[component], (values as List).cast<String>(),
+          reason: 'variants of $component, in fallback order');
+    });
+  });
+
   test('the fixture file is the one glinty generated', () {
     expect(fixtures, isNotEmpty);
     for (final f in fixtures) {

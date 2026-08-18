@@ -51,6 +51,9 @@ const supportedComponents = <String>{
 /// Components the protocol defines that this client cannot render.
 ///
 /// Named rather than omitted, so the gap is visible in a running app.
+/// The fixtures suite holds supported + unsupported equal to the
+/// schema's component list, so a new component fails there until this
+/// client answers for it -- render it, or refuse it by name.
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
   // Both carry markup, which has no Flutter equivalent by design.
@@ -58,6 +61,26 @@ const unsupportedComponents = <String>{
   // as a value. Same refusal for the same reason.
   'raw_html',
   'html_output',
+};
+
+/// The spec's fallback rule: unknown variants take the first listed,
+/// with a warning rather than an error, because a same-protocol
+/// server one release newer may know variants this client does not.
+///
+/// Restates the schema on purpose -- each entry gates this client's
+/// own style choices -- and the fixtures suite holds it equal to the
+/// schema's variant lists, order included (the first value is the
+/// fallback), so a new variant fails there until this client styles
+/// it.
+const knownVariants = <String, List<String>>{
+  'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
+  'text_output': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
+  'button': ['default', 'primary', 'secondary', 'danger', 'ghost', 'listing'],
+  'download_button': [
+    'default', 'primary', 'secondary', 'danger', 'ghost', 'listing'
+  ],
+  'panel': ['plain', 'card', 'sidebar'],
+  'divider': ['line', 'labelled'],
 };
 
 /// The one reserved component id.
@@ -319,23 +342,8 @@ class GlintyRenderer {
   /// choice and degrades within the mono role.
   final List<String> monoStack;
 
-  /// The spec's fallback rule: unknown variants take the first
-  /// listed, with a warning rather than an error, because a
-  /// same-protocol server one release newer may know variants this
-  /// client does not.
-  static const _knownVariants = <String, List<String>>{
-    'text': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
-    'text_output': ['normal', 'muted', 'strong', 'heading', 'mono', 'small'],
-    'button': ['default', 'primary', 'secondary', 'danger', 'ghost', 'listing'],
-    'download_button': [
-      'default', 'primary', 'secondary', 'danger', 'ghost', 'listing'
-    ],
-    'panel': ['plain', 'card', 'sidebar'],
-    'divider': ['line', 'labelled'],
-  };
-
   String _variant(String component, String? variant) {
-    final known = _knownVariants[component];
+    final known = knownVariants[component];
     if (known == null) return variant ?? '';
     if (variant == null) return known.first;
     if (known.contains(variant)) return variant;

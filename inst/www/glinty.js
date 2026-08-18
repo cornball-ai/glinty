@@ -12,7 +12,12 @@
        negotiation: the server sends the whole tree regardless, and a
        component missing from this list still renders here -- the list
        exists so the server can log what a lesser client will show as
-       a placeholder. The browser renders the full set. */
+       a placeholder. The browser renders the full set, and a test
+       (test_vocabulary.R) holds this list equal to the schema, so a
+       new component fails there until this client answers for it.
+       shortcut and table_output were both implemented here yet
+       missing from this list -- hello under-declared and nothing
+       noticed, which is the drift that test exists to catch. */
     var SUPPORTED_COMPONENTS = [
         "audio_output", "button", "checkbox_group", "checkbox_input",
         "column", "data_table",
@@ -21,8 +26,9 @@
         "image", "image_output",
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
-        "select_input",
-        "slider_input", "spacer", "tabset", "text", "text_input",
+        "select_input", "shortcut",
+        "slider_input", "spacer", "table_output", "tabset", "text",
+        "text_input",
         "text_output", "textarea_input", "ui_output", "verbatim_output",
         "video_output"
     ];
@@ -1104,7 +1110,11 @@
     /* The spec's fallback rule, applied to every variant-bearing
        component: unknown variants take the first listed, with a
        warning rather than an error, because a same-protocol server
-       one release newer may know variants this client does not. */
+       one release newer may know variants this client does not.
+       Restates the schema on purpose -- each entry gates this
+       client's own style maps -- and test_vocabulary.R holds it
+       equal to the schema, order included, so a new variant fails
+       there until the style exists here too. */
     var KNOWN_VARIANTS = {
         text: ["normal", "muted", "strong", "heading", "mono", "small"],
         text_output: ["normal", "muted", "strong", "heading", "mono",

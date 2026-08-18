@@ -254,6 +254,19 @@ the file matches the definition it came from, so they cannot fall
 behind. Adding a fixture or a transcript obliges every client to
 answer for it.
 
+`components.json` also carries a `vocabulary` block: the schema's
+component list and, per variant-bearing component, its variant values
+in declaration order (the first value is the fallback an unknown
+variant takes, and is asserted equal to the schema default). A
+client's declaration tables cannot be generated from it -- a support
+list states what that client implements, and a variant list gates the
+client's own style maps, so generating either would claim support
+with no builder or accept a variant with no style. Instead each
+client's suite asserts its hand-written tables against this block
+(the browser's via `test_vocabulary.R`, Flutter's via
+`fixtures_test.dart`), so a vocabulary change fails every client that
+has not answered for it instead of falling back silently.
+
 ## Components
 
 A component is an object with a `component` field. Unknown fields are
