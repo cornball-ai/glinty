@@ -182,15 +182,6 @@ session_end <- function(session) {
     invisible(NULL)
 }
 
-#' Evaluate an expression with a session as the current domain
-#'
-#' Observers created during evaluation are tagged with this session,
-#' so session_end() can destroy them.
-#'
-#' @param session a glinty_session
-#' @param expr expression to evaluate
-#' @return the result of expr
-#' @keywords internal
 #' Fire every session's pending on_flushed callbacks
 #'
 #' Called by the event loop after the flush's messages have been
@@ -223,6 +214,15 @@ fire_on_flushed <- function() {
     invisible(fired)
 }
 
+#' Evaluate an expression with a session as the current domain
+#'
+#' Observers created during evaluation are tagged with this session,
+#' so session_end() can destroy them.
+#'
+#' @param session a glinty_session
+#' @param expr expression to evaluate
+#' @return the result of expr
+#' @keywords internal
 with_session <- function(session, expr) {
     old <- .globals$current_session
     .globals$current_session <- session
