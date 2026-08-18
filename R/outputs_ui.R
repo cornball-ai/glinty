@@ -69,8 +69,8 @@ table_output <- function(id) {
 #' data_table("results", page_length = 5)
 #' @export
 data_table <- function(id, page_length = 10L,
-                       length_menu = c(10, 25, 50, 100),
-                       searchable = TRUE, sortable = TRUE) {
+                       length_menu = c(10, 25, 50, 100), searchable = TRUE,
+                       sortable = TRUE) {
     component("data_table", id = id, page_length = page_length,
               length_menu = length_menu, searchable = searchable,
               sortable = sortable)

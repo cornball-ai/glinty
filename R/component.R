@@ -332,8 +332,7 @@ COMPONENT_SCHEMA <- list(
                          text_output = list(
         id = field("string", required = TRUE),
         variant = field("enum", default = "normal",
-                        values = c("normal", "muted", "strong", "heading",
-                                   "mono", "small"))
+                        values = c("normal", "muted", "strong", "heading", "mono", "small"))
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),
@@ -414,9 +413,9 @@ COMPONENT_SCHEMA <- list(
 #' @keywords internal
 OUTPUT_KINDS <- list(text_output = "text", verbatim_output = "text",
                      table_output = "table", data_table = "table",
-                     plot_output = "image",
-                     image_output = "image", audio_output = "audio",
-                     video_output = "video", ui_output = "ui")
+                     plot_output = "image", image_output = "image",
+                     audio_output = "audio", video_output = "video",
+                     ui_output = "ui")
 
 #' What each input emits, and of what type
 #'
@@ -444,8 +443,7 @@ INPUT_META <- list(
                                        value_type_multiple = "strings"),
                    checkbox_input = list(message = "input", value_type = "bool"),
                    radio_buttons = list(message = "input", value_type = "string"),
-                   checkbox_group = list(message = "input",
-                                         value_type = "strings"),
+                   checkbox_group = list(message = "input", value_type = "strings"),
                    slider_input = list(message = "input", value_type = "number"),
                    range_slider = list(message = "input", value_type = "numbers"),
                    date_input = list(message = "input", value_type = "string"),

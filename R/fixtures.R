@@ -285,7 +285,7 @@ component_fixtures <- function() {
                       name = "checkbox-group",
                       component = component("checkbox_group", id = "toppings",
                 choices = c(Cheese = "cheese", Mushroom = "mushroom",
-                    Onion = "onion"),
+                            Onion = "onion"),
                 selected = c("cheese", "onion")),
                       notes = paste("one id, many boxes; the value is the",
                                     "checked members' values in choice",

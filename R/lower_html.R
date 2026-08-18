@@ -66,7 +66,7 @@ component_to_html <- function(x) {
                 list(class = "g-table-output g-datatable",
                      "data-g-page-length" = x$page_length,
                      "data-g-length-menu" = paste(unlist(x$length_menu),
-                                                  collapse = ","),
+                        collapse = ","),
                      "data-g-searchable" = if (isTRUE(x$searchable)) {
                         "1"
                     } else {
@@ -454,17 +454,16 @@ html_checkbox_group <- function(x) {
         item_id <- paste0(x$id, "_", i)
         html_el("div", list(class = "g-check"),
                 paste0(html_el("input",
-                    list(id = item_id, type = "checkbox",
-                         value = ch$value, class = "g-checkbox",
-                         "data-g-group-member" = "1",
-                         checked = if (ch$value %in% sel) {
-                        "checked"
-                    } else {
-                        NULL
-                    }),
-                    void = TRUE),
-                       html_el("label", list("for" = item_id),
-                               html_escape(ch$label))))
+                               list(id = item_id, type = "checkbox",
+                                    value = ch$value, class = "g-checkbox",
+                                    "data-g-group-member" = "1",
+                                    checked = if (ch$value %in% sel) {
+                            "checked"
+                        } else {
+                            NULL
+                        }),
+                               void = TRUE),
+                       html_el("label", list("for" = item_id), html_escape(ch$label))))
     }, character(1L)), collapse = "")
     box <- html_el("div", c(html_bind(x), list(class = "g-checkgroup-box")),
                    items)
