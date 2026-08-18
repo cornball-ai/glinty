@@ -71,8 +71,7 @@ password_input <- function(id, label = "", placeholder = NULL, emit = "live") {
 #' textarea_input("notes", "Notes:", rows = 6L)
 #' @export
 textarea_input <- function(id, label = "", value = "", rows = 4L,
-                           placeholder = NULL, emit = "live",
-                           clear_on = NULL) {
+                           placeholder = NULL, emit = "live", clear_on = NULL) {
     component("textarea_input", id = id, label = label, value = value,
               rows = rows, placeholder = placeholder, emit = emit,
               clear_on = clear_on)
