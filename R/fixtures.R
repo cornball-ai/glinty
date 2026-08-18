@@ -34,6 +34,18 @@ component_fixtures <- function() {
                       notes = "variant is semantic; each frontend picks its own muting"
         ),
                  list(
+                      name = "text-status",
+                      component = component("column", children = list(
+                component("text", value = "healthy", variant = "success"),
+                component("text", value = "cert expires soon",
+                          variant = "warning"),
+                component("text", value = "unreachable", variant = "danger")
+        )),
+                      notes = paste("the status trio colors from the theme's",
+                                    "semantic tokens; what the colors are is",
+                                    "the theme's decision")
+        ),
+                 list(
                       name = "heading",
                       component = component("heading", value = "Title", level = 1L),
                       notes = "level is 1..4, not a tag name"

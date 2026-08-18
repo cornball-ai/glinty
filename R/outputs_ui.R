@@ -6,9 +6,11 @@
 #' Create a text output slot
 #'
 #' @param id character output ID
-#' @param variant character "normal", "muted", "strong", "mono" or
-#'   "small". "mono" is for values that align by character: timecodes,
-#'   file listings, hashes. "small" is fine print
+#' @param variant character "normal", "muted", "strong", "heading",
+#'   "mono", "small", "success", "warning" or "danger". "mono" is for
+#'   values that align by character: timecodes, file listings, hashes.
+#'   "small" is fine print. The status trio colors the value from the
+#'   theme's semantic tokens -- the live health readout shape
 #' @return A UI component
 #' @examples
 #' text_output("greeting")

@@ -116,6 +116,8 @@ const Map<String, dynamic> glintyStockTheme = {
     'muted': '#6a6a6a',
     'border': '#d0d0d5',
     'danger': '#b3261e',
+    'success': '#1a7f37',
+    'warning': '#9a6700',
   },
   'dark': {
     'primary': '#6f95f5',
@@ -126,11 +128,43 @@ const Map<String, dynamic> glintyStockTheme = {
     'muted': '#9a9aa2',
     'border': '#3a3d45',
     'danger': '#e5484d',
+    'success': '#3fb950',
+    'warning': '#d29922',
   },
   'spacing': 4,
   'radius': 6,
   'font': {'body': 'system-ui', 'mono': 'ui-monospace', 'size': 16},
 };
+
+/// The status tokens Material's ColorScheme has no slots for.
+///
+/// `danger` maps onto `ColorScheme.error`; `success` and `warning`
+/// have no Material seat, so they ride a ThemeExtension and the text
+/// variants read them off Theme.of(context). glintyThemeData always
+/// installs one, defaulted from the stock palette for the scheme's
+/// brightness, so an unthemed app shows the same status colors the
+/// browser stylesheet ships.
+class GlintyStatusColors extends ThemeExtension<GlintyStatusColors> {
+  const GlintyStatusColors({required this.success, required this.warning});
+
+  final Color success;
+  final Color warning;
+
+  @override
+  GlintyStatusColors copyWith({Color? success, Color? warning}) =>
+      GlintyStatusColors(
+          success: success ?? this.success,
+          warning: warning ?? this.warning);
+
+  @override
+  GlintyStatusColors lerp(GlintyStatusColors? other, double t) {
+    if (other == null) return this;
+    return GlintyStatusColors(
+      success: Color.lerp(success, other.success, t) ?? success,
+      warning: Color.lerp(warning, other.warning, t) ?? warning,
+    );
+  }
+}
 
 ThemeData glintyThemeDataFor(
     Map<String, dynamic> theme, Brightness? brightness) {
@@ -168,6 +202,19 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
     outline: pick('border', base.outline),
   );
 
+  // success/warning fall back to the stock palette for this
+  // brightness rather than to a Material slot, because none exists.
+  final stockStatus = ((brightness == Brightness.dark
+          ? glintyStockTheme['dark']
+          : glintyStockTheme['colors']) as Map)
+      .cast<String, dynamic>();
+  final status = GlintyStatusColors(
+    success: pick('success',
+        glintyColor(stockStatus['success']) ?? scheme.primary),
+    warning: pick('warning',
+        glintyColor(stockStatus['warning']) ?? scheme.primary),
+  );
+
   final font = (theme['font'] as Map?)?.cast<String, dynamic>() ?? const {};
   final size = font['size'] is num ? (font['size'] as num).toDouble() : null;
 
@@ -183,6 +230,7 @@ ThemeData glintyThemeData(Map<String, dynamic> theme) {
 
   return ThemeData(
     colorScheme: scheme,
+    extensions: [status],
     scaffoldBackgroundColor: background,
     fontFamily: bodyStack.isEmpty ? null : bodyStack.first,
     fontFamilyFallback: bodyStack.length > 1 ? bodyStack.sublist(1) : null,

@@ -197,7 +197,9 @@ html_unsupported <- function(name) {
 html_text <- function(x) {
     cls <- c(normal = "g-text", muted = "g-text g-muted",
              strong = "g-text g-strong", heading = "g-text g-text-heading",
-             mono = "g-text g-mono", small = "g-text g-small")
+             mono = "g-text g-mono", small = "g-text g-small",
+             success = "g-text g-success", warning = "g-text g-warning",
+             danger = "g-text g-danger")
     html_el("span", list(class = unname(cls[[x$variant]]), id = x$id),
             html_escape(x$value))
 }
@@ -936,7 +938,8 @@ html_text_output <- function(x) {
     cls <- c(normal = "g-output", muted = "g-output g-muted",
              strong = "g-output g-strong",
              heading = "g-output g-text-heading", mono = "g-output g-mono",
-             small = "g-output g-small")
+             small = "g-output g-small", success = "g-output g-success",
+             warning = "g-output g-warning", danger = "g-output g-danger")
     html_el("span", c(html_slot(x), list(class = unname(cls[[x$variant]]))))
 }
 

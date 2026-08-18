@@ -9,8 +9,12 @@ txt(value, variant = "normal", id = NULL)
 \item{value}{character text to show}
 
 \item{variant}{character "normal", "muted", "strong", "heading",
-"mono" or "small". "mono" is for values that align by character:
-timecodes, file listings, hashes. "small" is fine print}
+"mono", "small", "success", "warning" or "danger". "mono" is for
+values that align by character: timecodes, file listings, hashes.
+"small" is fine print. The status trio colors the text from the
+theme's semantic tokens -- a pill that says healthy, degraded, or
+failing -- and stays semantic: what the colors are is the
+theme's decision}
 
 \item{id}{character element ID}
 }

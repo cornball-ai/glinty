@@ -8,9 +8,11 @@ text_output(id, variant = "normal")
 \arguments{
 \item{id}{character output ID}
 
-\item{variant}{character "normal", "muted", "strong", "mono" or
-"small". "mono" is for values that align by character: timecodes,
-file listings, hashes. "small" is fine print}
+\item{variant}{character "normal", "muted", "strong", "heading",
+"mono", "small", "success", "warning" or "danger". "mono" is for
+values that align by character: timecodes, file listings, hashes.
+"small" is fine print. The status trio colors the value from the
+theme's semantic tokens -- the live health readout shape}
 }
 \value{
 A UI component
