@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**A re-render never eats the sentence you are typing** (#79). The
+never-stomp contract now covers tree swaps: when a `ui` frame
+replaces a slot (or a modal replaces a modal) and the new subtree
+carries the field the user is focused in, the client preserves the
+live draft, caret and focus instead of resetting to the declared
+value. Unfocused fields take the new render, as ever, and a field
+the new tree drops takes its draft with it. Exists for the region
+re-rendered on a data tick with a composer inside -- the freshness
+poll that used to wipe half a thought every few seconds.
+
 **The status trio: `txt()` and `text_output()` say healthy, degraded,
 failing** (#78). Three new variants -- `success`, `warning`,
 `danger` -- coloring text from two new theme tokens (`success`,
