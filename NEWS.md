@@ -1,5 +1,35 @@
 # glinty (development version)
 
+**`data_table()`: the interactive table.** The same table value
+`table_output()` receives, plus client-side sorting, filtering and
+pagination. Interaction never touches the server; `align` doubles as
+the sort-type signal; a re-rendered value clamps the reader's page
+instead of resetting it. Browser and Flutter carry the same state
+machine.
+
+**`checkbox_group()`: the plural radio_buttons.** `selected` and
+every reported value are arrays at every length, `[]` included; the
+binding sits on the group's box, members carry only a marker.
+
+**`select_input(search = TRUE)`: a searchable select.** Typing
+filters the same closed choice list and only picking a real choice
+reports, so the value domain never widens to free text. Browser is a
+DOM-state combobox (adopted pages recover it whole); Flutter is
+`DropdownMenu(enableFilter:)`. Single-select only, by validation.
+
+**`session$on_flushed()`: run once, after the flush is delivered.**
+The deferred-expensive-render seam: paint placeholders, flip a
+reactive_val in the callback, and the real work happens after the
+placeholders reached the client. Sibling of `on_ended`.
+
+**An empty array from the wire is `character(0)`, not `NULL`.**
+Deselecting the last item of a multi select (or checkbox group) now
+leaves the server holding the same value it seeds for that state.
+
+**Gallery ports as living checks** (`sandbox/gallery/`, rounds 1-15
+of the shiny-examples sweep) plus conformance fixtures for every new
+component in both renderers.
+
 **`path_picker()`: a served file browser** (#47). Picks a directory
 or file on the machine running R, the job `file_input()` cannot do.
 The dialog is ordinary components in a modal -- breadcrumbs and one
