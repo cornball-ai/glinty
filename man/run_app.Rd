@@ -27,7 +27,11 @@ to 8080, so a scheduler-allocated port needs no plumbing.}
 sends in hello: NULL from the function refuses the connection,
 anything else becomes session$principal. NULL (the default)
 accepts every connection with no principal. See jwt_auth() for
-the JWT case.}
+the JWT case. A verifier declaring a second parameter is called
+as auth(token, req), where req is the parsed WebSocket upgrade
+request (method, path, query, headers with lower-cased names) --
+so a credential the page cannot read, such as an HttpOnly
+session cookie, is still visible to the verifier.}
 
 \item{origins}{character vector of page origins allowed to open
 the WebSocket, e.g. "https://app.example.com" (compared with

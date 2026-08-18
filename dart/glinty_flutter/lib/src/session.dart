@@ -196,6 +196,19 @@ class GlintySession {
   /// it -- the composer has focus at exactly that moment).
   final Map<String, int> clears = <String, int>{};
 
+  /// How many focus verbs each input has received, from
+  /// `input_update` frames carrying `focus: true`.
+  ///
+  /// Counted like [pushes] and [clears] -- a one-shot event a
+  /// stateful control answers once. Applied even when another field
+  /// is focused (moving the caret is not the hazard the never-stomp
+  /// guard refuses), and applied by a field BORN with a nonzero
+  /// count, because the tree swap and the focus for its composer
+  /// routinely arrive in one drain. The counter is dropped when the
+  /// input leaves the store, so a control reborn later does not
+  /// steal focus from an event that predates it.
+  final Map<String, int> focuses = <String, int>{};
+
   /// Bumped whenever the tree is replaced or the state is cleared.
   /// Widgets key off it so Flutter discards controllers and element
   /// state belonging to a tree that no longer exists.
@@ -271,6 +284,7 @@ class GlintySession {
       overrides.remove(key);
       pushes.remove(key);
       clears.remove(key);
+      focuses.remove(key);
       if (!seeds.containsKey(key)) inputs.remove(key);
     }
     _slotInputs[id] = seeds.keys.toSet();
@@ -545,6 +559,12 @@ class GlintySession {
             inputs[id] = msg['value'];
             pushes[id] = (pushes[id] ?? 0) + 1;
           }
+          // focus is a one-shot verb riding the same frame; counted
+          // apart from pushes because it applies under the opposite
+          // focus rule (see [focuses]).
+          if (msg['focus'] == true) {
+            focuses[id] = (focuses[id] ?? 0) + 1;
+          }
           // The rest of the update -- label, choices, bounds, step --
           // is not in the tree either: update_select_input() changes
           // the choices of a control the tree still describes with
@@ -678,6 +698,7 @@ class GlintySession {
       errors.clear();
       pushes.clear();
       clears.clear();
+      focuses.clear();
       uiValues.clear();
       feeds.clear();
       _slotInputs.clear();
@@ -739,6 +760,10 @@ class GlintySession {
       uiValues.clear();
       feeds.clear();
       _slotInputs.clear();
+      // A focus verb aimed at the old tree's field has no target in
+      // the new one; carrying the count over would have a reborn
+      // control steal focus from an event that predates the page.
+      focuses.clear();
     }
     // Invariant 2: nothing is emitted here. Adoption is not user
     // interaction, and the server built this tree, so it already knows

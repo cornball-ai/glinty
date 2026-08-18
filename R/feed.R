@@ -26,6 +26,13 @@
 #' reader is there, releases when they scroll up, and offers a way
 #' back down. `keep` bounds the window; older items fall off the top.
 #'
+#' A feed inside a dynamically rendered slot ([render_ui()]) loads
+#' its history from `session$on_flushed()`, not from inside the
+#' render: the shell must reach the client before a [feed_reset()]
+#' aimed at it means anything, and on_flushed fires exactly after the
+#' flush that carried the slot's tree has drained. One reset per slot
+#' render, appends between.
+#'
 #' @param id character feed ID
 #' @param keep integer items retained; the window shown and replayed
 #' @param grow integer flex-grow inside the parent, like column()

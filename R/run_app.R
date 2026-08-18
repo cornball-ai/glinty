@@ -58,7 +58,11 @@ app <- function(ui, server, theme = NULL) {
 #'   sends in hello: NULL from the function refuses the connection,
 #'   anything else becomes session$principal. NULL (the default)
 #'   accepts every connection with no principal. See jwt_auth() for
-#'   the JWT case.
+#'   the JWT case. A verifier declaring a second parameter is called
+#'   as auth(token, req), where req is the parsed WebSocket upgrade
+#'   request (method, path, query, headers with lower-cased names) --
+#'   so a credential the page cannot read, such as an HttpOnly
+#'   session cookie, is still visible to the verifier.
 #' @param origins character vector of page origins allowed to open
 #'   the WebSocket, e.g. "https://app.example.com" (compared with
 #'   default ports stripped), or "*" to disable the check. NULL (the
@@ -252,7 +256,7 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
         # The gate sits before any session exists, resume included: a
         # token that no longer verifies does not get its old session
         # back.
-        gate <- authenticate_hello(auth, first)
+        gate <- authenticate_hello(auth, first, upgrade_request_for(sid))
         if (!gate$ok) {
             refuse_conn(sid, "authentication failed")
             return(invisible(NULL))
