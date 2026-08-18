@@ -12,6 +12,7 @@ run_app(
   job_lanes = NULL,
   max_upload = 10485760L,
   check_secrets = TRUE,
+  api = NULL,
   quiet = FALSE
 )
 }
@@ -59,13 +60,34 @@ past it the job is refused with a reason. See run_job().}
 (default 10 MB). Bodies are buffered whole in memory before
 routing, so this is a memory ceiling as much as a policy one;
 raise it deliberately for apps that take audio or video.
-Oversized requests get a 413 without being read.}
+Oversized requests get a 413 without being read. Applies to api
+request bodies too.}
 
 \item{check_secrets}{logical refuse to start when the rendered page
 contains the value of a secret-looking environment variable (see
 env_secrets_in()). The usual cause is prefilling an input from
 Sys.getenv(), which publishes the secret to anyone who can fetch
 the page. Set FALSE only deliberately.}
+
+\item{api}{a function(method, path, body, query, principal)
+mounting an application JSON API on the same origin, or NULL
+(the default) for none. Consulted for any request the built-in
+routes do not own, every method: return
+`list(status =, body =)` for a JSON response (body is encoded
+with auto-unboxing), `list(status =, file =, content_type =)`
+for a binary response, add a named `headers` element for extras
+such as Set-Cookie or Location, or return NULL to fall through
+to glinty's own routing (a 404 for anything unclaimed). glinty
+decodes the request: `body` arrives as a named list parsed from
+JSON (NULL when absent or unparseable), `query` as a named list
+of decoded strings. `principal` is resolved per request by the
+same `auth` verifier that gates WebSocket sessions, fed the
+Authorization Bearer token (NULL when unauthenticated or auth is
+not configured -- the api function decides what an anonymous
+caller may do, since public routes like a ping are its
+business). Errors inside the function answer 500 with a generic
+body; the condition message goes to the server log, not the
+wire.}
 
 \item{quiet}{logical suppress the startup message}
 }
