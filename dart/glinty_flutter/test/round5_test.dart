@@ -2446,4 +2446,290 @@ void _ticketRefusals() {
     expect(s.tickets, isEmpty,
         reason: 'a refusal is not a credential');
   });
+
+  group('a stretch row measuring a grown flex (#53)', () {
+    // The blank-window bug: a stretch row wraps itself in
+    // IntrinsicHeight, a descendant flex with a grown child wrapped
+    // itself in a LayoutBuilder, and a LayoutBuilder cannot answer
+    // the intrinsics query the measurement is made of. The throw
+    // failed layout for the whole subtree, which paints as an empty
+    // window with no error on screen. Any uncaught layout exception
+    // fails these tests, so "the texts are on screen" is the whole
+    // assertion.
+    //
+    // The trigger needs the stretch row to be a STRICT ancestor of
+    // the grown flex. The flat form never threw -- the row's own
+    // LayoutBuilder sits outside its own IntrinsicHeight -- and it is
+    // pinned here because flat is the repro a regression test would
+    // naively use, and it passes on broken code.
+
+    testWidgets('nested: the depth>=1 shape that went blank',
+        (tester) async {
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Shell',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'column',
+                'children': [
+                  {
+                    'component': 'row',
+                    'children': [
+                      {
+                        'component': 'column',
+                        'grow': 1,
+                        'children': [
+                          {'component': 'text', 'value': 'left',
+                            'variant': 'normal'},
+                        ],
+                      },
+                      {
+                        'component': 'column',
+                        'children': [
+                          {'component': 'text', 'value': 'right',
+                            'variant': 'normal'},
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'side',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g1');
+      expect(find.text('left'), findsOneWidget);
+      expect(find.text('right'), findsOneWidget);
+      expect(find.text('side'), findsOneWidget);
+      // The inner row is the non-grown child of a column, which is
+      // itself the non-grown child of the stretch row: its width is
+      // unbounded, so the grown column must NOT get an Expanded --
+      // that is the crash on the other side of the blank window.
+      // flex-grow with nothing to divide does not grow, same as the
+      // browser.
+      expect(find.ancestor(of: find.text('left'),
+          matching: find.byType(Expanded)), findsNothing);
+    });
+
+    testWidgets('a declared width bounds a nested row, which then grows',
+        (tester) async {
+      // The chat-composer shape: a fixed-width panel under the
+      // stretch row, holding a row whose first child grows. The
+      // declared width bounds the inside, so refusing growth there
+      // (the safe answer for the unbounded case above) would be a
+      // regression: the composer field would shrink-wrap instead of
+      // taking the width the button leaves.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Composer',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'column',
+                'width': 340,
+                'children': [
+                  {
+                    'component': 'row',
+                    'children': [
+                      {
+                        'component': 'column',
+                        'grow': 1,
+                        'children': [
+                          {'component': 'text', 'value': 'composer',
+                            'variant': 'normal'},
+                        ],
+                      },
+                      {
+                        'component': 'column',
+                        'children': [
+                          {'component': 'text', 'value': 'send',
+                            'variant': 'normal'},
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g5');
+      expect(find.text('composer'), findsOneWidget);
+      expect(find.text('send'), findsOneWidget);
+      expect(find.ancestor(of: find.text('composer'),
+          matching: find.byType(Expanded)), findsOneWidget);
+    });
+
+    testWidgets('flat: the depth-0 shape that never broke stays working',
+        (tester) async {
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Flat',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'column',
+                'grow': 1,
+                'children': [
+                  {'component': 'text', 'value': 'left',
+                    'variant': 'normal'},
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'right',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g2');
+      expect(find.text('left'), findsOneWidget);
+      expect(find.text('right'), findsOneWidget);
+    });
+
+    testWidgets('an output slot rebuilding alone under the stretch row',
+        (tester) async {
+      // The mark lives in the element tree so that a slot updating by
+      // itself still sees it. Renderer state threaded through the
+      // build recursion would pass the two tests above and fail
+      // exactly here: the update rebuilds the slot without
+      // re-entering its ancestors, so anything remembered on the call
+      // stack is gone by the time the grown flex arrives.
+      final socket = await boot(tester, {
+        'component': 'page',
+        'title': 'Slot',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'ui_output', 'id': 'panel'},
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'side',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g3');
+      socket.deliver({
+        'type': 'output',
+        'id': 'panel',
+        'kind': 'ui',
+        'value': {
+          'component': 'row',
+          'children': [
+            {
+              'component': 'column',
+              'grow': 1,
+              'children': [
+                {'component': 'text', 'value': 'arrived',
+                  'variant': 'normal'},
+              ],
+            },
+          ],
+        },
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('arrived'), findsOneWidget);
+      expect(find.text('side'), findsOneWidget);
+    });
+  });
+
+  group('what the blank window was hiding', () {
+    // Fixing the intrinsics crash surfaced the next two build/layout
+    // exceptions in the same real app; either alone blanks the
+    // window just as thoroughly. Any uncaught exception fails these
+    // tests, so "the rest of the page is on screen" is the claim.
+
+    testWidgets('a table output with zero columns is an empty shell',
+        (tester) async {
+      // A server-side frame with no columns yet serializes as
+      // header: []. Material's DataTable asserts columns.isNotEmpty,
+      // and an assertion mid-build fails layout for everything above
+      // it. _GlintyDataTable guarded this; the plain table did not.
+      final socket = await boot(tester, {
+        'component': 'page',
+        'title': 'Tables',
+        'children': [
+          {'component': 'table_output', 'id': 't'},
+          {'component': 'text', 'value': 'after', 'variant': 'normal'},
+        ],
+      }, 'g6');
+      socket.deliver({
+        'type': 'output',
+        'id': 't',
+        'kind': 'table',
+        'value': {'header': [], 'rows': []},
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(DataTable), findsNothing);
+      expect(find.text('after'), findsOneWidget);
+    });
+
+    testWidgets('a collapse as the non-grown child of a row',
+        (tester) async {
+      // A row hands non-grown children unbounded width, and an
+      // ExpansionTile's ListTile forces its title to the incoming
+      // width -- w=Infinity, a layout error. The browser
+      // shrink-wraps a collapse there, so this client does too.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Folds',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Clips',
+                'children': [
+                  {'component': 'text', 'value': 'inside',
+                    'variant': 'normal'},
+                ],
+              },
+              {
+                'component': 'collapse',
+                'title': 'Selected',
+                'children': [
+                  {'component': 'text', 'value': 'other',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g7');
+      expect(find.text('Clips'), findsOneWidget);
+      expect(find.text('Selected'), findsOneWidget);
+    });
+  });
 }

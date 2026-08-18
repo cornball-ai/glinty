@@ -460,7 +460,20 @@ class GlintyRenderer {
       case 'image':
         return _staticImage(c);
       case 'collapse':
-        return _collapse(context, c);
+        // An ExpansionTile's ListTile must have a width to lay its
+        // title against, and a row hands non-grown children unbounded
+        // width. The browser shrink-wraps a collapse there;
+        // IntrinsicWidth is that -- and only there, because where
+        // width is bounded the tile fills it, which is also what the
+        // block-level div does. Sizing by intrinsics means the
+        // subtree gets the same no-LayoutBuilder mark a stretch row
+        // imposes, and the tight width it resolves to is recorded.
+        return Builder(builder: (context) {
+          final tile = _collapse(context, c);
+          if (_Bounds.maybeOf(context)?.width ?? true) return tile;
+          return IntrinsicWidth(
+              child: _UnderIntrinsics(child: _bounded(tile, width: true)));
+        });
       // page is never a flex child -- it is the root -- so it skips
       // the sizing wrapper the other three take.
       case 'page':
@@ -485,7 +498,8 @@ class GlintyRenderer {
         return _sized(
             c,
             c.boolean('scroll')
-                ? SingleChildScrollView(child: _column(context, c))
+                ? SingleChildScrollView(
+                    child: _bounded(_column(context, c), height: false))
                 : _column(context, c));
       case 'row':
         return _sized(c, _row(context, c));
@@ -774,8 +788,14 @@ class GlintyRenderer {
         out.add(row ? SizedBox(width: gap) : SizedBox(height: gap));
       }
       final grow = kids[i].integer('grow') ?? 0;
-      final child = build(context, kids[i]);
-      out.add(canGrow && grow > 0 ? Expanded(flex: grow, child: child) : child);
+      final grown = canGrow && grow > 0;
+      // Record what this flex gives the child: a tight main axis when
+      // grown, an unbounded one when not (a Flex measures non-flex
+      // children against infinity regardless of its own size). The
+      // cross axis passes through untouched.
+      final child = _bounded(build(context, kids[i]),
+          width: row ? grown : null, height: row ? null : grown);
+      out.add(grown ? Expanded(flex: grow, child: child) : child);
     }
     return out;
   }
@@ -788,6 +808,25 @@ class GlintyRenderer {
   /// When the axis is unbounded a grown child simply does not grow,
   /// which is what the browser does too -- flex-grow has nothing to
   /// divide when the container is auto-sized.
+  ///
+  /// EXCEPT under a stretch row, whose IntrinsicHeight makes the
+  /// LayoutBuilder itself the crash: the intrinsics pass walks the
+  /// subtree asking natural sizes, a LayoutBuilder cannot answer an
+  /// intrinsics query, and a subtree that fails layout paints
+  /// nothing -- a blank window with no error on screen. So the
+  /// stretch branch marks its subtree, and any flex under the mark
+  /// answers the question from [_Bounds] -- the record the
+  /// containers above kept while building -- instead of measuring.
+  /// Granting outright would be wrong: stretch does make height
+  /// tight, but a row sitting as the non-grown child of another flex
+  /// has unbounded WIDTH, and an Expanded there is the same crash in
+  /// different clothes.
+  ///
+  /// The check happens in a Builder rather than during this eager
+  /// recursion because the mark lives in the ELEMENT tree: an output
+  /// slot that rebuilds alone under the stretch row still sees it,
+  /// where a flag threaded through the recursion would have been
+  /// lost with the call stack.
   Widget _flex(BuildContext context, GlintyComponent c, bool row) {
     final gap = c.number('gap')?.toDouble() ?? 0;
     final wants = c.children.any((k) => (k.integer('grow') ?? 0) > 0);
@@ -812,15 +851,29 @@ class GlintyRenderer {
       // error when the row's own height is unbounded -- the usual case
       // inside a page column. IntrinsicHeight bounds it at the tallest
       // child, which is what the browser's align-items: stretch does.
-      return c.str('align') == 'stretch' ? IntrinsicHeight(child: made) : made;
+      // The marker sits INSIDE the IntrinsicHeight, so everything the
+      // intrinsics pass can reach knows not to interpose a
+      // LayoutBuilder; this row's own gate (below) stays outside it,
+      // which is why a flat stretch row with grown children was never
+      // broken.
+      return c.str('align') == 'stretch'
+          ? IntrinsicHeight(
+              child: _UnderIntrinsics(child: _bounded(made, height: true)))
+          : made;
     }
 
     // No grown child means no constraint to check, and no reason to
     // pay for a LayoutBuilder on every container in the tree.
     if (!wants) return make(false);
-    return LayoutBuilder(builder: (context, box) {
-      final bounded = row ? box.maxWidth.isFinite : box.maxHeight.isFinite;
-      return make(bounded);
+    return Builder(builder: (context) {
+      if (_UnderIntrinsics.present(context)) {
+        final b = _Bounds.maybeOf(context);
+        return make(row ? (b?.width ?? false) : (b?.height ?? false));
+      }
+      return LayoutBuilder(builder: (context, box) {
+        final bounded = row ? box.maxWidth.isFinite : box.maxHeight.isFinite;
+        return make(bounded);
+      });
     });
   }
 
@@ -1657,6 +1710,12 @@ class GlintyRenderer {
     final v = values[c.str('id')];
     if (v is! Map || v['header'] is! List) return const SizedBox.shrink();
     final header = (v['header'] as List).map((h) => h.toString()).toList();
+    // A zero-column table (a server-side frame with no columns yet)
+    // is an empty shell, like the browser's. Material's DataTable
+    // asserts columns.isNotEmpty, and an assertion thrown mid-build
+    // fails layout for everything above it -- _GlintyDataTable
+    // already guards this; the plain table must too.
+    if (header.isEmpty) return const SizedBox.shrink();
     // align marks numeric columns; DataColumn(numeric:) is
     // Material's own right-alignment for them
     final align =
@@ -1753,7 +1812,10 @@ class GlintyRenderer {
   Widget _sized(GlintyComponent c, Widget child) {
     final width = c.integer('width');
     if (width == null) return child;
-    return SizedBox(width: width.toDouble(), child: child);
+    // A declared width bounds the inside even where the outside was
+    // not -- a fixed-width panel sitting shrink-wrapped in a row.
+    return SizedBox(
+        width: width.toDouble(), child: _bounded(child, width: true));
   }
 
   /// A picture that is part of the UI, not an output.
@@ -1950,7 +2012,11 @@ class GlintyRenderer {
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.only(bottom: spacing * 2),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        children: c.children.map((k) => build(context, k)).toList(),
+        // The tile shrink-wraps its children: unbounded height inside,
+        // whatever held outside.
+        children: c.children
+            .map((k) => _bounded(build(context, k), height: false))
+            .toList(),
       );
 
   /// A plot: the client picks the size, the server draws to it.
@@ -2065,8 +2131,74 @@ class GlintyRenderer {
       );
 }
 
-/// A text field that keeps its controller across rebuilds.
+/// Marks the subtree a stretch row measures through IntrinsicHeight.
 ///
+/// A flex that finds this above itself answers its grow question from
+/// [_Bounds] instead of interposing a LayoutBuilder, because a
+/// LayoutBuilder cannot answer the intrinsics query the measurement
+/// is made of -- it throws, and the whole subtree paints nothing. See
+/// _flex.
+///
+/// An InheritedWidget rather than renderer state on purpose: the mark
+/// must survive partial rebuilds (an output slot updating alone under
+/// the stretch row), and only the element tree remembers ancestry
+/// across those.
+class _UnderIntrinsics extends InheritedWidget {
+  const _UnderIntrinsics({required super.child});
+
+  static bool present(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_UnderIntrinsics>() != null;
+
+  @override
+  bool updateShouldNotify(covariant InheritedWidget oldWidget) => false;
+}
+
+/// Whether the incoming constraints are finite on each axis, recorded
+/// at build time by the containers that decide it.
+///
+/// Under a stretch row a LayoutBuilder is off the table (see
+/// [_UnderIntrinsics]), so a flex that wants to grow a child must
+/// know its main axis is bounded without measuring. It can, because
+/// every boundedness transition in the vocabulary is made by a
+/// container this renderer builds: a Flex hands non-grown children an
+/// unbounded main axis and grown ones a tight one, a scroll view and
+/// a collapse un-bound height, a declared width bounds width, and the
+/// stretch row's own IntrinsicHeight bounds height. Each writes what
+/// it did here, and the grow gate reads the nearest record.
+///
+/// Inherited for the same reason the marker is: an output slot
+/// rebuilding alone must still see it.
+class _Bounds extends InheritedWidget {
+  const _Bounds(
+      {required this.width, required this.height, required super.child});
+
+  /// True when the incoming max extent on that axis is finite.
+  final bool width;
+  final bool height;
+
+  static _Bounds? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_Bounds>();
+
+  @override
+  bool updateShouldNotify(_Bounds oldWidget) =>
+      width != oldWidget.width || height != oldWidget.height;
+}
+
+/// Records a boundedness transition, inheriting the axis the caller
+/// leaves unset. Inheriting means reading the previous record, which
+/// needs a context BELOW it -- the eager recursion's [BuildContext]
+/// is above the whole subtree being built -- hence the Builder.
+Widget _bounded(Widget child, {bool? width, bool? height}) =>
+    Builder(builder: (context) {
+      final b = _Bounds.maybeOf(context);
+      return _Bounds(
+          // The defaults at the root, consulted only above the first
+          // record: a window is finite, and a page scrolls.
+          width: width ?? b?.width ?? true,
+          height: height ?? b?.height ?? false,
+          child: child);
+    });
+
 /// The renderer is stateless by design -- it turns a tree into
 /// widgets and holds nothing. A text field cannot be: it owns a
 /// controller and a selection, and rebuilding it from a fresh
