@@ -470,7 +470,19 @@ class GlintyRenderer {
       // the sizing wrapper the other three take.
       case 'page':
         {
-          if (c.str('width') == 'full') return _column(context, c);
+          // Both variants scroll: the page is what scrolls in the
+          // browser too. Full keeps workspace density -- every pixel
+          // of width, .g-page-full's tighter padding -- while the
+          // default is the centered reading column below. The height
+          // record says what a scroll view always means: unbounded,
+          // so grown children at page level stop growing, which is
+          // what flex-grow against an auto-height page does.
+          if (c.str('width') == 'full') {
+            return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                    spacing * 3, spacing * 2, spacing * 3, spacing * 3),
+                child: _bounded(_column(context, c), height: false));
+          }
           // The browser's reading column (.g-page: 760px, centered,
           // padded, the page is what scrolls). Width is tightened to
           // the cap so the column fills it the way the CSS box does,
@@ -884,7 +896,7 @@ class GlintyRenderer {
           // start alignment
           crossAxisAlignment:
               fill ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
-          mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+          mainAxisSize: canGrow ? MainAxisSize.max : MainAxisSize.min,
           children: [
             if (title != null)
               Padding(
@@ -895,13 +907,18 @@ class GlintyRenderer {
             ..._spaced(context, c.children, 0, false, canGrow: canGrow),
           ],
         );
-    // No LayoutBuilder gate here, unlike _flex: a filled panel's
-    // natural home is a stretched row, which measures its children
-    // through IntrinsicHeight -- and a LayoutBuilder cannot answer an
-    // intrinsics query. So fill grants Expanded outright. A filled
-    // panel in an unbounded spot is a layout error by definition:
-    // there is no height to hand over.
-    final body = makeBody(fill);
+    // Fill grants Expanded -- where there is height to hand over. No
+    // LayoutBuilder gate here, unlike _flex: a filled panel's natural
+    // home is a stretched row, which measures its children through
+    // IntrinsicHeight, and a LayoutBuilder cannot answer an
+    // intrinsics query. The _Bounds record can: where it says height
+    // is unbounded (a scrolling page), the panel degrades to content
+    // size, which is what the browser's flex column does in a
+    // scrolling body -- and what this used to answer with a crash,
+    // "a layout error by definition".
+    final body = Builder(
+        builder: (context) =>
+            makeBody(fill && (_Bounds.maybeOf(context)?.height ?? true)));
     final variant = _variant('panel', c.str('variant'));
     if (variant == 'card') {
       return Card(child: Padding(padding: const EdgeInsets.all(12), child: body));

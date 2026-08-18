@@ -2857,4 +2857,97 @@ void _ticketRefusals() {
       expect(find.text('Canvas'), findsOneWidget);
     });
   });
+
+  group('a full-width page scrolls (#63)', () {
+    testWidgets('content taller than the window scrolls instead of '
+        'overflowing', (tester) async {
+      // Pre-fix this was a RenderFlex overflow -- an exception in
+      // tests, a yellow stripe on screen -- because width="full"
+      // returned the bare column while only the centered variant
+      // scrolled. The page is what scrolls in the browser, both
+      // variants.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Tall',
+        'width': 'full',
+        'children': [
+          for (var i = 0; i < 80; i++)
+            {'component': 'text', 'value': 'line $i', 'variant': 'normal'},
+        ],
+      }, 'g12');
+      expect(find.text('line 0'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+    });
+
+    testWidgets('a fill panel at page level degrades to content size',
+        (tester) async {
+      // A scroll view has no height to hand over. Fill used to answer
+      // that spot with a crash ("a layout error by definition"); with
+      // the height record present it degrades to content size, which
+      // is what the browser's flex column does in a scrolling body.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Degraded',
+        'width': 'full',
+        'children': [
+          {
+            'component': 'panel',
+            'fill': true,
+            'children': [
+              {'component': 'text', 'value': 'still here',
+                'variant': 'normal'},
+            ],
+          },
+        ],
+      }, 'g13');
+      expect(find.text('still here'), findsOneWidget);
+    });
+
+    testWidgets('the stretch shell inside a scrolling page keeps filling',
+        (tester) async {
+      // The scroll view un-bounds height, but the stretch row bounds
+      // it again inside: a grown column in a fill panel there must
+      // still get its Expanded, or every workspace shell would go
+      // content-sized the moment the page learned to scroll.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Shell',
+        'width': 'full',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'panel',
+                'fill': true,
+                'grow': 1,
+                'children': [
+                  {
+                    'component': 'column',
+                    'grow': 1,
+                    'children': [
+                      {'component': 'text', 'value': 'log',
+                        'variant': 'normal'},
+                    ],
+                  },
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'side',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g14');
+      expect(find.text('log'), findsOneWidget);
+      expect(find.text('side'), findsOneWidget);
+      expect(find.ancestor(of: find.text('log'),
+          matching: find.byType(Expanded)), findsWidgets);
+    });
+  });
 }
