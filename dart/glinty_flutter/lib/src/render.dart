@@ -2378,12 +2378,20 @@ class _GlintyFeedState extends State<_GlintyFeed> {
   final ScrollController _scroll = ScrollController();
   bool _stuck = true;
   bool _fresh = false;
-  late int _seen = widget.tick;
+  late int _seen;
 
   @override
   void initState() {
     super.initState();
+    // eagerly: a `late` field initialises on first ACCESS, which
+    // happens inside didUpdateWidget -- by then `widget` is the new
+    // one, so _seen would equal the incoming tick and swallow it
+    // (the same trap _GlintyTextFieldState documents for pushes)
+    _seen = widget.tick;
     _scroll.addListener(_onScroll);
+    // a state born with items in the window starts at the bottom --
+    // the boot-history case: the reset arrived before the first build
+    if (widget.items.isNotEmpty) _pin();
   }
 
   @override

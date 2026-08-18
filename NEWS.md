@@ -1,5 +1,17 @@
 # glinty (development version)
 
+**`feed()`: the scrolling log** (#58). A shell in the tree that its
+own frame type fills item by item -- `feed_append()`,
+`feed_patch()` (rewrite the newest: token streaming), and
+`feed_reset()` (history, clearing) -- instead of re-rendering a
+transcript per line. The server holds the window, bounded by
+`keep` (default 200), and every message carries the effective bound;
+resume replays one reset with the current window. Clients own the
+scroll under the stick contract: pinned at the bottom, released on
+scroll-up with a "↓ Latest" chip back, and trim never shifts an
+unstuck reader's view. In a bounded spot the feed scrolls; on a
+plain page it shrink-wraps and the page does.
+
 **`clear_on`: emitting a named event empties the composer** (#60).
 `textarea_input("draft", clear_on = "send")` clears the field
 client-side when this client emits `send` -- after the event frame,
