@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**`update_text_input(focus =)`: the server can hand focus to a
+field** (#71). A one-shot verb riding `input_update`: spent on
+arrival, never re-applied, and honored even when another control is
+focused -- moving the caret is not the hazard the never-stomp guard
+refuses. Exists for the composer that should be ready to type into
+after the server swaps its region; sequence it with
+`session$on_flushed()` so the verb follows the tree it aims at.
+feed()'s docs now state the same on_flushed pattern for history
+loads inside `render_ui`.
+
 **Cookie-visible auth: a verifier can see the upgrade request** (#73).
 `run_app(auth = )` still takes a `function(token)`; a verifier that
 declares a second parameter is now called as `auth(token, req)`,

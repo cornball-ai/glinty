@@ -6,18 +6,33 @@
 #' skips the value patch when the element has focus, so it never
 #' stomps live typing.
 #'
+#' `focus = TRUE` moves the keyboard focus to this field on arrival.
+#' It is a one-shot verb, not state: focus lives in no tree, so the
+#' message says "focus it now" and is spent. It applies even when some
+#' other field is focused -- moving the caret is not the hazard the
+#' never-stomp guard exists for (rewriting a draft is), and the app
+#' asking to move the user's attention is the point. The case this
+#' exists for: a composer that should be ready to type into after the
+#' server swaps the layout, where the rebuilt DOM dropped focus with
+#' the old tree.
+#'
 #' @param session a glinty_session
 #' @param id character input ID
 #' @param value character new value (NULL leaves it alone)
 #' @param label character new label text (NULL leaves it alone)
+#' @param focus logical move keyboard focus to this field (FALSE sends
+#'   nothing; there is no "unfocus" verb)
 #' @return invisible(NULL)
 #' @examples
 #' \dontrun{
 #' update_text_input(session, "name", value = "Troy")
+#' update_text_input(session, "draft", focus = TRUE)
 #' }
 #' @export
-update_text_input <- function(session, id, value = NULL, label = NULL) {
-    send_input_update(session, id, list(value = value, label = label),
+update_text_input <- function(session, id, value = NULL, label = NULL,
+                              focus = FALSE) {
+    send_input_update(session, id,
+                      list(value = value, label = label, focus = if (isTRUE(focus)) TRUE),
                       sync_value = value)
 }
 

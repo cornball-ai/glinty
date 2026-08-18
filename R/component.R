@@ -172,8 +172,7 @@ COMPONENT_SCHEMA <- list(
                                       # inside whatever it gets, and a fixed
                                       # height would hold the panel tall when
                                       # its content is short.
-                                      max_height = field("int", min = 1,
-                                                         max = 4096),
+                                      max_height = field("int", min = 1, max = 4096),
                                       # The panel becomes a column that hands
                                       # its height to its children, so one of
                                       # them can grow and scroll. Without it a
