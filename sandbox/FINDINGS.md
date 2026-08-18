@@ -553,6 +553,26 @@ DX note for later: session methods (`on_ended`, now `on_flushed`,
 `flush_now`) are documented only in source comments — there is no
 ?glinty_session for app authors to find them.
 
+## Round 15: Layout pair (shiny-examples 015-sidebar + 015-navbar, 2026-08-17)
+
+Both 015s in one app, because each alone is a fragment. Zero
+framework changes — the sixth such round.
+
+- **sidebar-right is child order.** Shiny needs
+  `sidebarLayout(position = "right")`; glinty's row() already says
+  where things are by where they are. The check pins it as a
+  lowering fact: the plot slot lowers before the sidebar panel.
+- **navbarPage ports as tabset on a full-width page.** Same
+  navigation, in-page chrome. The real distinction — top-level
+  window chrome with a brand bar vs a tabset in the page flow — is
+  left open in the gap table on purpose: the example is three empty
+  tabPanels, which is not enough signal to design chrome against.
+  A consumer app that actually wants a navbar should drive it.
+
+Live: full-width page, tab strip, right-hand slider sidebar,
+histogram at measured full width; tab swap is pure visibility (zero
+re-renders, pinned in-process).
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
