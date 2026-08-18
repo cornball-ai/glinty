@@ -1,5 +1,17 @@
 # glinty (development version)
 
+**`run_app(api = )`: mount an application JSON API on the same
+origin** (#72). One pure function --
+`(method, path, body, query, principal) -> list(status, body | file,
+headers)` -- and glinty owns the wire: JSON decode/encode, the query
+string, binary file answers, extra headers (Set-Cookie, Location),
+and a per-request `principal` from the same `auth` verifier that
+gates WebSocket sessions. NULL falls through to glinty's own
+routing, so path ownership stays with the app and existing clients
+keep their bare roots. An app whose domain layer also serves
+non-glinty clients no longer needs a second hand-rolled HTTP server
+on a second port.
+
 **`panel(max_height =)`: the vertical bound a monitor panel needs**
 (#44). A cap, not a fixed size: shorter content keeps its height,
 taller content scrolls -- except media inside `fill = TRUE`, which
