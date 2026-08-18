@@ -282,6 +282,30 @@ Infrastructure learned the hard way this round:
   reach the option list. form_input (or keyboard) is the way to
   drive a select_input in the HTML frontend.
 
+## Round 7: More Widgets (shiny-examples 007, 2026-08-17)
+
+The dataset viewer whose outputs move only on Update View. **First
+round that needed zero framework changes** — the port is
+vocabulary and semantics glinty already had:
+
+- Shiny's `eventReactive(input$update, ..., ignoreNULL = FALSE)`
+  composes as a reactive_val written by
+  `observe_event(ignore_init = FALSE, ignore_null = FALSE)`: the
+  handler body already runs under isolate(), so reading the select
+  inside adds no dependency, and ignore_init = FALSE computes the
+  boot value. `isolate(input$obs())` gates the row count exactly as
+  the original's isolate() does.
+- helpText is txt(variant = "muted"), as the gap table predicted.
+- In-process check pins the negative space: select + number changes
+  re-render nothing; the press applies both; obs stays isolated
+  after the first press.
+- Live (HTML): pressure + 5 typed while outputs held rock + 10;
+  one press swapped summary and table together. Flutter viewer
+  reconnected across the app swap (welcome + outputs in trace) and
+  a canvas pixel probe confirmed it painting text and the filled
+  button; blob-returning captures stay DLP-blocked, so numeric
+  probes are the unit for viewer liveness now.
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
