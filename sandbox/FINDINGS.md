@@ -336,6 +336,41 @@ exists. Zero framework changes again.
   the tell). A recreated tab captured fine immediately. Recreate,
   don't rehabilitate.
 
+## Round 9: Downloading Data (shiny-examples 010, 2026-08-17)
+
+The dataset-download app, plus the round's real work: **the viewer
+now wires both transfer seams** (web leg), so file_input and
+download_button stop refusing there.
+
+- **Port**: line for line again, with one DX divergence worth
+  stating: glinty's download_handler(session, id, filename,
+  content) registers on the session by id rather than assigning
+  into output$ -- the press IS the transfer, so there is no output
+  value to hold. filename= and content= both read inputs at
+  redemption time (the served name tracks the select).
+- **In-process check covers the whole ticket path**: 200 with
+  content-disposition naming the current dataset, correct CSV
+  body, filename following a select change, and a spent ticket
+  refusing with 403 (one-shot).
+- **Viewer wiring** (sandbox/flutter-viewer): a conditional-import
+  pair -- transfer_web.dart drives a transient <input type=file>
+  and posts multipart to await request.target(); downloads are an
+  anchor click, a top-level navigation that works cross-origin
+  where an XHR would need CORS. transfer_stub.dart keeps native
+  refusing by name (a dialog plugin the viewer does not take on).
+  Live proof: the Download button renders ENABLED in the viewer --
+  unwired it names the gap -- beside the same rock table as the
+  browser. Cross-origin note: the viewer's upload POST (8492 ->
+  8490) will need CORS on the upload endpoint before that leg can
+  land files; the download anchor path has no such constraint.
+- **Not pressed live**: actually saving a file is a download
+  action gated on explicit permission -- the ticket path is fully
+  proven in-process; the live click is Troy's to try.
+- The CanvasKit capture freeze reproduced on a hard reload and
+  once more on a fresh tab mid-boot; the recreate-don't-
+  rehabilitate rule held both times (second fresh tab captured
+  fine).
+
 ## Framework DX finding
 
 3. **A server function with the wrong argument order fails silently.**
