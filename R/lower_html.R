@@ -88,10 +88,35 @@ component_to_html <- function(x) {
                                         list(class = "g-ui-output"))),
            tabset = html_tabset(x),
            conditional_panel = html_conditional(x),
+           feed = html_feed(x),
            shortcut = html_shortcut(x),
            raw_html = x$html,
            html_unsupported(x$component)
     )
+}
+
+#' The feed shell: an empty scroller the messages fill
+#'
+#' Items live in .g-feed-items; the jump button sits after them and
+#' sticks to the bottom edge of the scroller, hidden until the reader
+#' scrolls away from the bottom while items arrive. data-g-keep is the
+#' declaration; the effective bound rides every feed message, which is
+#' what the client trims by.
+#'
+#' @param x the component
+#' @return character HTML
+#' @keywords internal
+html_feed <- function(x) {
+    html_el("div",
+            list(class = paste(c("g-feed", if (html_is_sized(x)) "g-sized"),
+                               collapse = " "),
+                 id = x$id,
+                 "data-g-keep" = x$keep,
+                 style = html_flex_style(x)),
+            paste0(html_el("div", list(class = "g-feed-items")),
+                   html_el("button",
+                           list(type = "button", class = "g-feed-jump", hidden = "hidden"),
+                           html_escape("↓ Latest"))))
 }
 
 #' A key binding, lowered to a hidden marker the client binds from

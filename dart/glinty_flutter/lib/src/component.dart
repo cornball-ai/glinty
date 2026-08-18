@@ -134,3 +134,19 @@ enum GlintyEmit {
   static GlintyEmit parse(String? raw) =>
       raw == 'settle' ? GlintyEmit.settle : GlintyEmit.live;
 }
+
+/// One feed's held window: the session writes it from feed messages,
+/// the feed widget reads it.
+///
+/// [tick] counts messages so a stateful widget can tell one from the
+/// next -- a patch changes no length and a repeated append changes no
+/// content, so neither is visible any other way. [lastOp] says what
+/// the latest message did, because the ops pin differently: a reset
+/// pins to the bottom unconditionally (a fresh read), an append only
+/// while the reader was already there.
+class GlintyFeedState {
+  GlintyFeedState();
+  final List<GlintyComponent> items = <GlintyComponent>[];
+  int tick = 0;
+  String lastOp = '';
+}

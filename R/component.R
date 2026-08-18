@@ -62,6 +62,10 @@ field <- function(type, required = FALSE, default = NULL, values = NULL,
          values = values, min = min, max = max)
 }
 
+#' Default feed window, shared by the schema and the server-side log
+#' @keywords internal
+FEED_KEEP_DEFAULT <- 200L
+
 #' Component field schemas
 #'
 #' Every component's fields, with types, bounds and defaults.
@@ -384,6 +388,27 @@ COMPONENT_SCHEMA <- list(
                          # Browser-only, like tag(): raw markup has no widget equivalent.
                          html_output = list(id = field("string", required = TRUE)),
                          ui_output = list(id = field("string", required = TRUE)),
+
+                         # A server-fed item log: feed_append() adds one item
+                         # without resending the rest, feed_patch() rewrites
+                         # the newest (token streaming), feed_reset() replaces
+                         # the window (history load, resume replay). Items are
+                         # ordinary component trees. Starts empty on purpose:
+                         # the server's log is the one source of what a feed
+                         # holds, so there is no children field to disagree
+                         # with it. `keep` bounds the window; every feed
+                         # message carries the effective value, so no client
+                         # reads it from a second place at runtime. The feed
+                         # owns its scroll (stick to bottom while the reader
+                         # is there, release on scroll-up, offer a way back),
+                         # because apps hand-rolling that each get it subtly
+                         # wrong.
+                         feed = list(
+                                     id = field("string", required = TRUE),
+                                     keep = field("int", default = FEED_KEEP_DEFAULT, min = 1),
+                                     grow = field("int"),
+                                     width = field("int")
+    ),
 
                          # composite layout
                          tabset = list(

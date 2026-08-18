@@ -24,7 +24,7 @@ import 'component.dart';
 /// know draws a visible placeholder naming it.
 const supportedComponents = <String>{
   'text', 'heading', 'link', 'icon', 'divider', 'spacer',
-  'page', 'row', 'column', 'panel',
+  'page', 'row', 'column', 'panel', 'feed',
   'text_input', 'password_input', 'textarea_input', 'number_input',
   'select_input', 'checkbox_input', 'checkbox_group', 'radio_buttons',
   'slider_input', 'range_slider', 'button', 'download_button',
@@ -273,6 +273,7 @@ class GlintyRenderer {
       this.inputs = const {},
       this.pushes = const {},
       this.clears = const {},
+      this.feeds = const {},
       this.overrides = const {},
       this.condition,
       this.spacing = 4,
@@ -379,6 +380,11 @@ class GlintyRenderer {
   /// field, a clear applies regardless -- it is causally the user's
   /// own emit, and the composer has focus at exactly that moment.
   final Map<String, int> clears;
+
+  /// Each feed's held window, written by the session from feed
+  /// messages. The widget reads items plus the tick/lastOp pair that
+  /// tells one message from the next.
+  final Map<String, GlintyFeedState> feeds;
 
   /// Latest value per output id, as delivered by `output` messages.
   final Map<String, dynamic> values;
@@ -520,6 +526,8 @@ class GlintyRenderer {
                 ? SingleChildScrollView(
                     child: _bounded(_column(context, c), height: false))
                 : _column(context, c));
+      case 'feed':
+        return _sized(c, _feed(context, c));
       case 'row':
         return _sized(c, _row(context, c));
       case 'panel':
@@ -1869,6 +1877,32 @@ class GlintyRenderer {
             child: _UnderIntrinsics(child: _bounded(child, width: true)));
       });
 
+  /// The feed: a server-fed item log that owns its scroll.
+  ///
+  /// Items come from the session's feed store, never the tree -- the
+  /// tree only places the shell. Each item is an ordinary component
+  /// build wearing the record a scroller implies (width bounded by
+  /// the viewport, height its own), so a grown flex inside an item
+  /// answers its gate correctly. Where the feed's own height record
+  /// says unbounded (a plain page), it shrink-wraps and the page
+  /// scrolls, stick logic inert -- the browser's .g-feed does the
+  /// same, since overflow never triggers without a bound.
+  Widget _feed(BuildContext context, GlintyComponent c) {
+    final id = c.str('id')!;
+    final st = feeds[id];
+    final items = <Widget>[
+      for (final it in st?.items ?? const <GlintyComponent>[])
+        _bounded(build(context, it), width: true, height: false),
+    ];
+    return _GlintyFeed(
+      key: Key(id),
+      tick: st?.tick ?? 0,
+      lastOp: st?.lastOp ?? '',
+      gap: spacing * 2,
+      items: items,
+    );
+  }
+
   /// A picture that is part of the UI, not an output.
   ///
   /// Same decoding as an `image` output value -- data: and http(s),
@@ -2310,6 +2344,144 @@ class _RenderIntrinsicAnswer extends RenderProxyBox {
 
   @override
   double computeMaxIntrinsicHeight(double width) => answerHeight ?? 0;
+}
+
+/// The feed's scroller, chip, and stick state.
+///
+/// Stateful for the same reason a text field is: the scroll position
+/// and whether the reader left the bottom are the user's, and a
+/// rebuild must not take them back. The contract, shared with the
+/// browser client: pinned to the bottom while the reader is there
+/// (an append keeps the pin, a patch keeps it through streamed
+/// growth), released the moment they scroll up, a reset pins
+/// unconditionally, and items arriving while unpinned show the way
+/// back down instead of yanking the page.
+class _GlintyFeed extends StatefulWidget {
+  const _GlintyFeed({
+    super.key,
+    required this.tick,
+    required this.lastOp,
+    required this.gap,
+    required this.items,
+  });
+
+  final int tick;
+  final String lastOp;
+  final double gap;
+  final List<Widget> items;
+
+  @override
+  State<_GlintyFeed> createState() => _GlintyFeedState();
+}
+
+class _GlintyFeedState extends State<_GlintyFeed> {
+  final ScrollController _scroll = ScrollController();
+  bool _stuck = true;
+  bool _fresh = false;
+  late int _seen;
+
+  @override
+  void initState() {
+    super.initState();
+    // eagerly: a `late` field initialises on first ACCESS, which
+    // happens inside didUpdateWidget -- by then `widget` is the new
+    // one, so _seen would equal the incoming tick and swallow it
+    // (the same trap _GlintyTextFieldState documents for pushes)
+    _seen = widget.tick;
+    _scroll.addListener(_onScroll);
+    // a state born with items in the window starts at the bottom --
+    // the boot-history case: the reset arrived before the first build
+    if (widget.items.isNotEmpty) _pin();
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    // within a hair of the bottom counts as at it: fractional device
+    // pixels make exact equality flap (the browser uses the same
+    // tolerance)
+    final pos = _scroll.position;
+    final atBottom = pos.pixels >= pos.maxScrollExtent - 4;
+    if (atBottom == _stuck && !(atBottom && _fresh)) return;
+    setState(() {
+      _stuck = atBottom;
+      if (atBottom) _fresh = false;
+    });
+  }
+
+  void _pin() {
+    _stuck = true;
+    _fresh = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_GlintyFeed old) {
+    super.didUpdateWidget(old);
+    if (widget.tick == _seen) return;
+    _seen = widget.tick;
+    if (widget.lastOp == 'reset' || _stuck) {
+      _pin();
+    } else if (widget.lastOp == 'append') {
+      _fresh = true;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // A viewport cannot answer an intrinsics query, and a feed
+    // contributes nothing to measurement anyway -- it is a filler.
+    // The record decides the mode: bounded height scrolls here,
+    // unbounded shrink-wraps and lets the page scroll.
+    final bounded = _Bounds.maybeOf(context)?.height ?? false;
+    final children = <Widget>[
+      for (var i = 0; i < widget.items.length; i++) ...[
+        if (i > 0) SizedBox(height: widget.gap),
+        widget.items[i],
+      ],
+    ];
+    if (!bounded) {
+      return _IntrinsicAnswer(
+          child: ListView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: children));
+    }
+    final list = _IntrinsicAnswer(
+        child: ListView(controller: _scroll, children: children));
+    return Stack(children: [
+      list,
+      if (_fresh)
+        Positioned(
+          bottom: widget.gap,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Material(
+              elevation: 2,
+              borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () => setState(_pin),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  child: Text('↓ Latest'),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ]);
+  }
 }
 
 /// The renderer is stateless by design -- it turns a tree into
