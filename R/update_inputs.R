@@ -32,8 +32,7 @@
 update_text_input <- function(session, id, value = NULL, label = NULL,
                               focus = FALSE) {
     send_input_update(session, id,
-                      list(value = value, label = label,
-                           focus = if (isTRUE(focus)) TRUE),
+                      list(value = value, label = label, focus = if (isTRUE(focus)) TRUE),
                       sync_value = value)
 }
 
