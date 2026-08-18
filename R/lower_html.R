@@ -446,7 +446,11 @@ html_select <- function(x) {
 # real option changes the value.
 html_combo <- function(x) {
     chosen <- if (is.null(x$selected)) {
-        if (length(x$choices) == 0L) "" else x$choices[[1L]]$value
+        if (length(x$choices) == 0L) {
+            ""
+        } else {
+            x$choices[[1L]]$value
+        }
     } else {
         x$selected
     }
@@ -457,24 +461,22 @@ html_combo <- function(x) {
         }
     }
     opts <- paste(vapply(x$choices, function(ch) {
-        html_el("div", list(class = "g-combo-option",
-                            "data-g-value" = ch$value),
+        html_el("div",
+                list(class = "g-combo-option", "data-g-value" = ch$value),
                 html_escape(ch$label))
     }, character(1L)), collapse = "")
     inner <- paste0(
-        html_el("input", list(type = "text",
-                              class = "g-input g-combo-input",
-                              role = "combobox",
-                              "aria-expanded" = "false",
-                              autocomplete = "off",
-                              value = lab), void = TRUE),
-        html_el("div", list(class = "g-combo-list", hidden = "hidden"),
-                paste0(opts,
-                       html_el("div", list(class = "g-combo-empty",
-                                           hidden = "hidden"),
-                               "No matches"))))
-    box <- c(html_bind(x),
-             list(class = "g-combo", "data-g-selected" = chosen))
+                    html_el("input", list(type = "text",
+                class = "g-input g-combo-input",
+                role = "combobox",
+                "aria-expanded" = "false",
+                autocomplete = "off",
+                value = lab), void = TRUE),
+                    html_el("div", list(class = "g-combo-list", hidden = "hidden"),
+                            paste0(opts,
+                                   html_el("div", list(class = "g-combo-empty", hidden = "hidden"),
+                    "No matches"))))
+    box <- c(html_bind(x), list(class = "g-combo", "data-g-selected" = chosen))
     html_field_group(x, html_el("div", box, inner))
 }
 

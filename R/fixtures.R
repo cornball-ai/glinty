@@ -156,8 +156,7 @@ component_fixtures <- function() {
                  list(
                       name = "select-search",
                       component = component("select_input", id = "state",
-                choices = c(Alabama = "AL", Alaska = "AK",
-                        Arizona = "AZ"),
+                choices = c(Alabama = "AL", Alaska = "AK", Arizona = "AZ"),
                 search = TRUE, selected = "AK"),
                       notes = paste("a combobox over the same closed choices:",
                                     "typing filters, only a real choice",
