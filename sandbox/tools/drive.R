@@ -29,7 +29,10 @@ drive_measure <- function(d, id, width, height, dpr = 1) {
 }
 
 drive_input <- function(d, id, value) {
-    glinty:::handle_input(d$session, id, value)
+    # Through normalize_value like the live dispatch (protocol.R), or
+    # the harness feeds raw lists where the server never sees them --
+    # which is how a NULL-vs-character(0) seam stayed hidden.
+    glinty:::handle_input(d$session, id, glinty:::normalize_value(value))
     glinty::flush_reactions()
     invisible(d)
 }

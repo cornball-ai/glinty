@@ -45,8 +45,11 @@ session_end(s)
 # a JSON array of scalars still collapses to a vector
 expect_equal(normalize_value(list("a", "b")), c("a", "b"))
 expect_equal(normalize_value(list(1L, 2L, 3L)), c(1L, 2L, 3L))
-# an empty array is still NULL (unchanged behaviour)
-expect_null(normalize_value(list()))
+# an empty array is an empty vector, not NULL: [] is an empty
+# collection, and a multi select whose last item was deselected must
+# read the same as one seeded empty (character(0), the array-at-
+# every-length rule server-side)
+expect_equal(normalize_value(list()), character(0))
 # a JSON object survives intact: names kept, types not coerced
 obj <- normalize_value(list(data = "AAAA", size = 1024L, type = "audio/webm"))
 expect_true(is.list(obj))
