@@ -10,6 +10,15 @@ vocabulary change fails every client that has not answered for it.
 Found on arrival: the browser had implemented `shortcut` and
 `table_output` while declaring neither in hello.
 
+**Flutter: sliders and plots survive measurement, and a full-width
+page scrolls** (#62, #63). The leaf `LayoutBuilder`s -- slider chip
+and scale rows, the plot's measuring box -- now answer an intrinsics
+pass themselves (declared dimensions, or zero) instead of throwing,
+and the sliders shrink-wrap in unbounded-width spots the way a
+collapse already did. `width = "full"` pages scroll like the
+browser's, with the same padding; a fill panel where height is
+unbounded degrades to content size instead of a layout error.
+
 **Flutter: a grown flex under a stretch row no longer blanks the
 window** (#53). A stretch row measures through `IntrinsicHeight`,
 which a `LayoutBuilder` cannot answer, so flexes under the

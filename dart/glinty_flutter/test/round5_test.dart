@@ -2732,4 +2732,222 @@ void _ticketRefusals() {
       expect(find.text('Selected'), findsOneWidget);
     });
   });
+
+  group('leaf widgets under intrinsics measurement (#62)', () {
+    // The slider's chip and scale rows and the plot's measuring box
+    // are LayoutBuilders, and an intrinsics pass that reaches one
+    // throws -- the same blank-window class #53 fixed for the flex
+    // gate. The two passes that reach them: a stretch row measuring
+    // height (which queries non-flex children's width first), and
+    // the IntrinsicWidth a collapse takes as the non-grown child of
+    // a row. Any uncaught exception fails these tests, so the
+    // controls being on screen is the whole claim.
+
+    testWidgets('a slider inside a collapse inside a row',
+        (tester) async {
+      // The shortest repro from the issue.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Zoomable',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Zoom',
+                'open': true,
+                'children': [
+                  {'component': 'slider_input', 'id': 'z',
+                    'min': 0, 'max': 10, 'value': 5},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g8');
+      expect(find.text('Zoom'), findsOneWidget);
+      expect(find.byType(Slider), findsOneWidget);
+    });
+
+    testWidgets('a slider in a column under a stretch row',
+        (tester) async {
+      // IntrinsicHeight asks a non-flex child its width before its
+      // height, so the stretch shell reached the chip row's
+      // LayoutBuilder through the width query.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Shell',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'slider_input', 'id': 's',
+                    'min': 0, 'max': 1, 'value': 0.5, 'step': 0.1},
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'side',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g9');
+      expect(find.byType(Slider), findsOneWidget);
+      expect(find.text('side'), findsOneWidget);
+    });
+
+    testWidgets('a range slider inside a collapse inside a row',
+        (tester) async {
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Ranged',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Trim',
+                'open': true,
+                'children': [
+                  {'component': 'range_slider', 'id': 'r',
+                    'min': 0, 'max': 10},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g10');
+      expect(find.byType(RangeSlider), findsOneWidget);
+    });
+
+    testWidgets('a plot with a declared height, same spot',
+        (tester) async {
+      // The declared dimension is the honest intrinsics answer -- it
+      // is the size the plot will take -- so the shell measures with
+      // it rather than with zero.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Plotted',
+        'children': [
+          {
+            'component': 'row',
+            'children': [
+              {
+                'component': 'collapse',
+                'title': 'Canvas',
+                'open': true,
+                'children': [
+                  {'component': 'plot_output', 'id': 'p', 'height': 100},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g11');
+      expect(find.text('Canvas'), findsOneWidget);
+    });
+  });
+
+  group('a full-width page scrolls (#63)', () {
+    testWidgets('content taller than the window scrolls instead of '
+        'overflowing', (tester) async {
+      // Pre-fix this was a RenderFlex overflow -- an exception in
+      // tests, a yellow stripe on screen -- because width="full"
+      // returned the bare column while only the centered variant
+      // scrolled. The page is what scrolls in the browser, both
+      // variants.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Tall',
+        'width': 'full',
+        'children': [
+          for (var i = 0; i < 80; i++)
+            {'component': 'text', 'value': 'line $i', 'variant': 'normal'},
+        ],
+      }, 'g12');
+      expect(find.text('line 0'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+    });
+
+    testWidgets('a fill panel at page level degrades to content size',
+        (tester) async {
+      // A scroll view has no height to hand over. Fill used to answer
+      // that spot with a crash ("a layout error by definition"); with
+      // the height record present it degrades to content size, which
+      // is what the browser's flex column does in a scrolling body.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Degraded',
+        'width': 'full',
+        'children': [
+          {
+            'component': 'panel',
+            'fill': true,
+            'children': [
+              {'component': 'text', 'value': 'still here',
+                'variant': 'normal'},
+            ],
+          },
+        ],
+      }, 'g13');
+      expect(find.text('still here'), findsOneWidget);
+    });
+
+    testWidgets('the stretch shell inside a scrolling page keeps filling',
+        (tester) async {
+      // The scroll view un-bounds height, but the stretch row bounds
+      // it again inside: a grown column in a fill panel there must
+      // still get its Expanded, or every workspace shell would go
+      // content-sized the moment the page learned to scroll.
+      await boot(tester, {
+        'component': 'page',
+        'title': 'Shell',
+        'width': 'full',
+        'children': [
+          {
+            'component': 'row',
+            'align': 'stretch',
+            'children': [
+              {
+                'component': 'panel',
+                'fill': true,
+                'grow': 1,
+                'children': [
+                  {
+                    'component': 'column',
+                    'grow': 1,
+                    'children': [
+                      {'component': 'text', 'value': 'log',
+                        'variant': 'normal'},
+                    ],
+                  },
+                ],
+              },
+              {
+                'component': 'column',
+                'children': [
+                  {'component': 'text', 'value': 'side',
+                    'variant': 'normal'},
+                ],
+              },
+            ],
+          },
+        ],
+      }, 'g14');
+      expect(find.text('log'), findsOneWidget);
+      expect(find.text('side'), findsOneWidget);
+      expect(find.ancestor(of: find.text('log'),
+          matching: find.byType(Expanded)), findsWidgets);
+    });
+  });
 }
