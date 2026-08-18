@@ -1,5 +1,13 @@
 # glinty (development version)
 
+**`clear_on`: emitting a named event empties the composer** (#60).
+`textarea_input("draft", clear_on = "send")` clears the field
+client-side when this client emits `send` -- after the event frame,
+so the handler reads the full draft. Client-side because a server
+round-trip clear races the next keystroke and the focused-input
+guard (rightly) drops it. Requires `emit = "live"`; the browser
+flushes a trailing debounce ahead of the event.
+
 **The vocabulary rides `components.json`; client tables are held to
 it** (#57). The fixture JSON now carries the schema's component list
 and per-component variant lists. Client declaration tables stay
