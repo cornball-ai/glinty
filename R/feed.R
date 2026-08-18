@@ -60,8 +60,8 @@ feed_append <- function(session, id, item) {
     st$items <- c(st$items, list(item))
     feed_trim(st)
     feed_send(session, id, st,
-              list(type = "feed", id = id, op = "append",
-                   keep = st$keep, item = item))
+              list(type = "feed", id = id, op = "append", keep = st$keep,
+                   item = item))
 }
 
 #' Rewrite the newest item of a feed
@@ -89,8 +89,7 @@ feed_patch <- function(session, id, item) {
     item <- feed_check_item(item, "feed_patch")
     st$items[[length(st$items)]] <- item
     feed_send(session, id, st,
-              list(type = "feed", id = id, op = "patch",
-                   keep = st$keep, item = item))
+              list(type = "feed", id = id, op = "patch", keep = st$keep, item = item))
 }
 
 #' Replace a feed's window
@@ -122,8 +121,8 @@ feed_reset <- function(session, id, items = list()) {
 #' @keywords internal
 feed_check_item <- function(item, fn) {
     if (!is_component(item)) {
-        stop(fn, "(): item must be a component, got ",
-             class(item)[[1L]], call. = FALSE)
+        stop(fn, "(): item must be a component, got ", class(item)[[1L]],
+             call. = FALSE)
     }
     unclass_recursive(item)
 }
@@ -169,7 +168,9 @@ feed_declared_keep <- function(id) {
             found <<- x$keep
             return(invisible(NULL))
         }
-        for (part in x) walk(part)
+        for (part in x) {
+            walk(part)
+        }
         invisible(NULL)
     }
     walk(.globals$welcome_ui)
@@ -192,8 +193,7 @@ feed_trim <- function(st) {
 #' The reset message carrying a feed's whole window
 #' @keywords internal
 feed_reset_msg <- function(id, st) {
-    list(type = "feed", id = id, op = "reset",
-         keep = st$keep, items = st$items)
+    list(type = "feed", id = id, op = "reset", keep = st$keep, items = st$items)
 }
 
 #' Serialize one feed message, the way every outgoing message is
@@ -220,7 +220,7 @@ feed_send <- function(session, id, st, msg) {
         return(invisible(NULL))
     }
     session$last_sent[[paste0("..feed:", id)]] <- feed_json(
-                                                            feed_reset_msg(id, st))
+        feed_reset_msg(id, st))
     if (!isTRUE(session$detached)) {
         session$outgoing <- c(session$outgoing, list(feed_json(msg)))
     }

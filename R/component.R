@@ -404,10 +404,10 @@ COMPONENT_SCHEMA <- list(
                          # because apps hand-rolling that each get it subtly
                          # wrong.
                          feed = list(
-        id = field("string", required = TRUE),
-        keep = field("int", default = FEED_KEEP_DEFAULT, min = 1),
-        grow = field("int"),
-        width = field("int")
+                                     id = field("string", required = TRUE),
+                                     keep = field("int", default = FEED_KEEP_DEFAULT, min = 1),
+                                     grow = field("int"),
+                                     width = field("int")
     ),
 
                          # composite layout

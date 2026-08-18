@@ -142,8 +142,8 @@ resume_session <- function(session) {
     # by default -- which silently dropped those from the replay.
     replay <- lapply(ls(session$last_sent, all.names = TRUE),
                      function(id) {
-                         session$last_sent[[id]]
-                     })
+        session$last_sent[[id]]
+    })
     session$outgoing <- c(list(welcome_msg(session$id, resumed = TRUE)),
                           replay, session$outgoing)
     invisible(NULL)

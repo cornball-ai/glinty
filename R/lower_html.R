@@ -115,8 +115,7 @@ html_feed <- function(x) {
                  style = html_flex_style(x)),
             paste0(html_el("div", list(class = "g-feed-items")),
                    html_el("button",
-                           list(type = "button", class = "g-feed-jump",
-                                hidden = "hidden"),
+                           list(type = "button", class = "g-feed-jump", hidden = "hidden"),
                            html_escape("↓ Latest"))))
 }
 
