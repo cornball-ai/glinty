@@ -22,10 +22,11 @@ NULL from the router means "not mine" and falls through to
 glinty's own routing.
 }
 \details{
-An error inside the router answers 500 with a generic body; the
-condition message goes to the server log via message(), never onto
-the wire, where it could carry paths or SQL to a caller we do not
-know.
+An error inside the router -- or while encoding its answer, so a
+malformed return shape is covered too -- answers 500 with a generic
+body; the condition message goes to the server log via message(),
+never onto the wire, where it could carry paths or SQL to a caller
+we do not know.
 
 }
 \keyword{internal}

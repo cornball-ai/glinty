@@ -1,5 +1,15 @@
 # glinty (development version)
 
+**api mount hardening** (#85). Request bodies reach the router as
+plain nested lists (`simplifyVector = FALSE`): scalars stay scalars,
+arrays stay lists, and a field sent as null stays distinct from one
+not sent -- an array of records no longer collapses into an NA-filled
+data.frame. A new `list(status =, json =)` return sends a
+pre-serialized JSON string verbatim, for documents that must not be
+re-encoded. And response encoding now runs inside the sanitized error
+path, so a malformed router return answers the same generic 500 as a
+router throw instead of leaking the condition message onto the wire.
+
 **A re-render never eats the sentence you are typing** (#79). The
 never-stomp contract now covers tree swaps: when a `ui` frame
 replaces a slot (or a modal replaces a modal) and the new subtree
