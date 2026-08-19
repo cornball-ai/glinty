@@ -101,16 +101,21 @@ app <- function(ui, server, theme = NULL) {
 #'   `list(status =, body =)` for a JSON response (body is encoded
 #'   with auto-unboxing), `list(status =, json =)` for a
 #'   pre-serialized JSON string sent verbatim (a document that must
-#'   not be re-encoded, such as one another library wrote
-#'   byte-stably), `list(status =, file =, content_type =)`
-#'   for a binary response, add a named `headers` element for extras
-#'   such as Set-Cookie or Location, or return NULL to fall through
-#'   to glinty's own routing (a 404 for anything unclaimed). glinty
-#'   decodes the request: `body` arrives as a plain nested list
-#'   parsed from JSON (NULL when absent or unparseable) -- scalars
-#'   stay scalars, arrays stay lists, nothing is simplified to a
-#'   vector or data.frame, so a null field stays distinct from an
-#'   absent one and arrays of records keep their shape. `query`
+#'   not be re-encoded, such as one another library wrote byte-stably;
+#'   content_type given, or application/json),
+#'   `list(status =, file =, content_type =)`
+#'   for a binary response, add a `headers` element for extras such as
+#'   Set-Cookie or Location (every element named, no CR/LF in values),
+#'   or return NULL to fall through
+#'   to glinty's own routing (a 404 for anything unclaimed). The
+#'   response shape is checked strictly: unknown fields, a
+#'   non-numeric status, or malformed headers answer the sanitized
+#'   500 rather than a degraded response. glinty
+#'   decodes the request without simplification, so a null field
+#'   stays distinct from an absent one and arrays of records keep
+#'   their shape: an object body arrives as a named list, an array as
+#'   an unnamed list, a scalar as itself (NULL when the body is
+#'   absent, unparseable, or not valid UTF-8). `query`
 #'   arrives as a named list of decoded strings. `principal` is
 #'   resolved per request by the
 #'   same `auth` verifier that gates WebSocket sessions, fed the
