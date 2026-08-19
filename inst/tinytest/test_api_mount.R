@@ -179,3 +179,52 @@ unlink(f)
 a <- app(ui = page(txt("x"), title = "T"),
          server = function(input, output) NULL)
 expect_error(run_app(a, api = "not a function"), "api must be")
+
+# --- body decoding never simplifies: shape and null survive the wire ---
+got <- api_body(req("POST", "/x", body = charToRaw(paste0(
+    '{"revision":3,"ops":[{"verb":"move","args":{"x":1.5,"at":null}},',
+    '{"verb":"del"}]}'))))
+expect_equal(got$revision, 3)
+expect_true(is.list(got$ops))
+expect_false(is.data.frame(got$ops))
+expect_equal(length(got$ops), 2L)
+expect_equal(got$ops[[1]]$verb, "move")
+expect_equal(got$ops[[1]]$args$x, 1.5)
+# a field sent as null is present-and-NULL; one not sent is absent
+expect_true("at" %in% names(got$ops[[1]]$args))
+expect_null(got$ops[[1]]$args$at)
+expect_false("args" %in% names(got$ops[[2]]))
+# arrays stay lists even when they would simplify to a vector
+got <- api_body(req("POST", "/x", body = charToRaw('{"ids":["a","b"]}')))
+expect_true(is.list(got$ids))
+expect_equal(length(got$ids), 2L)
+
+# --- json =: a pre-serialized document passes through verbatim ---
+doc <- '{"OTIO_SCHEMA":"Timeline.1","tracks":[1,2],"note":null}'
+json_api <- function(method, path, body, query, principal) {
+    if (path == "/doc") {
+        return(list(status = 200L, json = doc,
+                    headers = c(ETag = "\"7\"")))
+    }
+    if (path == "/doc-bad") {
+        return(list(status = 200L, json = list(no = "strings only")))
+    }
+    NULL
+}
+r <- split_resp(route_http(req("GET", "/doc"), page, pkg_www, NULL,
+                           api = json_api))
+expect_true(grepl("Content-Type: application/json", r$head, fixed = TRUE))
+expect_true(grepl("ETag: \"7\"\r\n", r$head, fixed = TRUE))
+expect_identical(rawToChar(r$body), doc)
+
+# --- a malformed return answers the same sanitized 500 as a throw ---
+resp <- rawToChar(route_http(req("GET", "/doc-bad"), page, pkg_www, NULL,
+                             api = json_api))
+expect_true(grepl("500 Internal Server Error", resp, fixed = TRUE))
+expect_true(grepl("internal error", resp, fixed = TRUE))
+expect_false(grepl("strings only", resp, fixed = TRUE))
+mangled_api <- function(method, path, body, query, principal) 42
+resp <- rawToChar(route_http(req("GET", "/anything"), page, pkg_www, NULL,
+                             api = mangled_api))
+expect_true(grepl("500 Internal Server Error", resp, fixed = TRUE))
+expect_false(grepl("42", resp, fixed = TRUE))

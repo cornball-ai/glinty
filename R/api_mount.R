@@ -11,10 +11,11 @@
 #' NULL from the router means "not mine" and falls through to
 #' glinty's own routing.
 #'
-#' An error inside the router answers 500 with a generic body; the
-#' condition message goes to the server log via message(), never onto
-#' the wire, where it could carry paths or SQL to a caller we do not
-#' know.
+#' An error inside the router -- or while encoding its answer, so a
+#' malformed return shape is covered too -- answers 500 with a generic
+#' body; the condition message goes to the server log via message(),
+#' never onto the wire, where it could carry paths or SQL to a caller
+#' we do not know.
 #'
 #' @param req parsed request (with raw body when one was sent)
 #' @param api the application router (see run_app())
@@ -22,18 +23,15 @@
 #' @return raw HTTP response, or NULL when the router declined
 #' @keywords internal
 route_api <- function(req, api, auth = NULL) {
-    res <- tryCatch(
-                    api(req$method, req$path, api_body(req),
-                        as.list(parse_query(req$query)), api_principal(req, auth)),
-                    error = function(e) {
+    tryCatch({
+        res <- api(req$method, req$path, api_body(req),
+                   as.list(parse_query(req$query)), api_principal(req, auth))
+        if (is.null(res)) NULL else api_response_raw(res)
+    }, error = function(e) {
         message("api request failed: ", conditionMessage(e))
-        list(status = 500L, body = list(error = "internal error"))
-    }
-    )
-    if (is.null(res)) {
-        return(NULL)
-    }
-    api_response_raw(res)
+        api_response_raw(list(status = 500L,
+                              body = list(error = "internal error")))
+    })
 }
 
 #' Decode an api request body as JSON
@@ -43,8 +41,13 @@ route_api <- function(req, api, auth = NULL) {
 #' missing field, rather than glinty deciding what a malformed body
 #' deserves.
 #'
+#' Nothing is simplified: scalars stay scalars, arrays stay lists.
+#' Simplification would turn an array of records into an NA-filled
+#' data.frame, conflating a field a caller omitted with one it sent
+#' as null -- the router owns that distinction, not the wire.
+#'
 #' @param req parsed request
-#' @return a named list, or NULL
+#' @return a plain nested list, or NULL
 #' @keywords internal
 api_body <- function(req) {
     if (is.null(req$body) || length(req$body) == 0L) {
@@ -54,7 +57,7 @@ api_body <- function(req) {
     if (is.null(txt)) {
         return(NULL)
     }
-    tryCatch(jsonlite::fromJSON(txt, simplifyVector = TRUE),
+    tryCatch(jsonlite::fromJSON(txt, simplifyVector = FALSE),
              error = function(e) NULL)
 }
 
@@ -95,12 +98,14 @@ api_principal <- function(req, auth) {
 #' Encode an api result as a raw HTTP response
 #'
 #' `file` answers binary (content_type given, or guessed from the
-#' extension); a NULL `body` answers empty (204s, redirects);
-#' anything else is encoded as JSON with auto-unboxing, the encoding
-#' a scalar-in-a-list R payload means. A named `headers` element
-#' passes through for Set-Cookie and Location.
+#' extension); `json` answers a pre-serialized JSON string verbatim,
+#' for a document that must not be re-encoded (one another library
+#' wrote byte-stably, say); a NULL `body` answers empty (204s,
+#' redirects); anything else is encoded as JSON with auto-unboxing,
+#' the encoding a scalar-in-a-list R payload means. A named `headers`
+#' element passes through for Set-Cookie and Location.
 #'
-#' @param res list(status =, body = | file =, content_type =,
+#' @param res list(status =, body = | file = | json =, content_type =,
 #'   headers =)
 #' @return raw HTTP response
 #' @keywords internal
@@ -125,6 +130,13 @@ api_response_raw <- function(res) {
         }
         body <- readBin(res$file, "raw", file.info(res$file)$size)
         return(http_response_raw(status, ctype, body, extra))
+    }
+    if (!is.null(res$json)) {
+        if (!is.character(res$json) || length(res$json) != 1L ||
+            is.na(res$json)) {
+            stop("api json = must be a single string of pre-serialized JSON")
+        }
+        return(http_response_raw(status, "application/json", res$json, extra))
     }
     if (is.null(res$body)) {
         return(http_response_raw(status, "text/plain", "", extra))
