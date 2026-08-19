@@ -74,18 +74,26 @@ mounting an application JSON API on the same origin, or NULL
 (the default) for none. Consulted for any request the built-in
 routes do not own, every method: return
 `list(status =, body =)` for a JSON response (body is encoded
-with auto-unboxing), `list(status =, file =, content_type =)`
+with auto-unboxing), `list(status =, json =)` for a
+pre-serialized JSON string sent verbatim (a document that must
+not be re-encoded, such as one another library wrote
+byte-stably), `list(status =, file =, content_type =)`
 for a binary response, add a named `headers` element for extras
 such as Set-Cookie or Location, or return NULL to fall through
 to glinty's own routing (a 404 for anything unclaimed). glinty
-decodes the request: `body` arrives as a named list parsed from
-JSON (NULL when absent or unparseable), `query` as a named list
-of decoded strings. `principal` is resolved per request by the
+decodes the request: `body` arrives as a plain nested list
+parsed from JSON (NULL when absent or unparseable) -- scalars
+stay scalars, arrays stay lists, nothing is simplified to a
+vector or data.frame, so a null field stays distinct from an
+absent one and arrays of records keep their shape. `query`
+arrives as a named list of decoded strings. `principal` is
+resolved per request by the
 same `auth` verifier that gates WebSocket sessions, fed the
 Authorization Bearer token (NULL when unauthenticated or auth is
 not configured -- the api function decides what an anonymous
 caller may do, since public routes like a ping are its
-business). Errors inside the function answer 500 with a generic
+business). Errors inside the function, or while encoding its
+answer, answer 500 with a generic
 body; the condition message goes to the server log, not the
 wire.}
 
