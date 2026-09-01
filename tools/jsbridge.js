@@ -2301,6 +2301,122 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     }
 
     /* ---------------------------------------------------------- */
+    section("data_table: a small value drops the chrome");
+    {
+        /* A page-size select for a value that fits its smallest
+           option, a footer for a value that fits one page, is
+           furniture. Hidden per render, judged against the
+           unfiltered value. Must agree with data_table_test.dart. */
+        const tree = (searchable) => ({
+            component: "page", title: "C", children: [{
+                component: "data_table", id: "grid", page_length: 10,
+                length_menu: [10, 25], searchable: searchable,
+                sortable: true
+            }]
+        });
+        const value = (n) => ({
+            header: ["name", "n"], align: ["text", "num"],
+            rows: Array.from({ length: n }, function (_, i) {
+                return ["row" + (i + 1), String(i + 1)];
+            })
+        });
+        const open = (searchable, n) => {
+            const page = freshPage({});
+            page.ws().open();
+            page.ws().deliver({ type: "welcome", session: "sC",
+                                protocol: 4, ui_revision: "rC",
+                                ui: tree(searchable) });
+            page.ws().deliver({ type: "output", id: "grid",
+                                kind: "table", value: value(n) });
+            return page;
+        };
+        const hid = (page, sel) => page.document.querySelector(sel)
+            .classList.contains("g-hidden");
+
+        const small = open(true, 3);
+        check("3 rows in a 10-row page: the footer hides",
+              hid(small, ".g-dt-footer"));
+        check("and the page-size select hides",
+              hid(small, ".g-dt-length"));
+        check("the search box stays: searchable was the app's call",
+              !hid(small, ".g-dt-controls") &&
+              small.document.querySelector(".g-dt-search") !== null);
+
+        const bare = open(false, 3);
+        check("search off too: the whole controls row hides",
+              hid(bare, ".g-dt-controls"));
+
+        const big = open(true, 12);
+        check("12 rows: select and footer are back",
+              !hid(big, ".g-dt-length") && !hid(big, ".g-dt-footer"));
+        big.ws().deliver({ type: "output", id: "grid", kind: "table",
+                           value: value(3) });
+        check("the chrome answers each value: shrinking hides it again",
+              hid(big, ".g-dt-length") && hid(big, ".g-dt-footer"));
+
+        const edge = open(true, 10);
+        check("10 rows fit the 10-row page exactly: still hidden",
+              hid(edge, ".g-dt-footer") && hid(edge, ".g-dt-length"));
+    }
+
+    /* ---------------------------------------------------------- */
+    section("align right: right-aligned presentation, text sort");
+    {
+        /* "num" right-aligns and sorts numerically; "right" takes
+           the same seat for a pre-formatted string column ("1.2
+           GiB") whose numeric sort would read 1.2. The initial
+           order (10.0, 2.0, 9.0 by number) differs from text order,
+           so the sorted order tells the two apart. */
+        const av = {
+            header: ["size", "n"], align: ["right", "num"],
+            rows: [["2.0 GiB", "1"], ["10.0 GiB", "2"],
+                   ["9.0 GiB", "3"]]
+        };
+        const page = freshPage({});
+        page.ws().open();
+        page.ws().deliver({ type: "welcome", session: "sR",
+                            protocol: 4, ui_revision: "rR", ui: {
+            component: "page", title: "R", children: [{
+                component: "data_table", id: "grid", page_length: 10,
+                length_menu: [10], searchable: false, sortable: true
+            }] } });
+        page.ws().deliver({ type: "output", id: "grid",
+                            kind: "table", value: av });
+
+        const th = page.document.querySelectorAll("th")[0];
+        check("the right column classes its header",
+              th.classList.contains("g-right"));
+        const td = page.document.querySelector("td");
+        check("and its cells, without pretending to be numeric",
+              td.classList.contains("g-right") &&
+              !td.classList.contains("g-num"));
+
+        /* header sorts bind directly on the th, not through the
+           root delegation page.fire drives */
+        (th._listeners.click || []).forEach((fn) => fn({}));
+        const col = page.document.querySelectorAll("tr[data-g-key]")
+            .map((r) => r.children[0].textContent).join("|");
+        check("sorted ascending as text: 10.0 before 2.0 before 9.0",
+              col === "10.0 GiB|2.0 GiB|9.0 GiB");
+
+        /* the plain table_output wears the same class */
+        const plain = freshPage({});
+        plain.ws().open();
+        plain.ws().deliver({ type: "welcome", session: "sQ",
+                             protocol: 4, ui_revision: "rQ", ui: {
+            component: "page", title: "Q", children: [{
+                component: "table_output", id: "t"
+            }] } });
+        plain.ws().deliver({ type: "output", id: "t", kind: "table",
+                             value: av });
+        const ptd = plain.document.querySelector("td");
+        check("table_output: g-right on header and cell",
+              plain.document.querySelectorAll("th")[0]
+                  .classList.contains("g-right") &&
+              ptd.classList.contains("g-right"));
+    }
+
+    /* ---------------------------------------------------------- */
     section("every transcript in the file was replayed");
     {
         /* transcripts.json is a shared artifact: adding one is meant

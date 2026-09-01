@@ -1,5 +1,18 @@
 # glinty (development version)
 
+**data_table polish: align "right", and chrome that answers the
+value** (#93). `render_table(align = c(size = "right"))` right-aligns
+a pre-formatted string column -- "1.2 GiB", "3m 12s" -- while it
+keeps its text sort; calling it numeric would sort "1.2 GiB" as 1.2.
+The wire's `align` gains the third value `"right"` (PROTOCOL.md
+v4.1), additive: a client that has never seen it draws the column
+left-aligned. `"left"` on a numeric column demotes it to text,
+presentation and sort together. And the table chrome hides itself
+when the value cannot use it: the page-size select when the rows fit
+the smallest `length_menu` option, the footer (count, Prev/Next)
+when they fit one page -- a two-row table is just a table, judged
+against the unfiltered value so a search never flickers it.
+
 **mark_cells(): the render fn authors marks a rule cannot see**
 (#91). A `variants =` rule reads the rendered frame, so a mark that
 depends on data the table does not show -- the replica count behind

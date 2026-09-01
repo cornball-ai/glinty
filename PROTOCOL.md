@@ -56,6 +56,22 @@ any addition that is not clearly in the "fails visibly" column bumps
 the version, or gates itself behind a declared capability. There is
 no third option where it is fine because the field is optional.
 
+### v4.1
+
+Protocol still 4. A table's `align` may now say `"right"` as well as
+`"num"` and `"text"`: right-aligned presentation with a text sort,
+for a pre-formatted string column ("1.2 GiB", "3m 12s") whose
+numeric sort would read 1.2. `render_table(align = c(size =
+"right"))` asks for it. Safe by the test at the top: a client that
+has never seen `"right"` treats the column as text and draws it
+left-aligned — cosmetic, visible, nothing stops working.
+
+Alongside it, client presentation with no wire change: `data_table`
+chrome hides itself when the value cannot use it — the page-size
+select when the rows fit the smallest menu option, the footer when
+they fit one page, judged against the unfiltered value. A parity
+rule between the clients, like the sort.
+
 ### v4
 
 The number moved, for the first time since 3, on `data_table` growing
@@ -439,7 +455,10 @@ adds client-side sorting, filtering and pagination. The interaction
 is entirely local: the client holds the whole value, so a sort click
 never reaches the server, and a value update clamps the reader's page
 instead of resetting it. The value's `align` doubles as the sort-type
-signal — `"num"` columns sort numerically, the rest as text.
+signal — `"num"` columns sort numerically, the rest as text. The
+chrome hides itself when the value cannot use it: the page-size
+select when the rows fit the smallest `length_menu` option, the
+footer when they fit one page.
 
 Given a `selection` mode (`"single"` or `"multiple"`) it is also an
 input: a row click reports the selected rows' `keys` as an array of
@@ -795,10 +814,13 @@ side does not know is a button that renders and does nothing.
 `kind` describes **the value**, and comes from the renderer. How it is
 displayed belongs to the receiving component.
 
-A table's `align` marks each column `"num"` or `"text"`: values
-travel as strings, so numeric-ness must ride alongside for the
-frontends to right-align number columns. A client that sees no
-`align` treats every column as text.
+A table's `align` marks each column `"num"`, `"text"` or `"right"`:
+values travel as strings, so numeric-ness must ride alongside for the
+frontends to right-align number columns. `"right"` right-aligns a
+pre-formatted string column ("1.2 GiB") while it keeps its text sort
+(`render_table(align =)`). A client that sees no `align` treats every
+column as text, and one that has never seen `"right"` draws that
+column left-aligned — cosmetic, and on screen.
 
 A table's `keys` name its rows, one string each: `render_table()`
 sends the data.frame's row names, which is what a selectable
