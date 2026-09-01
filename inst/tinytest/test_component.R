@@ -138,7 +138,7 @@ for (nm in names(COMPONENT_SCHEMA)) {
         expect_true(spec$type %in% c("string", "strings", "number",
                                      "numbers", "int", "bool", "enum",
                                      "choices", "panels", "condition",
-                                     "children", "runs", "any"))
+                                     "children", "runs", "items", "any"))
         # an enum must say what it allows
         if (identical(spec$type, "enum")) {
             expect_true(length(spec$values) > 0L)
@@ -301,6 +301,39 @@ expect_equal(component("data_table", id = "g", selection = "multiple")$selection
 expect_error(component("data_table", id = "g", selection = "rows"),
              "must be one of")
 expect_true(grepl('"selection":"none"', as_json(dt), fixed = TRUE))
+
+# --- key_value: pairs as a flat item list ---
+kv <- key_value(c(A = "1", B = "two"))
+expect_equal(kv$items[[1L]], list(key = "A", value = "1"))
+expect_equal(length(kv$items), 2L)
+expect_true(grepl('"items":[{"key":"A","value":"1"},{"key":"B","value":"two"}]',
+                  as_json(kv), fixed = TRUE))
+# a txt() value carries its variant; a normal one carries none; a
+# number becomes the string a client would show
+kv2 <- key_value(list(State = txt("failed", "danger"), Note = txt("plain"),
+                      N = 3))
+expect_equal(kv2$items[[1L]], list(key = "State", value = "failed",
+                                   variant = "danger"))
+expect_equal(kv2$items[[2L]], list(key = "Note", value = "plain"))
+expect_equal(kv2$items[[3L]], list(key = "N", value = "3"))
+expect_true(grepl('"id":"meta"', as_json(key_value(c(A = "1"), id = "meta")),
+                  fixed = TRUE))
+# empty is a state, not an error
+expect_equal(key_value(list())$items, list())
+expect_equal(key_value(character(0))$items, list())
+expect_true(grepl('"items":[]', as_json(key_value(list())), fixed = TRUE))
+expect_error(key_value(c("a", "b")), "must be named")
+expect_error(key_value(list(A = button("b", "B"))), "must be a string or a txt")
+expect_error(component("key_value", items = list(
+    list(key = "k", value = "v", variant = "bogus"))), "must be one of")
+expect_error(component("key_value", items = list(
+    list(key = "k", value = "v", bold = TRUE))), "unknown fields")
+expect_error(component("key_value", items = list(list(key = "", value = "v"))),
+             "needs a key")
+expect_error(component("key_value", items = list(list(key = "k"))),
+             "needs a value")
+# the lowering's class map is keyed by the one variant list
+expect_equal(names(glinty:::TEXT_VARIANT_CLASSES), glinty:::TEXT_VARIANTS)
 
 # --- fixtures ---
 fx <- component_fixtures()

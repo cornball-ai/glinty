@@ -167,6 +167,25 @@ a.g-run {
     font-weight: 600;
 }
 
+/* key_value: dt/dd pairs are the grid items themselves, so they line
+   up with no wrapper per pair. Keys read as labels; a value takes a
+   text variant class the way a table cell does. */
+.g-kv {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    margin: 0.5rem 0;
+}
+
+.g-kv-key {
+    color: var(--g-muted);
+}
+
+.g-kv-value {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
 .g-link {
     color: var(--g-primary);
 }

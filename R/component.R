@@ -126,6 +126,16 @@ COMPONENT_SCHEMA <- list(
         runs = field("runs", required = TRUE),
         id = field("string")
     ),
+                         # Pairs: a key and a value per line, the value
+                         # optionally carrying a text variant. Flat like
+                         # rich_text's runs, for the same reason -- a client
+                         # renders it with a loop. A metadata block (image,
+                         # node, ports) is this; a row of two texts per pair
+                         # is what it replaces.
+                         key_value = list(
+        items = field("items", required = TRUE),
+        id = field("string")
+    ),
                          divider = list(
                                         label = field("string"),
                                         variant = field("enum", default = "line",
@@ -769,6 +779,49 @@ check_field <- function(value, spec, type, nm) {
                          call. = FALSE)
                 }
                 keep$href <- r$href
+            }
+            keep
+        })
+        return(unname(out))
+    },
+           items = {
+        # key_value's pairs. Empty is allowed: a block built inside
+        # render_ui() with nothing to show yet is a normal state, not
+        # the bug an empty rich_text is. A variant is present only when
+        # it says something -- "normal" is dropped, the way a FALSE
+        # mark is -- and it comes from the one text variant list.
+        if (!is.list(value)) {
+            stop(where, " must be a list of items", call. = FALSE)
+        }
+        out <- lapply(seq_along(value), function(i) {
+            it <- value[[i]]
+            if (!is.list(it) || is.null(it$key) || !is.character(it$key) ||
+                      length(it$key) != 1L || is.na(it$key) || !nzchar(it$key)) {
+                stop(where, " item ", i, " needs a key (a non-empty string)",
+                     call. = FALSE)
+            }
+            v <- it$value
+            if (is.null(v) || length(v) != 1L || is.na(v) ||
+                      !(is.character(v) || is.numeric(v) || is.logical(v))) {
+                stop(where, " item ", i, " needs a value (a single string)",
+                     call. = FALSE)
+            }
+            extra <- setdiff(names(it), c("key", "value", "variant"))
+            if (length(extra) > 0L) {
+                stop(where, " item ", i, " has unknown fields: ",
+                     paste(extra, collapse = ", "), call. = FALSE)
+            }
+            keep <- list(key = it$key, value = as.character(v))
+            if (!is.null(it$variant)) {
+                vr <- it$variant
+                if (!is.character(vr) || length(vr) != 1L || is.na(vr) ||
+                          !(vr %in% TEXT_VARIANTS)) {
+                    stop(where, " item ", i, " variant must be one of ",
+                         paste(TEXT_VARIANTS, collapse = ", "), call. = FALSE)
+                }
+                if (!identical(vr, "normal")) {
+                    keep$variant <- vr
+                }
             }
             keep
         })

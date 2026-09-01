@@ -26,7 +26,7 @@ import 'theme.dart' show GlintyStatusColors;
 /// know draws a visible placeholder naming it.
 const supportedComponents = <String>{
   'text', 'heading', 'link', 'icon', 'divider', 'spacer',
-  'rich_text',
+  'rich_text', 'key_value',
   'page', 'row', 'column', 'panel', 'feed',
   'text_input', 'password_input', 'textarea_input', 'number_input',
   'select_input', 'checkbox_input', 'checkbox_group', 'radio_buttons',
@@ -531,6 +531,8 @@ class GlintyRenderer {
         return _heading(context, c);
       case 'rich_text':
         return _richText(c);
+      case 'key_value':
+        return _keyValue(context, c);
       case 'link':
         return _link(context, c);
       case 'icon':
@@ -819,6 +821,42 @@ class GlintyRenderer {
         : const <GlintyRun>[];
     return _GlintyRichText(
         runs: runs, onLink: onLink, monoStack: monoStack);
+  }
+
+  /// Pairs, the keys in a column fitted to the widest of them. A
+  /// marked value takes the text variant's style through the same
+  /// switch a txt() uses. Empty items draw nothing: a normal state
+  /// for a block built inside a slot with nothing to show yet.
+  Widget _keyValue(BuildContext context, GlintyComponent c) {
+    final raw = c.fields['items'];
+    final items = raw is List ? raw.whereType<Map>().toList() : const <Map>[];
+    if (items.isEmpty) return const SizedBox.shrink();
+    final keyStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return Table(
+      columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
+      defaultVerticalAlignment: TableCellVerticalAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        for (final it in items)
+          TableRow(children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16, bottom: 4),
+              child: Text(it['key']?.toString() ?? '', style: keyStyle),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                it['value']?.toString() ?? '',
+                style: it['variant'] is String
+                    ? _variantStyle(
+                        context, _variant('text', it['variant'] as String))
+                    : null,
+              ),
+            ),
+          ]),
+      ],
+    );
   }
 
   Widget _link(BuildContext context, GlintyComponent c) {

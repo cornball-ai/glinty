@@ -57,6 +57,18 @@ component_fixtures <- function() {
                       notes = "href is data; a native frontend opens a browser"
         ),
                  list(
+                      name = "key-value",
+                      component = component("key_value", items = list(
+                    list(key = "Model", value = "whisper-large"),
+                    list(key = "Path", value = "/mnt/models/whisper",
+                         variant = "mono"),
+                    list(key = "State", value = "failed", variant = "danger")
+        )),
+                      notes = paste("pairs as a flat item list; a value's",
+                                    "variant is present only when it says",
+                                    "something, and comes from the text set")
+        ),
+                 list(
                       name = "rich-text",
                       component = component("rich_text", runs = list(
                     list(text = "plain, "),

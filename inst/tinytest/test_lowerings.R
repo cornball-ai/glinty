@@ -730,3 +730,23 @@ expect_true(grepl('data-g-output="runs"', sel, fixed = TRUE))
 expect_false(grepl("data-g-target", sel, fixed = TRUE))
 expect_false(grepl("data-g-message", sel, fixed = TRUE))
 expect_false(grepl("data-g-target", dtab, fixed = TRUE))
+
+# --- key_value lowers to a dl, the pairs as its direct children ---
+#
+# No wrapper per pair: the grid sits on the dl and dt/dd are its
+# items, which is the structure glinty.js builds node for node.
+kvh <- component_to_html(key_value(list(State = txt("failed", "danger"),
+                                        "<b>" = "x<y")))
+expect_true(grepl('<dl class="g-kv">', kvh, fixed = TRUE))
+expect_true(grepl(paste0('<dt class="g-kv-key">State</dt>',
+                         '<dd class="g-kv-value g-danger">failed</dd>'),
+                  kvh, fixed = TRUE))
+expect_true(grepl(paste0('<dt class="g-kv-key">&lt;b&gt;</dt>',
+                         '<dd class="g-kv-value">x&lt;y</dd>'),
+                  kvh, fixed = TRUE))
+expect_false(grepl("g-unsupported", kvh, fixed = TRUE))
+expect_false(grepl("<div", kvh, fixed = TRUE))
+expect_true(grepl('<dl class="g-kv" id="meta">',
+                  component_to_html(key_value(c(A = "1"), id = "meta")),
+                  fixed = TRUE))
+expect_equal(component_to_html(key_value(list())), '<dl class="g-kv"></dl>')

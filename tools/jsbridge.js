@@ -1472,6 +1472,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
               ctl.getAttribute("data-g-message") === "input" &&
               ctl.getAttribute("data-g-event") === "input");
 
+        node = build(byName("key-value"));
+        check("key_value is a dl of dt/dd pairs, values classed by variant",
+              node.tagName === "DL" &&
+              node.querySelectorAll("dt").length === 3 &&
+              node.querySelectorAll("dd").length === 3 &&
+              node.querySelectorAll("dd")[0].getAttribute("class") ===
+                  "g-kv-value" &&
+              node.querySelectorAll("dd")[1].classList.contains("g-mono") &&
+              node.querySelectorAll("dd")[2].classList.contains("g-danger") &&
+              node.querySelectorAll("dd")[2].textContent === "failed" &&
+              node.querySelectorAll("dt")[0].textContent === "Model");
+
         node = build(byName("password-input"));
         ctl = node.querySelector("[data-g-target]");
         check("password_input is a password box with an empty value",

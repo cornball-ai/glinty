@@ -1,7 +1,7 @@
 {
   "protocol": 4,
   "vocabulary": {
-    "components": ["text", "heading", "link", "icon", "rich_text", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
+    "components": ["text", "heading", "link", "icon", "rich_text", "key_value", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
     "variants": {
       "text": ["normal", "muted", "strong", "heading", "mono", "small", "success", "warning", "danger"],
       "divider": ["line", "labelled"],
@@ -72,6 +72,29 @@
         "value": "cornball.ai",
         "href": "https://cornball.ai",
         "external": false
+      }
+    },
+    {
+      "name": "key-value",
+      "notes": "pairs as a flat item list; a value's variant is present only when it says something, and comes from the text set",
+      "component": {
+        "component": "key_value",
+        "items": [
+          {
+            "key": "Model",
+            "value": "whisper-large"
+          },
+          {
+            "key": "Path",
+            "value": "/mnt/models/whisper",
+            "variant": "mono"
+          },
+          {
+            "key": "State",
+            "value": "failed",
+            "variant": "danger"
+          }
+        ]
       }
     },
     {
