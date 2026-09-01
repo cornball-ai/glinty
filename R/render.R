@@ -124,8 +124,8 @@ check_table_variants <- function(variants) {
         rule <- variants[[col]]
         named <- !is.null(names(rule)) && all(nzchar(names(rule)))
         ok <- is.function(rule) ||
-            (is.character(rule) && length(rule) >= 1L && !anyNA(rule) &&
-             (named || length(rule) == 1L))
+        (is.character(rule) && length(rule) >= 1L && !anyNA(rule) &&
+            (named || length(rule) == 1L))
         if (!ok) {
             stop(sprintf(paste("render_table(variants =): the rule for column %s must be",
                                "a single variant, a named character vector (cell text",
@@ -139,6 +139,12 @@ check_table_variants <- function(variants) {
     invisible(NULL)
 }
 
+#' Refuse a variant outside the text set
+#'
+#' @param v character variants, NA allowed for an unmarked cell
+#' @param col the column the rule belongs to, for the message
+#' @return invisible NULL, or an error naming the bad variants
+#' @keywords internal
 check_cell_variants <- function(v, col) {
     bad <- unique(v[!is.na(v) & !(v %in% c(TEXT_VARIANTS, ""))])
     if (length(bad)) {

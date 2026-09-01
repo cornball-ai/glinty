@@ -75,8 +75,8 @@ FEED_KEEP_DEFAULT <- 200L
 #' drift the vocabulary tests will name.
 #'
 #' @keywords internal
-TEXT_VARIANTS <- c("normal", "muted", "strong", "heading", "mono", "small",
-                   "success", "warning", "danger")
+TEXT_VARIANTS <- c("normal", "muted", "strong", "heading", "mono",
+                   "small", "success", "warning", "danger")
 
 #' Component field schemas
 #'
@@ -90,15 +90,12 @@ COMPONENT_SCHEMA <- list(
                          # static content
                          text = list(
                                      value = field("string", required = TRUE),
-                                     variant = field("enum", default = "normal",
-            values = TEXT_VARIANTS),
+                                     variant = field("enum", default = "normal", values = TEXT_VARIANTS),
                                      id = field("string")
     ),
-                         heading = list(
-                                        value = field("string", required = TRUE),
+                         heading = list(value = field("string", required = TRUE),
                                         level = field("int", default = 2L, min = 1, max = 4),
-                                        id = field("string")
-    ),
+                                        id = field("string")),
                          link = list(
                                      # `value` is the usual case: a link is text. It stops
                                      # being required when `children` are given, because a
@@ -380,8 +377,7 @@ COMPONENT_SCHEMA <- list(
                          # is why none of these carry a value field.
                          text_output = list(
         id = field("string", required = TRUE),
-        variant = field("enum", default = "normal",
-                        values = TEXT_VARIANTS)
+        variant = field("enum", default = "normal", values = TEXT_VARIANTS)
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),
