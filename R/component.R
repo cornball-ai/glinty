@@ -815,7 +815,7 @@ check_field <- function(value, spec, type, nm) {
             if (!is.null(it$variant)) {
                 vr <- it$variant
                 if (!is.character(vr) || length(vr) != 1L || is.na(vr) ||
-                          !(vr %in% TEXT_VARIANTS)) {
+                      !(vr %in% TEXT_VARIANTS)) {
                     stop(where, " item ", i, " variant must be one of ",
                          paste(TEXT_VARIANTS, collapse = ", "), call. = FALSE)
                 }

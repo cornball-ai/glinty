@@ -63,7 +63,7 @@ component_fixtures <- function() {
                     list(key = "Path", value = "/mnt/models/whisper",
                          variant = "mono"),
                     list(key = "State", value = "failed", variant = "danger")
-        )),
+                )),
                       notes = paste("pairs as a flat item list; a value's",
                                     "variant is present only when it says",
                                     "something, and comes from the text set")

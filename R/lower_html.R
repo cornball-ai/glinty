@@ -206,19 +206,24 @@ html_unsupported <- function(name) {
 #' the browser's `textVariantClass()` is its mirror. "" for normal.
 #'
 #' @keywords internal
-TEXT_VARIANT_CLASSES <- c(normal = "", muted = "g-muted", strong = "g-strong",
-                          heading = "g-text-heading", mono = "g-mono",
-                          small = "g-small", success = "g-success",
-                          warning = "g-warning", danger = "g-danger")
+TEXT_VARIANT_CLASSES <- c(normal = "", muted = "g-muted",
+                          strong = "g-strong", heading = "g-text-heading",
+                          mono = "g-mono", small = "g-small",
+                          success = "g-success", warning = "g-warning",
+                          danger = "g-danger")
 
 variant_classes <- function(base, variant) {
     extra <- TEXT_VARIANT_CLASSES[[variant]]
-    if (nzchar(extra)) paste(base, extra) else base
+    if (nzchar(extra)) {
+        paste(base, extra)
+    } else {
+        base
+    }
 }
 
 html_text <- function(x) {
-    html_el("span", list(class = variant_classes("g-text", x$variant),
-                         id = x$id),
+    html_el("span",
+            list(class = variant_classes("g-text", x$variant), id = x$id),
             html_escape(x$value))
 }
 
@@ -229,7 +234,8 @@ html_key_value <- function(x) {
     pairs <- vapply(x$items, function(it) {
         variant <- if (is.null(it$variant)) "normal" else it$variant
         paste0(html_el("dt", list(class = "g-kv-key"), html_escape(it$key)),
-               html_el("dd", list(class = variant_classes("g-kv-value", variant)),
+               html_el("dd",
+                       list(class = variant_classes("g-kv-value", variant)),
                        html_escape(it$value)))
     }, character(1L))
     html_el("dl", list(class = "g-kv", id = x$id), paste(pairs, collapse = ""))
