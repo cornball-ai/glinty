@@ -1,5 +1,16 @@
 # glinty (development version)
 
+**key_value(): pairs as a component** (#90). `key_value(c(Node =
+"troy-g5", Replicas = "1"))` is a list of pairs, one per line, for
+the metadata block every dashboard has -- image digest, node, ports.
+Values are strings or numbers, or a `txt()` so they can carry a
+variant: `key_value(list(Image = txt(digest, "mono"), State =
+txt("failed", "danger")))`. A `<dl>` in the browser and a two-column
+table in Flutter, so nothing is rebuilt out of rows of two texts with
+a width on each. Empty `items` draws nothing, which is a state for a
+block built inside `render_ui()` and not an error. On the wire it is
+`items: [{key, value, variant?}]`, flat like `rich_text`'s runs.
+
 **Protocol 4: a data table can be an input, and a cell can carry a
 variant** (#89). `data_table(selection = "single")` or `"multiple"`
 makes the table report the keys of its selected rows under its own
