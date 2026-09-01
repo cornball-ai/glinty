@@ -76,6 +76,12 @@ render_html <- function(fn) {
 #' Semantic, never a color: what `danger` looks like is the theme's
 #' decision, and a client draws it however it draws `txt("x", "danger")`.
 #'
+#' A rule only sees the rendered frame. For a mark that depends on
+#' data the table does not show -- the replica count behind a
+#' "serving 1/1" cell, the limit behind a memory column -- attach the
+#' marks to the frame with [mark_cells()] inside `fn`, where that data
+#' is in scope. A column marked from both places is refused.
+#'
 #' @param fn zero-arg function returning a data.frame
 #' @param variants named list of per-column variant rules, or NULL
 #' @return a glinty_renderer for assignment to output$id
@@ -148,7 +154,7 @@ check_table_variants <- function(variants) {
 check_cell_variants <- function(v, col) {
     bad <- unique(v[!is.na(v) & !(v %in% c(TEXT_VARIANTS, ""))])
     if (length(bad)) {
-        stop(sprintf("render_table(variants =): unknown variant %s in column %s; must be one of %s",
+        stop(sprintf("unknown variant %s in column %s; must be one of %s",
                      paste(bad, collapse = ", "), col,
                      paste(TEXT_VARIANTS, collapse = ", ")), call. = FALSE)
     }
@@ -164,8 +170,14 @@ check_cell_variants <- function(v, col) {
 #'   of character vectors with NA for an unmarked cell
 #' @keywords internal
 cell_variants <- function(df, cols, variants) {
-    if (is.null(variants) || nrow(df) == 0L) {
+    attached <- attr(df, "glinty_variants")
+    if ((is.null(variants) && is.null(attached)) || nrow(df) == 0L) {
         return(NULL)
+    }
+    dup <- intersect(names(attached), names(variants))
+    if (length(dup) > 0L) {
+        stop(sprintf("column %s is marked by both render_table(variants =) and mark_cells(); one author per column",
+                     paste(dup, collapse = ", ")), call. = FALSE)
     }
     n <- nrow(df)
     marks <- rep(list(rep(NA_character_, n)), length(cols))
@@ -192,7 +204,88 @@ cell_variants <- function(df, cols, variants) {
         v[!is.na(v) & v %in% c("", "normal")] <- NA_character_
         marks[[j]] <- v
     }
+    for (col in names(attached)) {
+        j <- match(col, names(df))
+        if (is.na(j)) {
+            stop(sprintf("mark_cells() names a column not in the data.frame: %s",
+                         col), call. = FALSE)
+        }
+        v <- attached[[col]]
+        if (!is.character(v) || !(length(v) %in% c(1L, n))) {
+            stop(sprintf("mark_cells(): the marks for column %s must be one variant per row (%d), or one for the column",
+                         col, n), call. = FALSE)
+        }
+        check_cell_variants(v, col)
+        if (length(v) == 1L) {
+            v <- rep(v, n)
+        }
+        v[!is.na(v) & v %in% c("", "normal")] <- NA_character_
+        marks[[j]] <- v
+    }
     marks
+}
+
+#' Mark table cells from inside the render function
+#'
+#' The `variants =` rules read the rendered frame, so a mark that
+#' depends on data the table does not show -- the replica count
+#' behind a "serving 1/1" cell, the limit behind a memory column --
+#' had no honest home, and an app ends up smuggling that data through
+#' a side channel to reach it. This attaches the marks to the frame
+#' itself, inside the render function, where the data is in scope:
+#' the function that wrote the text writes its variant too.
+#'
+#' Marks combine with `render_table(variants =)` column-wise; a
+#' column marked from both places is refused rather than resolved,
+#' because two authors for one column is a conflict, not a cascade.
+#'
+#' @param df the data.frame the render function returns
+#' @param ... marks named by column: a character vector of variants
+#'   from the [txt()] set, one per row, or one for the whole column.
+#'   `NA` and `"normal"` leave a cell plain
+#' @return `df`, with the marks attached for [render_table()]
+#' @examples
+#' \dontrun{
+#' output$services <- render_table(function() {
+#'     svc <- services()
+#'     mark_cells(data.frame(name = svc$name, serving = svc$label,
+#'                           row.names = svc$name),
+#'                serving = ifelse(svc$ready >= svc$replicas,
+#'                                 "success", "warning"))
+#' })
+#' }
+#' @export
+mark_cells <- function(df, ...) {
+    if (!is.data.frame(df)) {
+        stop("mark_cells() expects a data.frame", call. = FALSE)
+    }
+    marks <- list(...)
+    if (length(marks) == 0L) {
+        return(df)
+    }
+    if (is.null(names(marks)) || !all(nzchar(names(marks)))) {
+        stop("mark_cells() marks must be named by column", call. = FALSE)
+    }
+    for (col in names(marks)) {
+        if (!col %in% names(df)) {
+            stop(sprintf("mark_cells() names a column not in the data.frame: %s",
+                         col), call. = FALSE)
+        }
+        v <- marks[[col]]
+        if (!is.character(v) || !(length(v) %in% c(1L, nrow(df)))) {
+            stop(sprintf("mark_cells(): the marks for column %s must be one variant per row (%d), or one for the column",
+                         col, nrow(df)), call. = FALSE)
+        }
+        check_cell_variants(v, col)
+    }
+    existing <- attr(df, "glinty_variants")
+    dup <- intersect(names(marks), names(existing))
+    if (length(dup) > 0L) {
+        stop(sprintf("mark_cells(): column %s is already marked; one author per column",
+                     paste(dup, collapse = ", ")), call. = FALSE)
+    }
+    attr(df, "glinty_variants") <- c(existing, marks)
+    df
 }
 
 #' Convert a data.frame to the wire table structure

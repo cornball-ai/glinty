@@ -37,6 +37,12 @@ returning one variant per row (`NA` or `"normal"` for none).
 Semantic, never a color: what `danger` looks like is the theme's
 decision, and a client draws it however it draws `txt("x", "danger")`.
 
+A rule only sees the rendered frame. For a mark that depends on
+data the table does not show -- the replica count behind a
+"serving 1/1" cell, the limit behind a memory column -- attach the
+marks to the frame with [mark_cells()] inside `fn`, where that data
+is in scope. A column marked from both places is refused.
+
 }
 \examples{
 \dontrun{
