@@ -13,7 +13,7 @@ import 'package:glinty_flutter/glinty_flutter.dart';
 Map<String, dynamic> welcome(List<Map<String, dynamic>> children) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': 'r1',
       'ui': {'component': 'page', 'title': 'Focus', 'children': children},
     };

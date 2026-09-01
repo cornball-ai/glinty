@@ -68,6 +68,90 @@ one_json <- as.character(jsonlite::toJSON(
 expect_true(grepl('"header":["x"]', one_json, fixed = TRUE))
 expect_true(grepl('"rows":[["only"]]', one_json, fixed = TRUE))
 
+# --- keys: the row names travel, so a selection can name a row ---
+#
+# Automatic row names are positions as strings; named ones are what a
+# selectable table reports back, and either indexes the frame.
+expect_equal(unlist(m$value$keys), c("1", "2"))
+expect_true(grepl('"keys":["1"]', one_json, fixed = TRUE))
+named <- glinty:::df_to_table(mtcars[1:3, 1:2])
+expect_equal(unclass(named$keys), c("Mazda RX4", "Mazda RX4 Wag", "Datsun 710"))
+picked <- mtcars[unclass(named$keys)[2:3], , drop = FALSE]
+expect_equal(row.names(picked), c("Mazda RX4 Wag", "Datsun 710"))
+
+# --- variants: a marked cell is an object, an unmarked one a string ---
+vdf <- data.frame(state = c("failed", "ok", "running"), n = c(1, 2, 3),
+                  image = c("sha1", "sha2", "sha3"), stringsAsFactors = FALSE)
+v <- glinty:::df_to_table(vdf, list(
+    state = c(failed = "danger", running = "success"),
+    image = "mono"
+))
+# lookup by cell text: matched cells carry their variant, the rest stay strings
+expect_equal(v$rows[[1L]][[1L]], list(text = "failed", variant = "danger"))
+expect_equal(v$rows[[2L]][[1L]], "ok")
+expect_equal(v$rows[[3L]][[1L]], list(text = "running", variant = "success"))
+# a whole-column rule marks every cell
+expect_equal(v$rows[[1L]][[3L]], list(text = "sha1", variant = "mono"))
+# untouched columns are plain, and align still says what it said
+expect_equal(v$rows[[1L]][[2L]], "1")
+expect_equal(unclass(v$align), c("text", "num", "text"))
+expect_equal(unclass(v$keys), c("1", "2", "3"))
+vj <- as.character(jsonlite::toJSON(v, auto_unbox = TRUE))
+expect_true(grepl('[{"text":"failed","variant":"danger"},"1",{"text":"sha1","variant":"mono"}]',
+                  vj, fixed = TRUE))
+expect_true(grepl('["ok","2",{"text":"sha2","variant":"mono"}]', vj, fixed = TRUE))
+# a function rule sees the whole frame; NA and "normal" leave a cell plain
+fnv <- glinty:::df_to_table(vdf, list(n = function(d) ifelse(d$n > 2, "strong", NA)))
+expect_equal(fnv$rows[[3L]][[2L]], list(text = "3", variant = "strong"))
+expect_equal(fnv$rows[[1L]][[2L]], "1")
+plainv <- glinty:::df_to_table(vdf, list(state = function(d) rep("normal", nrow(d))))
+expect_equal(plainv$rows[[1L]][[1L]], "failed")
+# no rules: the rows are the character arrays they always were
+expect_true(inherits(glinty:::df_to_table(vdf)$rows[[1L]], "AsIs"))
+expect_true(is.list(v$rows[[1L]]) && !inherits(v$rows[[1L]], "AsIs"))
+# a single-column marked row is still an array on the wire
+onev <- glinty:::df_to_table(data.frame(x = "only"), list(x = "mono"))
+expect_true(grepl('"rows":[[{"text":"only","variant":"mono"}]]',
+                  as.character(jsonlite::toJSON(onev, auto_unbox = TRUE)),
+                  fixed = TRUE))
+
+# static rules fail where render_table() was written
+expect_error(render_table(function() vdf, variants = list("mono")), "named list")
+expect_error(render_table(function() vdf, variants = list(state = "bogus")),
+             "unknown variant bogus")
+expect_error(render_table(function() vdf, variants = list(state = c("a", "b"))),
+             "single variant")
+expect_error(render_table(function() vdf, variants = list(state = 1)),
+             "single variant")
+expect_error(render_table(function() vdf, variants = list(state = NA_character_)),
+             "single variant")
+# a function rule can only be checked by what it returns: that half
+# waits for the render and reaches the client as the output's error
+with_session(s, {
+    s$output$vtbl <- render_table(function() vdf,
+        variants = list(state = function(d) rep("bogus", nrow(d))))
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_equal(m$id, "vtbl")
+expect_true(grepl("unknown variant bogus in column state", m$message, fixed = TRUE))
+with_session(s, {
+    s$output$ctbl <- render_table(function() vdf, variants = list(nope = "mono"))
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_true(grepl("not in the data.frame: nope", m$message, fixed = TRUE))
+with_session(s, {
+    s$output$ltbl <- render_table(function() vdf,
+        variants = list(state = function(d) "danger"))
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_true(grepl("one variant per row", m$message, fixed = TRUE))
+
 # render_table rejects non-data.frames via the error path
 with_session(s, {
     s$output$badtbl <- render_table(function() "nope")

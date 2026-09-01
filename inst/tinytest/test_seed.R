@@ -175,3 +175,34 @@ s3 <- new_session("seed3")
 seed_session_inputs(s3, dup)
 expect_equal(isolate(s3$input$x()), "first")
 session_end(s3)
+
+# --- a selectable data table is an input; a plain one is not ---
+#
+# The tabset shape: an id-keyed input outside INPUT_META, seeded from
+# the tree. Nothing selected is character(0), the multiple-select
+# rule, so `df[input$runs(), ]` is a zero-row frame rather than an
+# error. A table with no selection mode seeds nothing and stays
+# auto-NULL, like any output.
+seed_of <- glinty:::input_seed_value
+expect_null(seed_of(data_table("g")))
+expect_identical(seed_of(data_table("g", selection = "single")), character(0))
+expect_identical(seed_of(data_table("g", selection = "multiple")), character(0))
+
+s4 <- new_session("seed4")
+seed_session_inputs(s4, page(data_table("runs", selection = "multiple"),
+                             data_table("plain"), title = "tables"))
+expect_identical(isolate(s4$input$runs()), character(0))
+expect_null(isolate(s4$input$plain()))
+
+# keys arrive as a JSON array and land as a character vector, through
+# the live dispatch (and so through normalize_value); the empty array
+# is the seed's state again, not NULL
+glinty:::dispatch_client_message(s4,
+    '{"type":"input","id":"runs","value":["2","5"]}')
+expect_identical(isolate(s4$input$runs()), c("2", "5"))
+glinty:::dispatch_client_message(s4,
+    '{"type":"input","id":"runs","value":["r-79da5a3068b1583a"]}')
+expect_identical(isolate(s4$input$runs()), "r-79da5a3068b1583a")
+glinty:::dispatch_client_message(s4, '{"type":"input","id":"runs","value":[]}')
+expect_identical(isolate(s4$input$runs()), character(0))
+session_end(s4)

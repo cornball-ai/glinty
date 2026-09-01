@@ -418,10 +418,11 @@ component_fixtures <- function() {
                       name = "data-table",
                       component = component("data_table", id = "grid",
                 page_length = 5L, length_menu = c(5, 30, 50),
-                searchable = FALSE),
+                searchable = FALSE, selection = "single"),
                       notes = paste("same table value, interactive shell: options",
                                     "ride as data attributes, length_menu always",
-                                    "an array")
+                                    "an array; with a selection mode the table",
+                                    "is also an input reporting row keys")
         ),
                  list(
                       name = "data-table-defaults",

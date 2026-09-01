@@ -78,7 +78,7 @@ final tree = {
 Map<String, dynamic> welcome({bool? resumed, String revision = 'r1'}) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': revision,
       'ui': tree,
       'resumed': ?resumed,
@@ -593,7 +593,7 @@ final sliderTree = {
 Map<String, dynamic> welcomeSlider() => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': 'rs',
       'ui': sliderTree,
     };
@@ -721,7 +721,7 @@ final numberTree = {
 Map<String, dynamic> _welcomeOf(Object tree, String rev) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': rev,
       'ui': tree,
     };

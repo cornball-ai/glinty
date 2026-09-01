@@ -13,7 +13,7 @@ import 'package:glinty_flutter/glinty_flutter.dart';
 Map<String, dynamic> welcomeWith(Object tree, {String revision = 'r1'}) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': revision,
       'ui': tree,
     };

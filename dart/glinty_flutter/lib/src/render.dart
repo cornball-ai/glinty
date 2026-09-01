@@ -621,7 +621,7 @@ class GlintyRenderer {
       case 'verbatim_output':
         return _slot(context, c, 'text', () => _verbatim(context, c));
       case 'table_output':
-        return _slot(context, c, 'table', () => _table(c));
+        return _slot(context, c, 'table', () => _table(context, c));
       case 'data_table':
         return _slot(context, c, 'table', () => _dataTable(c));
       case 'plot_output':
@@ -753,9 +753,16 @@ class GlintyRenderer {
 
   // --- static content ---
 
-  TextStyle? _textStyleFor(BuildContext context, GlintyComponent c) {
+  TextStyle? _textStyleFor(BuildContext context, GlintyComponent c) =>
+      _variantStyle(context, _variant(c.type, c.str('variant')));
+
+  /// The style a text variant asks for, shared by txt(), text_output
+  /// and a marked table cell -- one switch, so a cell marked `danger`
+  /// is the same red as `txt("x", "danger")`. Takes a variant already
+  /// checked by [_variant].
+  TextStyle? _variantStyle(BuildContext context, String? variant) {
     final theme = Theme.of(context).textTheme;
-    switch (_variant(c.type, c.str('variant'))) {
+    switch (variant) {
       case 'muted':
         // the muted token lands on onSurfaceVariant in glintyThemeData
         return theme.bodyMedium
@@ -1838,7 +1845,14 @@ class GlintyRenderer {
                     fontFamilyFallback: monoStack.sublist(1)))),
       );
 
-  Widget _table(GlintyComponent c) {
+  /// The style of one table cell: nothing for a plain string, the
+  /// text variant's style for a marked `{text, variant}` cell.
+  TextStyle? _cellStyle(BuildContext context, dynamic cell) {
+    final v = _cellVariant(cell);
+    return v == null ? null : _variantStyle(context, _variant('text', v));
+  }
+
+  Widget _table(BuildContext context, GlintyComponent c) {
     final v = values[c.str('id')];
     if (v is! Map || v['header'] is! List) return const SizedBox.shrink();
     final header = (v['header'] as List).map((h) => h.toString()).toList();
@@ -1854,8 +1868,10 @@ class GlintyRenderer {
         (v['align'] as List? ?? const []).map((a) => a.toString()).toList();
     bool numAt(int i) => i < align.length && align[i] == 'num';
     final rows = (v['rows'] as List? ?? const []).map((r) {
-      final cells = (r as List).map((cell) => cell.toString()).toList();
-      return DataRow(cells: cells.map((s) => DataCell(Text(s))).toList());
+      return DataRow(cells: [
+        for (final cell in r as List)
+          DataCell(Text(_cellText(cell), style: _cellStyle(context, cell)))
+      ]);
     }).toList();
     return DataTable(
       columns: [
@@ -1867,8 +1883,9 @@ class GlintyRenderer {
   }
 
   /// The interactive table: same value as [_table], plus client-side
-  /// sort, filter and pagination held in a stateful widget keyed by
-  /// id. Mirrors renderDataTable in glinty.js: the two must agree.
+  /// sort, filter, pagination and selection held in a stateful widget
+  /// keyed by id. Mirrors renderDataTable in glinty.js: the two must
+  /// agree.
   Widget _dataTable(GlintyComponent c) {
     final id = c.str('id')!;
     final v = values[id];
@@ -1882,6 +1899,11 @@ class GlintyRenderer {
       menu: menu,
       searchable: c.boolean('searchable', fallback: true),
       sortable: c.boolean('sortable', fallback: true),
+      selection: c.str('selection') ?? 'none',
+      // the selected keys are the table's input value, reported
+      // under its id the way a tabset reports its open panel
+      onSelect: (keys) => onInput?.call(id, keys),
+      cellStyle: _cellStyle,
     );
   }
 
@@ -2937,17 +2959,59 @@ class _GlintyTextFieldState extends State<_GlintyTextField> {
       );
 }
 
-/// The interactive table. Sort, filter and page state live here, in
-/// the client, where the click happened -- the server never hears
-/// about a sort. Keyed by id, so the state survives value updates and
+/// A cell is a string, or `{text, variant}` when the server marked
+/// it. Every read of a cell goes through these two, so the filter,
+/// the sort and the paint agree on what a marked cell says.
+String _cellText(dynamic c) {
+  if (c == null) return '';
+  if (c is Map) {
+    final t = c['text'];
+    return t == null ? '' : t.toString();
+  }
+  return c.toString();
+}
+
+String? _cellVariant(dynamic c) {
+  if (c is Map && c['variant'] is String) return c['variant'] as String;
+  return null;
+}
+
+/// A row with the key it was sent under: the value's `keys` entry
+/// (the data.frame's row names) or its 1-based position. Keyed
+/// before any filter or sort, because that is when the position
+/// still means something.
+class _DtRow {
+  const _DtRow(this.key, this.cells);
+  final String key;
+  final List cells;
+}
+
+List<_DtRow> _dtRows(Map? v) {
+  final rows = v?['rows'] as List? ?? const [];
+  final keys = v?['keys'] as List? ?? const [];
+  return [
+    for (var i = 0; i < rows.length; i++)
+      _DtRow(
+        i < keys.length && keys[i] != null ? keys[i].toString() : '${i + 1}',
+        rows[i] as List,
+      )
+  ];
+}
+
+/// The interactive table. Sort, filter, page and selection state
+/// live here, in the client, where the click happened -- the server
+/// never hears about a sort, and hears the whole selection each time
+/// it changes. Keyed by id, so the state survives value updates and
 /// re-renders; a new value clamps the page instead of resetting it,
-/// keeping the reader's place unless the place stopped existing.
+/// keeping the reader's place unless the place stopped existing, and
+/// drops selected keys the new value no longer carries.
 ///
 /// Must agree with renderDataTable in glinty.js: case-insensitive
 /// contains filter across all columns, numeric sort where the value's
 /// align says "num" (a non-number in a numeric column compares equal,
 /// as JS Number() -> NaN does), text sort elsewhere by code unit like
-/// JS < on strings.
+/// JS < on strings; single selection replaces and clears on a second
+/// tap, multiple toggles, and keys are reported in data order.
 class _GlintyDataTable extends StatefulWidget {
   const _GlintyDataTable({
     super.key,
@@ -2956,6 +3020,9 @@ class _GlintyDataTable extends StatefulWidget {
     required this.menu,
     required this.searchable,
     required this.sortable,
+    required this.selection,
+    required this.onSelect,
+    required this.cellStyle,
   });
 
   final Map? value;
@@ -2963,6 +3030,9 @@ class _GlintyDataTable extends StatefulWidget {
   final List<num> menu;
   final bool searchable;
   final bool sortable;
+  final String selection;
+  final void Function(List<String> keys)? onSelect;
+  final TextStyle? Function(BuildContext context, dynamic cell) cellStyle;
 
   @override
   State<_GlintyDataTable> createState() => _GlintyDataTableState();
@@ -2974,11 +3044,51 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
   int _page = 0;
   int? _sortCol;
   bool _sortAsc = true;
+  final _selected = <String>{};
 
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GlintyDataTable old) {
+    super.didUpdateWidget(old);
+    // a row that left the value leaves the selection, and the server
+    // hears about it once, only if something changed -- after this
+    // frame, because didUpdateWidget runs inside a build and the
+    // session's notifyListeners would setState on an ancestor. Not
+    // gated on the value's identity: the prune is idempotent, and a
+    // re-render that carries the same rows changes nothing.
+    final keys = _dtRows(widget.value).map((r) => r.key).toSet();
+    final before = _selected.length;
+    _selected.retainWhere(keys.contains);
+    if (_selected.length != before) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _report());
+    }
+  }
+
+  /// The selection in data order, never click order, so this client
+  /// and the browser report the same vector.
+  void _report() {
+    widget.onSelect?.call([
+      for (final r in _dtRows(widget.value))
+        if (_selected.contains(r.key)) r.key
+    ]);
+  }
+
+  void _toggle(String key) {
+    setState(() {
+      if (widget.selection == 'single') {
+        final was = _selected.contains(key);
+        _selected.clear();
+        if (!was) _selected.add(key);
+      } else if (!_selected.remove(key)) {
+        _selected.add(key);
+      }
+    });
+    _report();
   }
 
   int _compare(String a, String b, bool numeric) {
@@ -3003,19 +3113,22 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
     final align =
         (v?['align'] as List? ?? const []).map((a) => a.toString()).toList();
     bool numAt(int i) => i < align.length && align[i] == 'num';
-    final all = (v?['rows'] as List? ?? const [])
-        .map((r) => (r as List).map((c) => c.toString()).toList())
-        .toList();
+    final all = _dtRows(v);
+    final selectable = widget.selection != 'none';
 
     final q = _search.text.toLowerCase();
     var rows = q.isEmpty
         ? all
-        : all.where((r) => r.any((c) => c.toLowerCase().contains(q))).toList();
+        : all
+            .where((r) =>
+                r.cells.any((c) => _cellText(c).toLowerCase().contains(q)))
+            .toList();
     final sc = _sortCol;
     if (sc != null && sc < header.length) {
       rows = List.of(rows)
         ..sort((a, b) {
-          final d = _compare(a[sc], b[sc], numAt(sc));
+          final d = _compare(
+              _cellText(a.cells[sc]), _cellText(b.cells[sc]), numAt(sc));
           return _sortAsc ? d : -d;
         });
     }
@@ -3054,6 +3167,9 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
     ]);
 
     final table = DataTable(
+      // rows select on tap, as in the browser; Material's checkbox
+      // column would be a second control the wire never described
+      showCheckboxColumn: false,
       sortColumnIndex: sc != null && sc < header.length ? sc : null,
       sortAscending: _sortAsc,
       columns: [
@@ -3071,7 +3187,15 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
       ],
       rows: [
         for (final r in pageRows)
-          DataRow(cells: [for (final c in r) DataCell(Text(c))])
+          DataRow(
+            selected: selectable && _selected.contains(r.key),
+            onSelectChanged: selectable ? (_) => _toggle(r.key) : null,
+            cells: [
+              for (final c in r.cells)
+                DataCell(
+                    Text(_cellText(c), style: widget.cellStyle(context, c)))
+            ],
+          )
       ],
     );
 

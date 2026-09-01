@@ -160,8 +160,8 @@ for (nm in names(old)) {
 
 # --- the first frame must be a well-formed hello ---
 well_formed_hello <- glinty:::well_formed_hello
-expect_true(well_formed_hello(list(type = "hello", protocol = 3L)))
-expect_true(well_formed_hello(list(type = "hello", protocol = 3,
+expect_true(well_formed_hello(list(type = "hello", protocol = 4L)))
+expect_true(well_formed_hello(list(type = "hello", protocol = 4,
                                    token = "x", resume = "y")))
 expect_false(well_formed_hello(NULL))
 expect_false(well_formed_hello(list(type = "init", inputs = list())))

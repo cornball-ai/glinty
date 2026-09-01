@@ -59,46 +59,176 @@ render_html <- function(fn) {
 #' so escaping is structurally unnecessary) and the native frontend
 #' draws a grid from the same data.
 #'
+#' Row names travel as `keys`, which is how a [data_table()] with
+#' `selection` says which rows were chosen: `input$grid()` is a
+#' character vector of keys, and `df[input$grid(), ]` is the selected
+#' rows. Give the data.frame meaningful row names
+#' (`row.names(df) <- df$run_id`) and a selection survives a re-sort
+#' and a refresh; automatic row names (`"1"`, `"2"`, ...) work too,
+#' as positions.
+#'
+#' `variants` colors cells the way [txt()] colors text. A named list,
+#' one entry per column, each entry one of: a single variant for the
+#' whole column (`image = "mono"`); a named character vector looked up
+#' by cell text (`state = c(failed = "danger", running = "success")`,
+#' unmatched cells stay normal); or a function of the data.frame
+#' returning one variant per row (`NA` or `"normal"` for none).
+#' Semantic, never a color: what `danger` looks like is the theme's
+#' decision, and a client draws it however it draws `txt("x", "danger")`.
+#'
 #' @param fn zero-arg function returning a data.frame
+#' @param variants named list of per-column variant rules, or NULL
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
 #' output$results <- render_table(function() head(mtcars))
+#' output$runs <- render_table(function() runs(),
+#'     variants = list(state = c(failed = "danger", running = "success"),
+#'                     image = "mono"))
 #' }
 #' @export
-render_table <- function(fn) {
+render_table <- function(fn, variants = NULL) {
+    check_table_variants(variants)
     new_renderer(
                  function() {
         df <- fn()
         if (!is.data.frame(df)) {
             stop("render_table() expects a data.frame", call. = FALSE)
         }
-        df_to_table(df)
+        df_to_table(df, variants)
     },
                  "table"
     )
 }
 
+#' Refuse a malformed `variants` where render_table() was written
+#'
+#' The static forms (a variant, a lookup vector) are checked here so
+#' a typo fails at definition, not on the first render. A function
+#' rule can only be checked against what it returns, so that half
+#' waits for the render and surfaces as the output's error.
+#'
+#' @param variants the render_table(variants =) argument
+#' @return invisible NULL, or an error
+#' @keywords internal
+check_table_variants <- function(variants) {
+    if (is.null(variants)) {
+        return(invisible(NULL))
+    }
+    if (!is.list(variants) || length(variants) == 0L ||
+        is.null(names(variants)) || !all(nzchar(names(variants)))) {
+        stop("render_table(variants =) must be a named list, one entry per column",
+             call. = FALSE)
+    }
+    for (col in names(variants)) {
+        rule <- variants[[col]]
+        named <- !is.null(names(rule)) && all(nzchar(names(rule)))
+        ok <- is.function(rule) ||
+            (is.character(rule) && length(rule) >= 1L && !anyNA(rule) &&
+             (named || length(rule) == 1L))
+        if (!ok) {
+            stop(sprintf(paste("render_table(variants =): the rule for column %s must be",
+                               "a single variant, a named character vector (cell text",
+                               "-> variant), or a function of the data.frame"), col),
+                 call. = FALSE)
+        }
+        if (is.character(rule)) {
+            check_cell_variants(rule, col)
+        }
+    }
+    invisible(NULL)
+}
+
+check_cell_variants <- function(v, col) {
+    bad <- unique(v[!is.na(v) & !(v %in% c(TEXT_VARIANTS, ""))])
+    if (length(bad)) {
+        stop(sprintf("render_table(variants =): unknown variant %s in column %s; must be one of %s",
+                     paste(bad, collapse = ", "), col,
+                     paste(TEXT_VARIANTS, collapse = ", ")), call. = FALSE)
+    }
+    invisible(NULL)
+}
+
+#' Resolve per-column variant rules to one mark per cell
+#'
+#' @param df the data.frame being rendered
+#' @param cols its columns as character, the cell text a lookup reads
+#' @param variants the checked render_table(variants =) argument
+#' @return NULL when nothing is marked, else a list (one per column)
+#'   of character vectors with NA for an unmarked cell
+#' @keywords internal
+cell_variants <- function(df, cols, variants) {
+    if (is.null(variants) || nrow(df) == 0L) {
+        return(NULL)
+    }
+    n <- nrow(df)
+    marks <- rep(list(rep(NA_character_, n)), length(cols))
+    for (col in names(variants)) {
+        j <- match(col, names(df))
+        if (is.na(j)) {
+            stop(sprintf("render_table(variants =) names a column not in the data.frame: %s",
+                         col), call. = FALSE)
+        }
+        rule <- variants[[col]]
+        v <- if (is.function(rule)) {
+            out <- rule(df)
+            if (!is.character(out) || length(out) != n) {
+                stop(sprintf("render_table(variants =): the rule for column %s must return one variant per row (%d), as character",
+                             col, n), call. = FALSE)
+            }
+            check_cell_variants(out, col)
+            out
+        } else if (is.null(names(rule))) {
+            rep(rule, n)
+        } else {
+            unname(rule[cols[[j]]])
+        }
+        v[!is.na(v) & v %in% c("", "normal")] <- NA_character_
+        marks[[j]] <- v
+    }
+    marks
+}
+
 #' Convert a data.frame to the wire table structure
 #'
-#' I() wrappers keep length-1 headers and single-cell rows as JSON
-#' arrays under auto_unbox. `align` marks each column "num" or
+#' I() wrappers keep length-1 headers, keys and single-cell rows as
+#' JSON arrays under auto_unbox. `align` marks each column "num" or
 #' "text": values become strings on the wire, so numeric-ness must
 #' travel alongside or the frontends can't right-align numbers.
+#' `keys` are the row names, what a selectable table reports.
+#'
+#' A cell is a string, or `list(text =, variant =)` when a variant
+#' rule marked it -- only the marked cells change shape, so a table
+#' with no rules is byte-for-byte what it always was, and a client
+#' that has never heard of the object form shows it as an object
+#' rather than as a plausible string.
 #'
 #' @param df a data.frame
-#' @return list(header, rows, align) of character vectors
+#' @param variants per-column variant rules, see [render_table()]
+#' @return list(header, rows, keys, align)
 #' @keywords internal
-df_to_table <- function(df) {
+df_to_table <- function(df, variants = NULL) {
     num <- vapply(df, is.numeric, logical(1L), USE.NAMES = FALSE)
     cols <- lapply(df, function(col) {
         if (is.numeric(col)) format(col, trim = TRUE) else as.character(col)
     })
+    marks <- cell_variants(df, cols, variants)
     rows <- lapply(seq_len(nrow(df)), function(i) {
-        I(vapply(cols, function(col) col[[i]], character(1L),
-                 USE.NAMES = FALSE))
+        cells <- vapply(cols, function(col) col[[i]], character(1L),
+                        USE.NAMES = FALSE)
+        if (is.null(marks)) {
+            return(I(cells))
+        }
+        row <- as.list(cells)
+        for (j in seq_along(row)) {
+            v <- marks[[j]][[i]]
+            if (!is.na(v)) {
+                row[[j]] <- list(text = cells[[j]], variant = v)
+            }
+        }
+        row
     })
-    list(header = I(names(df)), rows = rows,
+    list(header = I(names(df)), rows = rows, keys = I(row.names(df)),
          align = I(ifelse(num, "num", "text")))
 }
 

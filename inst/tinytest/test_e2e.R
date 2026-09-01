@@ -156,12 +156,12 @@ next_json <- function(timeout = 5) {
 
 # --- 2. handshake; sessions start on the first client message ---
 con <- ws_handshake()
-writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}', mask = TRUE), con)
+writeBin(text_frame('{"type":"hello","protocol":4,"client":"e2e/1"}', mask = TRUE), con)
 
-# --- 3. welcome first (protocol 3), then the initial count update ---
+# --- 3. welcome first (protocol 4), then the initial count update ---
 msg <- next_json()
 expect_equal(msg$type, "welcome")
-expect_equal(msg$protocol, 3L)
+expect_equal(msg$protocol, 4L)
 expect_true(nchar(msg$session) == 32L)
 sid <- msg$session
 # the welcome carries the tree and repeats the served revision
@@ -196,7 +196,7 @@ Sys.sleep(0.5)
 # --- 7. reconnect and resume: hello carries the old session id ---
 con <- ws_handshake()
 writeBin(text_frame(
-    sprintf('{"type":"hello","protocol":3,"client":"e2e/1","resume":"%s"}',
+    sprintf('{"type":"hello","protocol":4,"client":"e2e/1","resume":"%s"}',
             sid),
     mask = TRUE
 ), con)
@@ -234,7 +234,7 @@ close(con)
 # --- 9. resume with a bogus id gets an honest resumed=false ---
 con <- ws_handshake()
 writeBin(text_frame(
-    paste0('{"type":"hello","protocol":3,"client":"e2e/1",',
+    paste0('{"type":"hello","protocol":4,"client":"e2e/1",',
            '"resume":"deadbeefdeadbeefdeadbeefdeadbeef"}'),
     mask = TRUE
 ), con)
@@ -246,7 +246,7 @@ close(con)
 # --- 10. multipart upload via a ticket minted over the socket ---
 # fresh WS session for the upload test
 con <- ws_handshake()
-writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}', mask = TRUE), con)
+writeBin(text_frame('{"type":"hello","protocol":4,"client":"e2e/1"}', mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$type, "welcome")
 next_json() # initial count update, ignore
@@ -396,7 +396,7 @@ ws_handshake_auth <- function() {
 
 # no token: one error frame, then the server closes the socket
 con <- ws_handshake_auth()
-writeBin(text_frame('{"type":"hello","protocol":3,"client":"e2e/1"}',
+writeBin(text_frame('{"type":"hello","protocol":4,"client":"e2e/1"}',
     mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$type, "error")
@@ -422,7 +422,7 @@ close(con)
 # the wrong token is refused the same way
 con <- ws_handshake_auth()
 writeBin(text_frame(
-    '{"type":"hello","protocol":3,"client":"e2e/1","token":"guess"}',
+    '{"type":"hello","protocol":4,"client":"e2e/1","token":"guess"}',
     mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$type, "error")
@@ -431,7 +431,7 @@ close(con)
 # the right token gets a welcome, and the principal reaches the app
 con <- ws_handshake_auth()
 writeBin(text_frame(
-    '{"type":"hello","protocol":3,"client":"e2e/1","token":"letmein"}',
+    '{"type":"hello","protocol":4,"client":"e2e/1","token":"letmein"}',
     mask = TRUE), con)
 msg <- next_json()
 expect_equal(msg$type, "welcome")
@@ -448,7 +448,7 @@ Sys.sleep(0.5)
 # session id gets a fresh session, never A's replay
 con <- ws_handshake_auth()
 writeBin(text_frame(sprintf(
-    paste0('{"type":"hello","protocol":3,"client":"e2e/1",',
+    paste0('{"type":"hello","protocol":4,"client":"e2e/1",',
            '"token":"letmein2","resume":"%s"}'), a_sid),
     mask = TRUE), con)
 msg <- next_json()
@@ -461,7 +461,7 @@ Sys.sleep(0.3)
 # while A's own refreshed token resumes A's session
 con <- ws_handshake_auth()
 writeBin(text_frame(sprintf(
-    paste0('{"type":"hello","protocol":3,"client":"e2e/1",',
+    paste0('{"type":"hello","protocol":4,"client":"e2e/1",',
            '"token":"letmein","resume":"%s"}'), a_sid),
     mask = TRUE), con)
 msg <- next_json()

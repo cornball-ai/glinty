@@ -1,9 +1,10 @@
-# glinty protocol v3
+# glinty protocol v4
 
 Status: **frozen**. On `main`, unreleased. Three independent
 lowerings render it: R to HTML for the server-rendered first paint,
 `inst/www/glinty.js` to DOM, and `dart/glinty_flutter` to Flutter
-widgets. Protocol 2 is gone.
+widgets. Protocol 2 is gone; protocol 3 never shipped and 4 replaces
+it on `main` (see "v4" below for why the number moved).
 
 Frozen means what already exists does not move. Clients may still
 grow — the Flutter one refuses markup and `date_input` by name,
@@ -54,6 +55,42 @@ That justification expires the moment protocol 3 ships. After that,
 any addition that is not clearly in the "fails visibly" column bumps
 the version, or gates itself behind a declared capability. There is
 no third option where it is fine because the field is optional.
+
+### v4
+
+The number moved, for the first time since 3, on `data_table` growing
+a `selection` field. By the test at the top this is the `button.value`
+shape: an older client draws a working-looking table whose rows do
+nothing, the handler never fires, and nothing on screen says why. The
+v3.1 justification (no older protocol-3 client exists) was still
+literally true, since protocol 3 never shipped, and was not used
+again: it was written as expiring, and leaning on it twice is how an
+expiry stops meaning anything.
+
+What arrived with it:
+
+- `selection` on `data_table`: `"none"` (the default), `"single"` or
+  `"multiple"`. Given a mode the table is also an input under its own
+  id: the client reports the selected rows' keys as an array of
+  strings, in the value's order, and an empty array when nothing is
+  selected. This follows the `tabset` pattern — an id-keyed input
+  seeded from the tree, no binding on the container — rather than
+  `INPUT_META`: the container stays a slot, and the rows carry the
+  key. Sorting and filtering stay local, so a selected row stays
+  selected through both; a row that leaves the value leaves the
+  selection, and the client reports that once.
+- `keys` on the `table` value: one string per row, the data.frame's
+  row names. What a selection names, and what `df[input$grid(), ]`
+  reads. A client that sees no `keys` uses the 1-based position.
+- A `table` cell may be `{text, variant}` instead of a string, with a
+  `text` variant, so a status column can say `failed` in `danger`. Only
+  marked cells change shape. This one would have been safe on its own:
+  a client that has never seen the form shows an object, which is
+  visible.
+
+Resume caveat: a client that rebuilds after a reconnect starts with
+nothing selected while the server still holds the last reported keys.
+The fix is an `input_update` for `data_table`, not in this version.
 
 ### v3.2
 
@@ -155,7 +192,7 @@ is a translation of the other.
 | type | fields | meaning |
 |---|---|---|
 | `hello` | `protocol`, `client`, `components`, `kinds`, `features`, `token?`, `resume?` | opening frame; declares what this client can render |
-| `input` | `id`, `value` | an input changed |
+| `input` | `id`, `value` | an input changed; a `data_table` with a selection mode reports its selected keys this way, as an array under its own id |
 | `event` | `id`, `value?` | a button press or other discrete event; `value` is present only when the button declared one |
 | `measure` | `id`, `width`, `height`, `dpr?` | a client-sized output's box, in logical pixels |
 | `ticket` | `id`, `purpose` | request a short-lived upload/download ticket |
@@ -395,6 +432,16 @@ never reaches the server, and a value update clamps the reader's page
 instead of resetting it. The value's `align` doubles as the sort-type
 signal — `"num"` columns sort numerically, the rest as text.
 
+Given a `selection` mode (`"single"` or `"multiple"`) it is also an
+input: a row click reports the selected rows' `keys` as an array of
+strings under the table's id, in the value's order, and `[]` when
+nothing is selected. Single replaces (and a second click on the
+selected row clears); multiple toggles. The selection is held with
+the rest of the client state, so it survives a sort and a filter, and
+a value update drops keys the new value no longer carries — reported
+once, only if that changed anything. The container stays a plain
+slot (no `data-g-target`); the rows carry `data-g-key`.
+
 **Fed by message**: `feed`
 
 `feed` is the scrolling log — a shell in the tree that its own frame
@@ -439,7 +486,7 @@ same as safe to add.
 | `slider_input` | `id`, `min: num`, `max: num` | `label`, `value`, `step` |
 | `range_slider` | `id`, `min: num`, `max: num` | `label`, `value: [lo, hi]`, `step` |
 | `button` | `id`, `label` | `variant`, `icon`, `value: string` |
-| `data_table` | `id` | `page_length: int` (10), `length_menu: [num]` (always an array; `[10,25,50,100]`), `searchable: bool` (true), `sortable: bool` (true) |
+| `data_table` | `id` | `page_length: int` (10), `length_menu: [num]` (always an array; `[10,25,50,100]`), `searchable: bool` (true), `sortable: bool` (true), `selection: enum` (`none`; `single`, `multiple`) |
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
 | `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false), `report: bool` (false) |
@@ -570,7 +617,7 @@ rather than an intention.
 | `conditional_panel` | `Offstage` | hiding keeps the subtree, and its state, alive |
 | `feed` | `ListView` + a scroll controller | a bounded spot gives it a real viewport; an unbounded one shrink-wraps into the page's scroll; the stick contract is in "The feed" |
 | `text_output` / `verbatim_output` / `table_output` | `Text` / mono `Container` / `Table` | a kind they cannot draw is named, not stringified |
-| `data_table` | stateful `DataTable` + controls | sort/filter/page state lives in the client; must agree with the browser's `renderDataTable` |
+| `data_table` | stateful `DataTable` + controls | sort/filter/page/selection state lives in the client; rows select on tap with no checkbox column; must agree with the browser's `renderDataTable` |
 | `plot_output` | `LayoutBuilder` + `Image.memory` | always reports, fixed size included; a declared axis wins, an unbounded height becomes 4:3 |
 | `image` | `Image.memory` / `Image.network` | data:, http(s), or relative resolved against the server address |
 | `collapse` | `ExpansionTile` | `open` becomes `initiallyExpanded` |
@@ -727,7 +774,7 @@ side does not know is a button that renders and does nothing.
 | kind | value | from |
 |---|---|---|
 | `text` | string | `render_text()` |
-| `table` | `{header, rows, align}` | `render_table()` |
+| `table` | `{header, rows, align, keys?}` | `render_table()` |
 | `image` | `{src, width, height}` | `render_plot()` |
 | `audio` | `{src, mime, duration?}` | `render_audio()` |
 | `video` | `{src, mime, poster?, duration?}` | `render_video()` |
@@ -741,6 +788,19 @@ A table's `align` marks each column `"num"` or `"text"`: values
 travel as strings, so numeric-ness must ride alongside for the
 frontends to right-align number columns. A client that sees no
 `align` treats every column as text.
+
+A table's `keys` name its rows, one string each: `render_table()`
+sends the data.frame's row names, which is what a selectable
+`data_table` reports back. A client that sees no `keys` uses the
+1-based position.
+
+A cell is a string, or `{"text": "failed", "variant": "danger"}` when
+the server marked it with a `text` variant (`render_table(variants
+=)`). Only marked cells take the object form, so a table with no
+rules is what it always was. A client reads a cell's text through one
+accessor for the filter, the sort and the paint, so a marked cell
+sorts and searches by its text and never by its shape. An unknown
+variant falls back to normal with a console warning, as on `text`.
 
 So there is no `verbatim` kind. `render_text()` always produces
 `text`; `verbatim_output` is the component that chooses to display a
@@ -964,7 +1024,7 @@ Not negotiation. The client states what it can do; the server never
 adapts the wire format in response.
 
 ```json
-{"type": "hello", "protocol": 3, "client": "glinty-js/0.5.0",
+{"type": "hello", "protocol": 4, "client": "glinty-js/0.5.0",
  "components": ["text_input", "select_input", "..."],
  "kinds": ["text", "table", "image", "audio", "video", "ui", "html"],
  "features": ["upload", "download", "modal", "progress", "measure",

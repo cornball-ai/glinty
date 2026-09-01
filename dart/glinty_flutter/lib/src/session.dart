@@ -22,7 +22,7 @@ import 'inputs.dart';
 import 'render.dart' show supportedComponents;
 
 /// The protocol version this client speaks.
-const glintyProtocolVersion = 3;
+const glintyProtocolVersion = 4;
 
 /// A frame the client sends. Named rather than a bare map so tests can
 /// count what left, which is the only way to assert invariant 2.

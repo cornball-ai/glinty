@@ -66,6 +66,18 @@ field <- function(type, required = FALSE, default = NULL, values = NULL,
 #' @keywords internal
 FEED_KEEP_DEFAULT <- 200L
 
+#' The text variants
+#'
+#' One list for every place a string can carry a variant: `text`,
+#' `text_output`, a table cell, a key_value item. It was spelled out
+#' twice in the schema before a third consumer arrived; a variant
+#' added here reaches all of them, and one added anywhere else is a
+#' drift the vocabulary tests will name.
+#'
+#' @keywords internal
+TEXT_VARIANTS <- c("normal", "muted", "strong", "heading", "mono", "small",
+                   "success", "warning", "danger")
+
 #' Component field schemas
 #'
 #' Every component's fields, with types, bounds and defaults.
@@ -79,8 +91,7 @@ COMPONENT_SCHEMA <- list(
                          text = list(
                                      value = field("string", required = TRUE),
                                      variant = field("enum", default = "normal",
-            values = c("normal", "muted", "strong", "heading", "mono",
-                       "small", "success", "warning", "danger")),
+            values = TEXT_VARIANTS),
                                      id = field("string")
     ),
                          heading = list(
@@ -370,8 +381,7 @@ COMPONENT_SCHEMA <- list(
                          text_output = list(
         id = field("string", required = TRUE),
         variant = field("enum", default = "normal",
-                        values = c("normal", "muted", "strong", "heading", "mono", "small",
-                                   "success", "warning", "danger"))
+                        values = TEXT_VARIANTS)
     ),
                          verbatim_output = list(id = field("string", required = TRUE)),
                          table_output = list(id = field("string", required = TRUE)),
@@ -381,7 +391,14 @@ COMPONENT_SCHEMA <- list(
         # page-size options offered; always an array on the wire
         length_menu = field("numbers", default = c(10, 25, 50, 100)),
         searchable = field("bool", default = TRUE),
-        sortable = field("bool", default = TRUE)
+        sortable = field("bool", default = TRUE),
+        # Given a selection mode the table is also an input: the
+        # client reports the keys of the chosen rows under the
+        # table's id. Not `variant` on purpose -- selection is
+        # behaviour, not look, and the variant machinery (CSS guard,
+        # KNOWN_VARIANTS) should not have to answer for it.
+        selection = field("enum", default = "none",
+                          values = c("none", "single", "multiple"))
     ),
                          plot_output = list(
         id = field("string", required = TRUE),
@@ -975,4 +992,4 @@ print.glinty_component <- function(x, ...) {
 #' against rather than rendering half of it.
 #'
 #' @keywords internal
-PROTOCOL_VERSION <- 3L
+PROTOCOL_VERSION <- 4L

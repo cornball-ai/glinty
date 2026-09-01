@@ -1,7 +1,7 @@
 /* Runtime checks of glinty.js without a browser.
 
    A hand-rolled mini-DOM (below) is stubbed into a fresh vm context
-   per scenario, and the real client is driven through the protocol 3
+   per scenario, and the real client is driven through the protocol 4
    paths that matter: the hello/welcome bootstrap, all four hydration
    invariants, component rendering against the shared fixture file,
    and the transcript replays that the R and Dart suites also run.
@@ -534,7 +534,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("exactly one frame left on open", page.sent.length === 1);
         const hello = page.sent[0];
         check("and it is hello", hello.type === "hello");
-        check("hello speaks protocol 3", hello.protocol === 3);
+        check("hello speaks protocol 4", hello.protocol === 4);
         check("hello names the client",
               typeof hello.client === "string" && hello.client.length > 0);
         check("hello declares components",
@@ -624,7 +624,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         page.ws().deliver({
             type: "welcome",
             session: welcome.session,
-            protocol: 3,
+            protocol: 4,
             ui_revision: welcome.ui_revision,
             ui: welcome.ui,
             resumed: true
@@ -707,7 +707,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const err = page.document.getElementById("g-protocol-error");
         check("the refusal is on screen", err !== null);
         check("it names both versions",
-              err.textContent.includes("protocol 3") &&
+              err.textContent.includes("protocol 4") &&
               err.textContent.includes("protocol " + welcome.protocol));
         check("it says what to do", err.textContent.includes("Update the app"));
         check("the refused tree was not rendered",
@@ -797,7 +797,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         /* A themeless welcome touches nothing. */
         const bare = freshPage({ setup: prerenderDemo });
         bare.ws().open();
-        bare.ws().deliver({ type: "welcome", session: "s0", protocol: 3 });
+        bare.ws().deliver({ type: "welcome", session: "s0", protocol: 4 });
         check("no theme, no block",
               bare.document.getElementById("g-theme") === null);
 
@@ -807,7 +807,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const hostile = freshPage({ setup: prerenderDemo });
         hostile.ws().open();
         hostile.ws().deliver({
-            type: "welcome", session: "sx", protocol: 3,
+            type: "welcome", session: "sx", protocol: 4,
             theme: { colors: { primary: "red;}body{display:none",
                                danger: "#b3261e" },
                      font: { mono: "x;--g-primary:#ff0000",
@@ -1077,7 +1077,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const page = freshPage({ metaRevision: "whatever",
                                  setup: prerenderDemo });
         page.ws().open();
-        page.ws().deliver({ type: "welcome", session: "s-new", protocol: 3,
+        page.ws().deliver({ type: "welcome", session: "s-new", protocol: 4,
                             resumed: false });
         check("resumed=false reloads", page.reloads === 1);
     }
@@ -2141,7 +2141,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         check("nothing sent while closed", page.sent.length === 0);
         page.ws().open();
         check("hello still goes first", page.sent[0].type === "hello");
-        page.ws().deliver({ type: "welcome", session: "s1", protocol: 3 });
+        page.ws().deliver({ type: "welcome", session: "s1", protocol: 4 });
         const early = page.sent.find((m) => m.id === "early");
         check("queued input flushed after welcome",
               !!early && early.value === "value-1");
@@ -2167,6 +2167,125 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         G.setInputValue("evt", "x", { priority: "event" });
         check("opts argument is accepted and ignored",
               page.sent.filter((m) => m.id === "evt").length === 1);
+    }
+
+    /* ---------------------------------------------------------- */
+    section("data_table: row selection and marked cells");
+    {
+        /* The first table coverage in this bridge. The interactive
+           build happens only when a value arrives, so the fixture
+           render above never reaches renderDataTable; and selection
+           reports through the root click delegation, which is
+           exactly what page.fire drives. Must agree with
+           data_table_test.dart. */
+        const tableTree = (selection) => ({
+            component: "page", title: "T", children: [{
+                component: "data_table", id: "grid", page_length: 10,
+                length_menu: [10], searchable: true, sortable: true,
+                selection: selection
+            }]
+        });
+        const tableValue = (keys) => ({
+            header: ["state", "n"], align: ["text", "num"], keys: keys,
+            rows: [[{ text: "failed", variant: "danger" },
+                    { text: "10", variant: "mono" }],
+                   ["ok", "2"], ["fine", "3"]]
+        });
+        const open = (selection) => {
+            const page = freshPage({});
+            page.ws().open();
+            page.ws().deliver({ type: "welcome", session: "sT", protocol: 4,
+                                ui_revision: "rT", ui: tableTree(selection) });
+            page.ws().deliver({ type: "output", id: "grid", kind: "table",
+                                value: tableValue(["a", "b", "c"]) });
+            return page;
+        };
+        const rows = (page) =>
+            page.document.querySelectorAll("tr[data-g-key]");
+        const lastInput = (page) => {
+            const f = page.frames("input");
+            return f.length ? JSON.stringify(f[f.length - 1]) : null;
+        };
+        const frame = (keys) =>
+            JSON.stringify({ type: "input", id: "grid", value: keys });
+
+        const multi = open("multiple");
+        let trs = rows(multi);
+        check("three keyed rows were built",
+              trs.length === 3 &&
+              trs.map((r) => r.getAttribute("data-g-key")).join() === "a,b,c");
+        check("a marked cell shows its text, not an object",
+              trs[0].children[0].textContent === "failed");
+        check("and carries the variant class",
+              trs[0].children[0].classList.contains("g-danger"));
+        check("a marked numeric cell composes g-num with the variant",
+              trs[0].children[1].classList.contains("g-num") &&
+              trs[0].children[1].classList.contains("g-mono"));
+        check("an unmarked text cell carries no class",
+              trs[1].children[0].getAttribute("class") === null);
+        check("the table is marked selectable",
+              multi.document.querySelector(".g-table").classList
+                  .contains("g-dt-selectable"));
+        check("nothing was reported before a click",
+              lastInput(multi) === null);
+
+        multi.fire("click", trs[1].children[0]);
+        check("a click reports the row's key",
+              lastInput(multi) === frame(["b"]));
+        /* the body rebuilds on every render: re-query the rows */
+        multi.fire("click", rows(multi)[0].children[0]);
+        check("a second row toggles in, reported in data order",
+              lastInput(multi) === frame(["a", "b"]));
+        trs = rows(multi);
+        check("selected rows carry the class and nothing else does",
+              trs[0].classList.contains("g-dt-selected") &&
+              trs[1].classList.contains("g-dt-selected") &&
+              !trs[2].classList.contains("g-dt-selected") &&
+              trs[0].getAttribute("aria-selected") === "true");
+        multi.fire("click", rows(multi)[1].children[0]);
+        check("clicking a selected row toggles it out",
+              lastInput(multi) === frame(["a"]));
+        const sentBefore = multi.frames("input").length;
+        multi.ws().deliver({ type: "output", id: "grid", kind: "table",
+                             value: tableValue(["x", "b", "c"]) });
+        check("a value without the selected row prunes it and says so once",
+              multi.frames("input").length === sentBefore + 1 &&
+              lastInput(multi) === frame([]));
+        multi.ws().deliver({ type: "output", id: "grid", kind: "table",
+                             value: tableValue(["x", "b", "c"]) });
+        check("a value that keeps the selection sends nothing",
+              multi.frames("input").length === sentBefore + 1);
+
+        const single = open("single");
+        single.fire("click", rows(single)[1].children[0]);
+        single.fire("click", rows(single)[2].children[0]);
+        check("single: the second click replaces",
+              lastInput(single) === frame(["c"]));
+        single.fire("click", rows(single)[2].children[0]);
+        check("single: clicking the selected row clears",
+              lastInput(single) === frame([]));
+
+        const none = open("none");
+        check("none: the table is not selectable",
+              !none.document.querySelector(".g-table").classList
+                  .contains("g-dt-selectable"));
+        none.fire("click", rows(none)[1].children[0]);
+        check("none: a click reports nothing", lastInput(none) === null);
+
+        /* the plain table_output reads the same cell form */
+        const plain = freshPage({});
+        plain.ws().open();
+        plain.ws().deliver({
+            type: "welcome", session: "sP", protocol: 4, ui_revision: "rP",
+            ui: { component: "page", title: "P",
+                  children: [{ component: "table_output", id: "t" }] }
+        });
+        plain.ws().deliver({ type: "output", id: "t", kind: "table",
+                             value: tableValue(["a", "b", "c"]) });
+        const ptd = plain.document.querySelectorAll("td")[0];
+        check("table_output shows a marked cell's text with its class",
+              ptd.textContent === "failed" &&
+              ptd.classList.contains("g-danger"));
     }
 
     /* ---------------------------------------------------------- */
