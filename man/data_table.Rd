@@ -53,6 +53,11 @@ click order, and a row that leaves the value leaves the selection.
 Sorting and filtering stay local, so a selected row stays selected
 through both.
 
+A cleared selection arrives as `character(0)`, not `NULL`. An
+[observe_event()] with the default `ignore_null = TRUE` skips it,
+which suits a detail pane holding the last opened row; watch with
+`ignore_null = FALSE` to react to the clear itself.
+
 }
 \examples{
 data_table("results", page_length = 5)
