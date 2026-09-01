@@ -1,5 +1,20 @@
 # glinty (development version)
 
+**mark_cells(): the render fn authors marks a rule cannot see**
+(#91). A `variants =` rule reads the rendered frame, so a mark that
+depends on data the table does not show -- the replica count behind
+a "serving 1/1" cell, the limit behind a memory column -- forced an
+app into a side channel. `mark_cells(df, serving = ifelse(ready >=
+replicas, "success", "warning"))` attaches the marks to the frame
+inside the render function, where that data is in scope: one
+function authors the text and its variant. One per row or one for
+the column, `NA`/`"normal"` for plain; combines with `variants =`
+column-wise, and a column marked from both places is refused. The
+wire is unchanged. Also documented: a cleared `data_table` selection
+arrives as `character(0)`, which `observe_event()`'s default
+`ignore_null = TRUE` skips -- watch with `ignore_null = FALSE` to
+react to the clear.
+
 **key_value(): pairs as a component** (#90). `key_value(c(Node =
 "troy-g5", Replicas = "1"))` is a list of pairs, one per line, for
 the metadata block every dashboard has -- image digest, node, ports.
