@@ -28,6 +28,7 @@ component_to_html <- function(x) {
     switch(x$component,
            text = html_text(x),
            rich_text = html_rich_text(x),
+           key_value = html_key_value(x),
            heading = html_heading(x),
            link = html_link(x),
            icon = html_icon(x),
@@ -198,14 +199,46 @@ html_unsupported <- function(name) {
 
 # --- static content ---
 
+#' The class a text variant adds beyond its base
+#'
+#' One map for every place a string carries a variant -- `text`,
+#' `text_output`, a key_value item -- keyed by [TEXT_VARIANTS], and
+#' the browser's `textVariantClass()` is its mirror. "" for normal.
+#'
+#' @keywords internal
+TEXT_VARIANT_CLASSES <- c(normal = "", muted = "g-muted",
+                          strong = "g-strong", heading = "g-text-heading",
+                          mono = "g-mono", small = "g-small",
+                          success = "g-success", warning = "g-warning",
+                          danger = "g-danger")
+
+variant_classes <- function(base, variant) {
+    extra <- TEXT_VARIANT_CLASSES[[variant]]
+    if (nzchar(extra)) {
+        paste(base, extra)
+    } else {
+        base
+    }
+}
+
 html_text <- function(x) {
-    cls <- c(normal = "g-text", muted = "g-text g-muted",
-             strong = "g-text g-strong", heading = "g-text g-text-heading",
-             mono = "g-text g-mono", small = "g-text g-small",
-             success = "g-text g-success", warning = "g-text g-warning",
-             danger = "g-text g-danger")
-    html_el("span", list(class = unname(cls[[x$variant]]), id = x$id),
+    html_el("span",
+            list(class = variant_classes("g-text", x$variant), id = x$id),
             html_escape(x$value))
+}
+
+html_key_value <- function(x) {
+    # dt/dd pairs as the dl's direct children, the grid on the dl:
+    # no wrapper per pair, and the browser builder mirrors this
+    # structure node for node
+    pairs <- vapply(x$items, function(it) {
+        variant <- if (is.null(it$variant)) "normal" else it$variant
+        paste0(html_el("dt", list(class = "g-kv-key"), html_escape(it$key)),
+               html_el("dd",
+                       list(class = variant_classes("g-kv-value", variant)),
+                       html_escape(it$value)))
+    }, character(1L))
+    html_el("dl", list(class = "g-kv", id = x$id), paste(pairs, collapse = ""))
 }
 
 html_heading <- function(x) {
@@ -939,12 +972,8 @@ html_slot <- function(x) {
 }
 
 html_text_output <- function(x) {
-    cls <- c(normal = "g-output", muted = "g-output g-muted",
-             strong = "g-output g-strong",
-             heading = "g-output g-text-heading", mono = "g-output g-mono",
-             small = "g-output g-small", success = "g-output g-success",
-             warning = "g-output g-warning", danger = "g-output g-danger")
-    html_el("span", c(html_slot(x), list(class = unname(cls[[x$variant]]))))
+    html_el("span", c(html_slot(x),
+                      list(class = variant_classes("g-output", x$variant))))
 }
 
 html_plot_output <- function(x) {

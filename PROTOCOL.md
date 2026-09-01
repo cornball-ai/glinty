@@ -92,6 +92,15 @@ Resume caveat: a client that rebuilds after a reconnect starts with
 nothing selected while the server still holds the last reported keys.
 The fix is an `input_update` for `data_table`, not in this version.
 
+Under the same number, since it never shipped either:
+
+- `key_value`, a list of pairs: `items: [{key, value, variant?}]`,
+  flat like `rich_text`'s runs so a client renders it with a loop. A
+  `<dl>` in the browser, a two-column table in Flutter. The value's
+  `variant` is a `text` variant, present only when it says something.
+  Empty `items` is allowed and draws nothing. A new component, so safe
+  by the placeholder rule on its own.
+
 ### v3.2
 
 Protocol still 3. One addition, driven by an NLE: `shortcut`, a key
@@ -332,7 +341,7 @@ Layout nests:
 ### The set
 
 **Static content**: `text`, `heading`, `link`, `icon`, `image`,
-`divider`, `spacer`, `rich_text`
+`divider`, `spacer`, `rich_text`, `key_value`
 
 These are what `p()`, `span()`, `h1()`–`h4()` and `a()` become. Without
 them the migration is not mechanical, because today's apps are full of
@@ -468,6 +477,7 @@ same as safe to add.
 | `text` | `value: string` | `variant`, `id` |
 | `heading` | `value: string` | `level: 1..4` (2), `id` |
 | `rich_text` | `runs: [{text, bold?, italic?, code?, strike?, href?}]` | `id` — marks are present-and-true or absent; `href` scheme-restricted |
+| `key_value` | `items: [{key, value, variant?}]` (may be empty) | `id` — `variant` is a `text` variant, absent for normal |
 | `link` | `href: string`, and one of `value: string` or `children: []` | `external: bool` (false) |
 | `icon` | `name`: one of `play`, `stop`, `rotate`, `trash`, `microphone`, `bookmark`, `download`, `upload`, `folder`, `file` | `size: int` (16) |
 | `divider` | — | `label: string`, `variant` |
@@ -591,6 +601,7 @@ rather than an intention.
 | `text` | `Text` | variant → `TextStyle` from theme |
 | `heading` | `Text` | level → `textTheme.headlineN` |
 | `rich_text` | `Text.rich` + `TextSpan`s | marks combine on one span's style; linked runs tap through `onLink`, recognizers owned and disposed |
+| `key_value` | `Table`, intrinsic key column | a value's variant goes through the same style switch as `text`; empty items draw nothing |
 | `link` | `InkWell` + `Text` or children | `external` → `url_launcher` |
 | `icon` | `Icon` | name → `IconData`; needs a name→icon map |
 | `divider` | `Divider` | `labelled` → `Row` with `Expanded` rules |

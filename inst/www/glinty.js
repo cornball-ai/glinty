@@ -23,7 +23,7 @@
         "column", "data_table",
         "conditional_panel", "date_input", "divider", "download_button",
         "collapse", "file_input", "heading", "html_output", "icon",
-        "image", "image_output",
+        "image", "image_output", "key_value",
         "link", "number_input", "page", "panel", "password_input",
         "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
         "feed", "rich_text",
@@ -1639,6 +1639,23 @@
                 }
                 span.textContent = r.text;
                 node.appendChild(span);
+            });
+            return node;
+        case "key_value":
+            /* one dt/dd pair per item as the dl's direct children,
+               the grid on the dl itself -- node for node what
+               html_key_value() emits. textContent, never innerHTML. */
+            node = el("dl", { "class": "g-kv", id: c.id });
+            (c.items || []).forEach(function (it) {
+                var dt = el("dt", { "class": "g-kv-key" });
+                dt.textContent = it.key;
+                var extra = textVariantClass(it.variant);
+                var dd = el("dd", {
+                    "class": "g-kv-value" + (extra ? " " + extra : "")
+                });
+                dd.textContent = it.value;
+                node.appendChild(dt);
+                node.appendChild(dd);
             });
             return node;
         case "link":
