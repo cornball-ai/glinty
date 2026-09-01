@@ -2106,13 +2106,14 @@
         return "normal";
     }
 
-    /* Paint one cell: textContent (structural escaping), the numeric
-       class the column's align asks for, and the variant class the
-       cell carries. One composed className, because a numeric column
-       can carry a variant too. */
-    function fillCell(td, c, isNum) {
+    /* Paint one cell: textContent (structural escaping), the
+       alignment class the column's align asks for ("num", or
+       "right" for a right-aligned string column), and the variant
+       class the cell carries. One composed className, because an
+       aligned column can carry a variant too. */
+    function fillCell(td, c, a) {
         td.textContent = cellText(c);
-        var cls = isNum ? "g-num" : "";
+        var cls = a === "num" ? "g-num" : a === "right" ? "g-right" : "";
         var v = textVariantClass(cellVariant(c));
         if (v) cls += (cls ? " " : "") + v;
         if (cls) td.className = cls;
@@ -2130,10 +2131,18 @@
         });
     }
 
+    /* The alignment class a column's align token asks for: "num"
+       for numeric columns, "g-right" for a right-aligned string
+       column ("right"), nothing for text. */
+    function alignClass(a) {
+        return a === "num" ? "g-num" : a === "right" ? "g-right" : "";
+    }
+
     function buildTable(el, data) {
         el.textContent = "";
-        /* align marks numeric columns; values travel as strings so
-           the wire carries the type the layout needs */
+        /* align marks numeric ("num") and right-aligned string
+           ("right") columns; values travel as strings so the wire
+           carries the type the layout needs */
         var align = data.align || [];
         var tbl = document.createElement("table");
         tbl.className = "g-table";
@@ -2142,7 +2151,8 @@
         (data.header || []).forEach(function (h, i) {
             var th = document.createElement("th");
             th.textContent = h;
-            if (align[i] === "num") th.className = "g-num";
+            var a = alignClass(align[i]);
+            if (a) th.className = a;
             hr.appendChild(th);
         });
         thead.appendChild(hr);
@@ -2152,7 +2162,7 @@
             var tr = document.createElement("tr");
             r.forEach(function (c, i) {
                 var td = document.createElement("td");
-                fillCell(td, c, align[i] === "num");
+                fillCell(td, c, align[i]);
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -2168,8 +2178,9 @@
        whole value and rearranges it locally; the server never hears
        about a sort. Numeric columns (align === "num") sort
        numerically, the rest as text -- the alignment the wire
-       already carries doubles as the type signal. Mirrors
-       _GlintyDataTable in dart: the two must agree.
+       already carries doubles as the type signal, and "right" is
+       presentation only: right-aligned, still sorted as text.
+       Mirrors _GlintyDataTable in dart: the two must agree.
 
        The controls are built once and persist across value updates
        and re-renders -- rebuilding them would steal focus from the
@@ -2226,6 +2237,10 @@
             });
             controls.appendChild(box);
         }
+        /* kept on the state so renderDataTable can hide chrome the
+           current value cannot use */
+        st.controls = controls;
+        st.lenSel = lenSel;
         el.appendChild(controls);
 
         st.body = document.createElement("div");
@@ -2300,6 +2315,21 @@
             return { key: keys[i], cells: r };
         });
 
+        /* Chrome a value cannot use is noise: the page-size select
+           hides when every row fits the smallest menu option, the
+           footer (count, Prev/Next) when the whole value fits one
+           page. Judged against the unfiltered value -- a filter
+           only shrinks -- so typing a search never flickers the
+           chrome. The search box answers `searchable` alone; with
+           it off and the select hidden, the controls row would be
+           empty margin, so it goes too. */
+        var minLen = Math.min.apply(null, st.menu);
+        var lenOff = rows.length <= minLen;
+        st.lenSel.classList.toggle("g-hidden", lenOff);
+        st.controls.classList.toggle("g-hidden", lenOff && !st.searchable);
+        st.footer.classList.toggle("g-hidden",
+                                   rows.length <= st.pageLength);
+
         var q = st.search.toLowerCase();
         var filtered = !q ? items : items.filter(function (it) {
             return it.cells.some(function (c) {
@@ -2340,7 +2370,8 @@
             th.textContent = h
                 + (st.sortCol === i ? (st.sortAsc ? " ▴" : " ▾")
                                     : "");
-            if (align[i] === "num") th.className = "g-num";
+            var a = alignClass(align[i]);
+            if (a) th.className = a;
             if (st.sortable) {
                 th.classList.add("g-dt-sortable");
                 th.addEventListener("click", function () {
@@ -2371,7 +2402,7 @@
             }
             it.cells.forEach(function (c, i) {
                 var td = document.createElement("td");
-                fillCell(td, c, align[i] === "num");
+                fillCell(td, c, align[i]);
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);

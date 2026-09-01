@@ -82,8 +82,20 @@ render_html <- function(fn) {
 #' marks to the frame with [mark_cells()] inside `fn`, where that data
 #' is in scope. A column marked from both places is refused.
 #'
+#' `align` overrides a column's alignment: a named character vector,
+#' `"left"` or `"right"` per column. Numeric columns already
+#' right-align and sort numerically; a pre-formatted string column
+#' ("1.2 GiB", "3m 12s") is text on the wire and sits left, so
+#' `align = c(size = "right")` right-aligns it while keeping the
+#' text sort -- calling it numeric instead would sort "1.2 GiB" as
+#' 1.2. `"right"` on a numeric column changes nothing; `"left"` on
+#' one demotes it to text, presentation and sort together, because
+#' the two travel as one signal.
+#'
 #' @param fn zero-arg function returning a data.frame
 #' @param variants named list of per-column variant rules, or NULL
+#' @param align named character vector of per-column alignment
+#'   overrides, `"left"` or `"right"`, or NULL
 #' @return a glinty_renderer for assignment to output$id
 #' @examples
 #' \dontrun{
@@ -91,17 +103,20 @@ render_html <- function(fn) {
 #' output$runs <- render_table(function() runs(),
 #'     variants = list(state = c(failed = "danger", running = "success"),
 #'                     image = "mono"))
+#' output$fleet <- render_table(function() fleet(),
+#'     align = c(memory = "right", age = "right"))
 #' }
 #' @export
-render_table <- function(fn, variants = NULL) {
+render_table <- function(fn, variants = NULL, align = NULL) {
     check_table_variants(variants)
+    check_table_align(align)
     new_renderer(
                  function() {
         df <- fn()
         if (!is.data.frame(df)) {
             stop("render_table() expects a data.frame", call. = FALSE)
         }
-        df_to_table(df, variants)
+        df_to_table(df, variants, align)
     },
                  "table"
     )
@@ -141,6 +156,33 @@ check_table_variants <- function(variants) {
         if (is.character(rule)) {
             check_cell_variants(rule, col)
         }
+    }
+    invisible(NULL)
+}
+
+#' Refuse a malformed `align` where render_table() was written
+#'
+#' The shape and the values are static, so both are checked at
+#' definition. Whether the named columns exist can only be known
+#' against a frame, so that half waits for the render and surfaces
+#' as the output's error.
+#'
+#' @param align the render_table(align =) argument
+#' @return invisible NULL, or an error
+#' @keywords internal
+check_table_align <- function(align) {
+    if (is.null(align)) {
+        return(invisible(NULL))
+    }
+    if (!is.character(align) || length(align) == 0L ||
+        is.null(names(align)) || !all(nzchar(names(align)))) {
+        stop("render_table(align =) must be a named character vector, one entry per column",
+             call. = FALSE)
+    }
+    bad <- unique(align[!(align %in% c("left", "right"))])
+    if (length(bad)) {
+        stop(sprintf('render_table(align =) must be "left" or "right", not %s',
+                     paste(bad, collapse = ", ")), call. = FALSE)
     }
     invisible(NULL)
 }
@@ -291,9 +333,11 @@ mark_cells <- function(df, ...) {
 #' Convert a data.frame to the wire table structure
 #'
 #' I() wrappers keep length-1 headers, keys and single-cell rows as
-#' JSON arrays under auto_unbox. `align` marks each column "num" or
-#' "text": values become strings on the wire, so numeric-ness must
-#' travel alongside or the frontends can't right-align numbers.
+#' JSON arrays under auto_unbox. `align` marks each column "num",
+#' "text" or "right": values become strings on the wire, so
+#' numeric-ness must travel alongside or the frontends can't
+#' right-align numbers. "right" is the align= override's seat for a
+#' string column: right-aligned, still sorted as text.
 #' `keys` are the row names, what a selectable table reports.
 #'
 #' A cell is a string, or `list(text =, variant =)` when a variant
@@ -304,10 +348,24 @@ mark_cells <- function(df, ...) {
 #'
 #' @param df a data.frame
 #' @param variants per-column variant rules, see [render_table()]
+#' @param align per-column alignment overrides, see [render_table()]
 #' @return list(header, rows, keys, align)
 #' @keywords internal
-df_to_table <- function(df, variants = NULL) {
+df_to_table <- function(df, variants = NULL, align = NULL) {
     num <- vapply(df, is.numeric, logical(1L), USE.NAMES = FALSE)
+    aligns <- ifelse(num, "num", "text")
+    for (col in names(align)) {
+        j <- match(col, names(df))
+        if (is.na(j)) {
+            stop(sprintf("render_table(align =) names a column not in the data.frame: %s",
+                         col), call. = FALSE)
+        }
+        aligns[[j]] <- if (align[[col]] == "right") {
+            if (num[[j]]) "num" else "right"
+        } else {
+            "text"
+        }
+    }
     cols <- lapply(df, function(col) {
         if (is.numeric(col)) format(col, trim = TRUE) else as.character(col)
     })
@@ -328,7 +386,7 @@ df_to_table <- function(df, variants = NULL) {
         row
     })
     list(header = I(names(df)), rows = rows, keys = I(row.names(df)),
-         align = I(ifelse(num, "num", "text")))
+         align = I(aligns))
 }
 
 #' Render a base graphics plot

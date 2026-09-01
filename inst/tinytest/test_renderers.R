@@ -79,6 +79,52 @@ expect_equal(unclass(named$keys), c("Mazda RX4", "Mazda RX4 Wag", "Datsun 710"))
 picked <- mtcars[unclass(named$keys)[2:3], , drop = FALSE]
 expect_equal(row.names(picked), c("Mazda RX4 Wag", "Datsun 710"))
 
+# --- align=: right-align a pre-formatted string column, keep its text sort ---
+adf <- data.frame(size = c("1.2 GiB", "800 MiB"), n = c(1, 2),
+                  stringsAsFactors = FALSE)
+expect_equal(unclass(glinty:::df_to_table(adf)$align), c("text", "num"))
+a <- glinty:::df_to_table(adf, align = c(size = "right"))
+expect_equal(unclass(a$align), c("right", "num"))
+expect_true(grepl('"align":["right","num"]',
+                  as.character(jsonlite::toJSON(a, auto_unbox = TRUE)),
+                  fixed = TRUE))
+# "right" on a numeric column changes nothing; "left" demotes it to
+# text -- presentation and sort travel as one signal. "left" on a
+# text column is the no-op it sounds like.
+expect_equal(unclass(glinty:::df_to_table(adf, align = c(n = "right"))$align),
+             c("text", "num"))
+expect_equal(unclass(glinty:::df_to_table(adf, align = c(n = "left"))$align),
+             c("text", "text"))
+expect_equal(unclass(glinty:::df_to_table(adf, align = c(size = "left"))$align),
+             c("text", "num"))
+# malformed align fails where render_table() was written
+expect_error(render_table(function() adf, align = c("right")),
+             "named character vector")
+expect_error(render_table(function() adf, align = list(size = "right")),
+             "named character vector")
+expect_error(render_table(function() adf, align = c(size = "center")),
+             '"left" or "right", not center')
+# an unknown column can only be judged against a frame: that half
+# waits for the render and reaches the client as the output's error
+with_session(s, {
+    s$output$atbl <- render_table(function() adf, align = c(nope = "right"))
+})
+flush_reactions()
+m <- last_msg(s)
+expect_equal(m$type, "error")
+expect_equal(m$id, "atbl")
+expect_true(grepl("not in the data.frame: nope", m$message, fixed = TRUE))
+# align= and variants= compose on the same render
+with_session(s, {
+    s$output$avtbl <- render_table(function() adf,
+        variants = list(size = "mono"), align = c(size = "right"))
+})
+flush_reactions()
+m <- jsonlite::fromJSON(s$outgoing[[length(s$outgoing)]],
+                        simplifyVector = FALSE)
+expect_equal(unlist(m$value$align), c("right", "num"))
+expect_equal(m$value$rows[[1L]][[1L]], list(text = "1.2 GiB", variant = "mono"))
+
 # --- variants: a marked cell is an object, an unmarked one a string ---
 vdf <- data.frame(state = c("failed", "ok", "running"), n = c(1, 2, 3),
                   image = c("sha1", "sha2", "sha3"), stringsAsFactors = FALSE)

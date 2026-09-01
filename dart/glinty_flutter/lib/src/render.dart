@@ -1900,11 +1900,13 @@ class GlintyRenderer {
     // fails layout for everything above it -- _GlintyDataTable
     // already guards this; the plain table must too.
     if (header.isEmpty) return const SizedBox.shrink();
-    // align marks numeric columns; DataColumn(numeric:) is
-    // Material's own right-alignment for them
+    // align marks right-aligned columns -- "num", and "right" for a
+    // pre-formatted string column; DataColumn(numeric:) is
+    // Material's own right-alignment for both
     final align =
         (v['align'] as List? ?? const []).map((a) => a.toString()).toList();
-    bool numAt(int i) => i < align.length && align[i] == 'num';
+    bool rightAt(int i) =>
+        i < align.length && (align[i] == 'num' || align[i] == 'right');
     final rows = (v['rows'] as List? ?? const []).map((r) {
       return DataRow(cells: [
         for (final cell in r as List)
@@ -1914,7 +1916,7 @@ class GlintyRenderer {
     return DataTable(
       columns: [
         for (var i = 0; i < header.length; i++)
-          DataColumn(label: Text(header[i]), numeric: numAt(i))
+          DataColumn(label: Text(header[i]), numeric: rightAt(i))
       ],
       rows: rows,
     );
@@ -3048,8 +3050,12 @@ List<_DtRow> _dtRows(Map? v) {
 /// contains filter across all columns, numeric sort where the value's
 /// align says "num" (a non-number in a numeric column compares equal,
 /// as JS Number() -> NaN does), text sort elsewhere by code unit like
-/// JS < on strings; single selection replaces and clears on a second
-/// tap, multiple toggles, and keys are reported in data order.
+/// JS < on strings -- "right" right-aligns but stays a text sort;
+/// single selection replaces and clears on a second tap, multiple
+/// toggles, and keys are reported in data order. Chrome hides
+/// against the unfiltered value: the page-size control when the
+/// rows fit the smallest menu option, the footer when they fit one
+/// page.
 class _GlintyDataTable extends StatefulWidget {
   const _GlintyDataTable({
     super.key,
@@ -3150,7 +3156,11 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
     if (header.isEmpty) return const SizedBox.shrink();
     final align =
         (v?['align'] as List? ?? const []).map((a) => a.toString()).toList();
+    // "num" drives the sort; DataColumn(numeric:) -- Material's
+    // right-alignment -- also covers "right", which keeps a text sort
     bool numAt(int i) => i < align.length && align[i] == 'num';
+    bool rightAt(int i) =>
+        i < align.length && (align[i] == 'num' || align[i] == 'right');
     final all = _dtRows(v);
     final selectable = widget.selection != 'none';
 
@@ -3178,22 +3188,32 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
     final last = (from + _pageLength).clamp(0, total);
     final pageRows = rows.sublist(from, last);
 
+    // Chrome a value cannot use is noise: the page-size dropdown
+    // hides when every row fits the smallest menu option, the footer
+    // when the whole value fits one page. Judged against the
+    // unfiltered value, as in the browser, so a search never
+    // flickers the chrome. The search box answers `searchable`
+    // alone.
+    final menuInts = widget.menu.map((n) => n.toInt()).toList();
+    final showLength = menuInts.isNotEmpty &&
+        all.length > menuInts.reduce((a, b) => a < b ? a : b);
+    final showFooter = all.length > _pageLength;
+
     final controls = Row(children: [
-      DropdownButton<int>(
-        value: widget.menu.map((n) => n.toInt()).contains(_pageLength)
-            ? _pageLength
-            : null,
-        items: [
-          for (final n in widget.menu)
-            DropdownMenuItem(value: n.toInt(), child: Text('$n rows'))
-        ],
-        onChanged: (n) => setState(() {
-          if (n != null) _pageLength = n;
-          _page = 0;
-        }),
-      ),
+      if (showLength)
+        DropdownButton<int>(
+          value: menuInts.contains(_pageLength) ? _pageLength : null,
+          items: [
+            for (final n in widget.menu)
+              DropdownMenuItem(value: n.toInt(), child: Text('$n rows'))
+          ],
+          onChanged: (n) => setState(() {
+            if (n != null) _pageLength = n;
+            _page = 0;
+          }),
+        ),
       if (widget.searchable) ...[
-        const SizedBox(width: 12),
+        if (showLength) const SizedBox(width: 12),
         Expanded(
             child: TextField(
           controller: _search,
@@ -3214,7 +3234,7 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
         for (var i = 0; i < header.length; i++)
           DataColumn(
             label: Text(header[i]),
-            numeric: numAt(i),
+            numeric: rightAt(i),
             onSort: widget.sortable
                 ? (i, asc) => setState(() {
                       _sortCol = i;
@@ -3254,12 +3274,12 @@ class _GlintyDataTableState extends State<_GlintyDataTable> {
     ]);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      controls,
+      if (showLength || widget.searchable) controls,
       SizedBox(
           width: double.infinity,
           child: SingleChildScrollView(
               scrollDirection: Axis.horizontal, child: table)),
-      footer,
+      if (showFooter) footer,
     ]);
   }
 }

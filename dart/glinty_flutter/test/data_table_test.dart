@@ -339,4 +339,97 @@ void main() {
     expect(find.text('row5'), findsOneWidget);
     expect(find.text('Showing 4–5 of 5'), findsOneWidget);
   });
+
+  testWidgets('a small value drops the chrome, a big one brings it back',
+      (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(gridTree()));
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': tableValue(3),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+
+    // 3 rows fit the 3-row page and the smallest menu option: no
+    // dropdown, no count, no nav -- the table is just a table
+    expect(find.byType(DropdownButton<int>), findsNothing);
+    expect(find.textContaining('Showing'), findsNothing);
+    expect(find.text('Next ›'), findsNothing);
+    // the search box answers `searchable` alone
+    expect(find.byType(TextField), findsOneWidget);
+
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': tableValue(10),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<int>), findsOneWidget);
+    expect(find.text('Showing 1–3 of 10'), findsOneWidget);
+    expect(find.text('Next ›'), findsOneWidget);
+  });
+
+  testWidgets('align right: right-aligned column, still a text sort',
+      (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(gridTree(pageLength: 10)));
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': {
+        'header': ['size', 'n'],
+        'align': ['right', 'num'],
+        'rows': [
+          ['2.0 GiB', '1'],
+          ['10.0 GiB', '2'],
+          ['9.0 GiB', '3'],
+        ],
+      },
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+
+    // DataColumn(numeric:) is Material's right-alignment: on for
+    // "right" as for "num"
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.columns[0].numeric, isTrue);
+    expect(table.columns[1].numeric, isTrue);
+
+    await tester.tap(find.text('size'));
+    await tester.pumpAndSettle();
+    final texts = tester
+        .widgetList<Text>(find.descendant(
+            of: find.byType(DataTable), matching: find.byType(Text)))
+        .map((t) => t.data)
+        .toList();
+    // ascending text order: "10.0 GiB" < "2.0 GiB" < "9.0 GiB"; a
+    // numeric sort would read 2 < 9 < 10
+    expect(texts.indexOf('10.0 GiB'), lessThan(texts.indexOf('2.0 GiB')));
+    expect(texts.indexOf('2.0 GiB'), lessThan(texts.indexOf('9.0 GiB')));
+  });
+
+  testWidgets('table_output honours align right too', (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith({
+      'component': 'page',
+      'title': 'P',
+      'children': [
+        {'component': 'table_output', 'id': 't'},
+      ],
+    }));
+    s.receive({
+      'type': 'output', 'id': 't', 'kind': 'table',
+      'value': {
+        'header': ['size'],
+        'align': ['right'],
+        'rows': [
+          ['2.0 GiB'],
+        ],
+      },
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.columns[0].numeric, isTrue);
+  });
 }

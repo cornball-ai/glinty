@@ -748,9 +748,13 @@ a.g-run {
     cursor: pointer;
 }
 
-/* numeric columns (align: "num" on the wire) read down the decimal */
+/* numeric columns (align: "num" on the wire) read down the decimal;
+   "right" is the same seat for a pre-formatted string column
+   ("1.2 GiB"), which keeps its text sort */
 .g-table th.g-num,
-.g-table td.g-num {
+.g-table td.g-num,
+.g-table th.g-right,
+.g-table td.g-right {
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
