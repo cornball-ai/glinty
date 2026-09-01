@@ -72,6 +72,11 @@ table_output <- function(id) {
 #' Sorting and filtering stay local, so a selected row stays selected
 #' through both.
 #'
+#' A cleared selection arrives as `character(0)`, not `NULL`. An
+#' [observe_event()] with the default `ignore_null = TRUE` skips it,
+#' which suits a detail pane holding the last opened row; watch with
+#' `ignore_null = FALSE` to react to the clear itself.
+#'
 #' @param id character output ID
 #' @param page_length integer rows shown per page
 #' @param length_menu numeric page-size options offered

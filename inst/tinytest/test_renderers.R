@@ -152,6 +152,57 @@ m <- last_msg(s)
 expect_equal(m$type, "error")
 expect_true(grepl("one variant per row", m$message, fixed = TRUE))
 
+# --- mark_cells: the render fn authors marks a rule cannot see ---
+#
+# A variants= rule only reads the rendered frame; a mark derived from
+# data the table does not show is attached to the frame itself, by
+# the same function that wrote the text.
+md <- mark_cells(vdf, state = c("danger", NA, "success"), image = "mono")
+expect_equal(attr(md, "glinty_variants"),
+             list(state = c("danger", NA, "success"), image = "mono"))
+mv <- glinty:::df_to_table(md)
+expect_equal(mv$rows[[1L]][[1L]], list(text = "failed", variant = "danger"))
+expect_equal(mv$rows[[2L]][[1L]], "ok")
+expect_equal(mv$rows[[3L]][[1L]], list(text = "running", variant = "success"))
+# a length-1 mark covers the column
+expect_equal(mv$rows[[1L]][[3L]], list(text = "sha1", variant = "mono"))
+expect_equal(unclass(mv$keys), c("1", "2", "3"))
+# marks combine with variants= column-wise
+both <- glinty:::df_to_table(mark_cells(vdf, n = c(NA, NA, "strong")),
+                             list(image = "mono"))
+expect_equal(both$rows[[3L]][[2L]], list(text = "3", variant = "strong"))
+expect_equal(both$rows[[3L]][[3L]], list(text = "sha3", variant = "mono"))
+expect_equal(both$rows[[1L]][[2L]], "1")
+# one author per column, in either direction
+expect_error(glinty:::df_to_table(mark_cells(vdf, state = "danger"),
+                                  list(state = c(failed = "danger"))),
+             "one author per column")
+expect_error(mark_cells(mark_cells(vdf, state = "danger"), state = "mono"),
+             "already marked")
+# authoring-time refusals, where the render fn was written
+expect_error(mark_cells("nope", a = "mono"), "expects a data.frame")
+expect_error(mark_cells(vdf, "mono"), "named by column")
+expect_error(mark_cells(vdf, nope = "mono"), "not in the data.frame")
+expect_error(mark_cells(vdf, state = c("danger", "mono")),
+             "one variant per row")
+expect_error(mark_cells(vdf, state = 1L), "one variant per row")
+expect_error(mark_cells(vdf, state = "bogus"),
+             "unknown variant bogus in column state")
+# no marks: the frame comes back untouched
+expect_identical(mark_cells(vdf), vdf)
+# through a session, marks reach the wire like any other render
+with_session(s, {
+    s$output$mtbl <- render_table(function() {
+        mark_cells(vdf, state = ifelse(vdf$n > 2, "success", "danger"))
+    })
+})
+flush_reactions()
+m <- jsonlite::fromJSON(s$outgoing[[length(s$outgoing)]],
+                        simplifyVector = FALSE)
+expect_equal(m$kind, "table")
+expect_equal(m$value$rows[[1L]][[1L]], list(text = "failed", variant = "danger"))
+expect_equal(m$value$rows[[3L]][[1L]], list(text = "running", variant = "success"))
+
 # render_table rejects non-data.frames via the error path
 with_session(s, {
     s$output$badtbl <- render_table(function() "nope")
