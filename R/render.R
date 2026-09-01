@@ -361,7 +361,11 @@ df_to_table <- function(df, variants = NULL, align = NULL) {
                          col), call. = FALSE)
         }
         aligns[[j]] <- if (align[[col]] == "right") {
-            if (num[[j]]) "num" else "right"
+            if (num[[j]]) {
+                "num"
+            } else {
+                "right"
+            }
         } else {
             "text"
         }

@@ -3,21 +3,25 @@
 \alias{df_to_table}
 \title{Convert a data.frame to the wire table structure}
 \usage{
-df_to_table(df, variants = NULL)
+df_to_table(df, variants = NULL, align = NULL)
 }
 \arguments{
 \item{df}{a data.frame}
 
 \item{variants}{per-column variant rules, see [render_table()]}
+
+\item{align}{per-column alignment overrides, see [render_table()]}
 }
 \value{
 list(header, rows, keys, align)
 }
 \description{
 I() wrappers keep length-1 headers, keys and single-cell rows as
-JSON arrays under auto_unbox. `align` marks each column "num" or
-"text": values become strings on the wire, so numeric-ness must
-travel alongside or the frontends can't right-align numbers.
+JSON arrays under auto_unbox. `align` marks each column "num",
+"text" or "right": values become strings on the wire, so
+numeric-ness must travel alongside or the frontends can't
+right-align numbers. "right" is the align= override's seat for a
+string column: right-aligned, still sorted as text.
 `keys` are the row names, what a selectable table reports.
 }
 \details{

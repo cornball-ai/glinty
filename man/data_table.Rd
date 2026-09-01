@@ -42,6 +42,14 @@ the value at a size a client comfortably holds -- sample or
 pre-filter server-side above a few thousand rows.
 }
 \details{
+The chrome hides itself when the value cannot use it: the
+page-size select goes when the rows fit the smallest
+`length_menu` option, and the footer (row count, Prev/Next) when
+they fit one page -- a two-row table is just a table. Deliver
+more rows and the controls come back. The search box answers
+`searchable` alone: whether filtering makes sense is the app's
+call, not a row count's.
+
 Given a `selection`, the table is also an input: `input[[id]]` is
 the character vector of selected row keys -- the data.frame's
 `row.names()`, which [render_table()] sends as `keys` -- and
