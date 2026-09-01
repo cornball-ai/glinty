@@ -38,7 +38,7 @@ final formTree = {
 Map<String, dynamic> welcomeWith(Object tree, {String revision = 'r1'}) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': revision,
       'ui': tree,
     };
@@ -254,7 +254,7 @@ void main() {
 
       // the server refuses the resume: that session is gone
       s.receive({
-        'type': 'welcome', 'session': 's2', 'protocol': 3,
+        'type': 'welcome', 'session': 's2', 'protocol': 4,
         'resumed': false, 'ui_revision': 'r2', 'ui': formTree,
       });
 
@@ -277,7 +277,7 @@ void main() {
       expect(find.text('Troy'), findsOneWidget);
 
       s.receive({
-        'type': 'welcome', 'session': 's2', 'protocol': 3,
+        'type': 'welcome', 'session': 's2', 'protocol': 4,
         'resumed': false, 'ui_revision': 'r2', 'ui': formTree,
       });
       await pumpSession(tester, s);

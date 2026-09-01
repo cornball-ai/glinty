@@ -638,6 +638,21 @@ a.g-run {
     font-size: 0.9rem;
 }
 
+/* a selectable table: rows are targets, and the chosen ones show
+   it with the theme's primary, tinted rather than filled so a cell
+   variant's color still reads on top */
+.g-dt-selectable tbody tr {
+    cursor: pointer;
+}
+
+.g-dt-selectable tbody tr:hover td {
+    background: color-mix(in srgb, var(--g-primary) 6%, transparent);
+}
+
+.g-table tr.g-dt-selected td {
+    background: color-mix(in srgb, var(--g-primary) 15%, transparent);
+}
+
 /* ---------- range slider ---------- */
 
 /* Two native range inputs stacked over one drawn rail. The inputs

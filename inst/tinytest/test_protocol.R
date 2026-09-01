@@ -40,11 +40,11 @@ expect_equal(
 .g$welcome_revision <- NULL
 expect_equal(
     welcome_msg("abc123"),
-    '{"type":"welcome","session":"abc123","protocol":3}'
+    '{"type":"welcome","session":"abc123","protocol":4}'
 )
 expect_equal(
     welcome_msg("abc123", resumed = TRUE),
-    '{"type":"welcome","session":"abc123","protocol":3,"resumed":true}'
+    '{"type":"welcome","session":"abc123","protocol":4,"resumed":true}'
 )
 
 wui <- component("page", title = "T", children = list(
@@ -55,7 +55,7 @@ wui <- component("page", title = "T", children = list(
 w <- jsonlite::fromJSON(welcome_msg("s9"), simplifyVector = FALSE)
 expect_equal(w$type, "welcome")
 expect_equal(w$session, "s9")
-expect_equal(w$protocol, 3L)
+expect_equal(w$protocol, 4L)
 expect_equal(w$ui$component, "page")
 expect_equal(w$ui_revision, ui_revision(wui))
 # a refused resume says so
@@ -75,7 +75,7 @@ expect_equal(normalize_value(mixed), mixed)
 # --- dispatch: hello records capabilities and answers nothing ---
 s <- new_session("p1")
 s$outgoing <- list()
-dispatch(s, paste0('{"type":"hello","protocol":3,"client":"glinty-js/0.5.0",',
+dispatch(s, paste0('{"type":"hello","protocol":4,"client":"glinty-js/0.5.0",',
                    '"components":["page","button"],"kinds":["text"],',
                    '"features":["modal"]}'))
 expect_equal(s$client, "glinty-js/0.5.0")

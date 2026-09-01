@@ -12,7 +12,7 @@ void main() {
   testWidgets('a 1000-row table in a tabset sorts and pages', (tester) async {
     final s = GlintySession();
     s.receive({
-      'type': 'welcome', 'session': 's1', 'protocol': 3,
+      'type': 'welcome', 'session': 's1', 'protocol': 4,
       'ui_revision': 'r1',
       'ui': {
         'component': 'page', 'title': 'Grid',

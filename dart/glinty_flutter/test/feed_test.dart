@@ -15,7 +15,7 @@ import 'package:glinty_flutter/glinty_flutter.dart';
 Map<String, dynamic> welcome({int keep = 200}) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': 'r1',
       'ui': {
         'component': 'page',
@@ -166,7 +166,7 @@ void main() {
       ..receive({
         'type': 'welcome',
         'session': 's2',
-        'protocol': 3,
+        'protocol': 4,
         'ui_revision': 'r1',
         'ui': {
           'component': 'page',

@@ -413,8 +413,9 @@ normalize_value <- function(value) {
         # An empty JSON array is an empty collection, not an absence:
         # unlist(list()) gives NULL, which made deselecting the last
         # item of a multi select set the server's value to NULL where
-        # the seed for the identical state is character(0). Both
-        # list-valued inputs are string-typed, so the empty array
+        # the seed for the identical state is character(0). Every
+        # list-valued input (a multiple select, a checkbox group, a
+        # selectable data table) is string-typed, so the empty array
         # continues as the empty character vector.
         if (length(value) == 0L) {
             return(character(0))

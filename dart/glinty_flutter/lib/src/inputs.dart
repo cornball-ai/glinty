@@ -83,6 +83,13 @@ dynamic _seedFor(GlintyComponent c) {
         return selected;
       }
       return panels.first.title;
+    case 'data_table':
+      // A selectable table starts with nothing selected: an empty
+      // list, not an absence -- the multiple-select rule again. With
+      // no selection mode the table is not an input and seeds
+      // nothing, as R/seed.R says.
+      final mode = c.str('selection') ?? 'none';
+      return mode == 'none' ? null : <String>[];
     default:
       return null;
   }

@@ -1,11 +1,11 @@
 /* glinty client: WebSocket transport + component rendering + DOM
-   patching. No dependencies. Speaks protocol 3: it opens with hello,
+   patching. No dependencies. Speaks protocol 4: it opens with hello,
    receives the canonical component tree in welcome, and hydrates
    against the pre-rendered markup by comparing ui_revision. */
 (function () {
     "use strict";
 
-    var PROTOCOL = 3;
+    var PROTOCOL = 4;
     var CLIENT_ID = "glinty-js/0.0.5";
 
     /* What this client declares in hello. A declaration, not a
@@ -665,6 +665,18 @@
             if (btn) activateTab(btn);
         });
 
+        /* A data table row. Delegated like every other piece of
+           client chrome, so it is one listener for every table and
+           the node bridge can fire it. The toggle itself decides
+           whether the table takes selection at all. */
+        root.addEventListener("click", function (ev) {
+            var tr = ev.target.closest("[data-g-key]");
+            if (!tr) return;
+            var host = tr.closest(".g-datatable");
+            if (!host || !host._gdt) return;
+            dataTableToggle(host, tr.getAttribute("data-g-key"));
+        });
+
         root.addEventListener("click", function (ev) {
             if (ev.target.closest("[data-g-modal-close]")) {
                 closeModal();
@@ -943,6 +955,17 @@
         html_output: "html",
         ui_output: "ui"
     };
+
+    /* The class a text variant adds beyond its base, read out of
+       TEXT_CLASSES so a table cell (and later a key_value item)
+       shares one table with txt() instead of restating it: "" for
+       normal, "g-danger" for danger, "g-text-heading" for heading.
+       Unknown variants fall back the way txt() does, with the same
+       console warning. */
+    function textVariantClass(variant) {
+        var cls = TEXT_CLASSES[checkVariant("text", variant)] || "g-text";
+        return cls.replace(/^g-text ?/, "");
+    }
 
     /* The shortest plain rendering of a number: parse, strip float
        noise (0.6000000000000001 from range stepping), print. Must
@@ -1877,7 +1900,8 @@
                 "data-g-page-length": c.page_length,
                 "data-g-length-menu": (c.length_menu || []).join(","),
                 "data-g-searchable": c.searchable === false ? "0" : "1",
-                "data-g-sortable": c.sortable === false ? "0" : "1"
+                "data-g-sortable": c.sortable === false ? "0" : "1",
+                "data-g-selection": c.selection || "none"
             }));
         case "plot_output":
             return el("img", assign(slotAttrs(c), {
@@ -2043,6 +2067,52 @@
         }
     }
 
+    /* A cell is a string, or {text, variant} when the server marked
+       it. Every read of a cell goes through these two, so the filter,
+       the sort and the paint agree on what a marked cell says --
+       three places reading `String(c)` on their own is how an object
+       becomes "[object Object]" in one of them and not the others. */
+    function cellText(c) {
+        if (c === null || c === undefined) return "";
+        if (typeof c === "object") {
+            return c.text === null || c.text === undefined
+                ? "" : String(c.text);
+        }
+        return String(c);
+    }
+
+    function cellVariant(c) {
+        if (c !== null && typeof c === "object" &&
+                typeof c.variant === "string") {
+            return c.variant;
+        }
+        return "normal";
+    }
+
+    /* Paint one cell: textContent (structural escaping), the numeric
+       class the column's align asks for, and the variant class the
+       cell carries. One composed className, because a numeric column
+       can carry a variant too. */
+    function fillCell(td, c, isNum) {
+        td.textContent = cellText(c);
+        var cls = isNum ? "g-num" : "";
+        var v = textVariantClass(cellVariant(c));
+        if (v) cls += (cls ? " " : "") + v;
+        if (cls) td.className = cls;
+    }
+
+    /* The key of each row: what the server sent as `keys` (the
+       data.frame's row names), or the 1-based position for a value
+       that carries none. Taken from the wire order, before any
+       filter or sort has moved a row. */
+    function rowKeys(data) {
+        var keys = data.keys || [];
+        return (data.rows || []).map(function (r, i) {
+            return keys[i] === undefined || keys[i] === null
+                ? String(i + 1) : String(keys[i]);
+        });
+    }
+
     function buildTable(el, data) {
         el.textContent = "";
         /* align marks numeric columns; values travel as strings so
@@ -2065,8 +2135,7 @@
             var tr = document.createElement("tr");
             r.forEach(function (c, i) {
                 var td = document.createElement("td");
-                td.textContent = c; /* structural escaping */
-                if (align[i] === "num") td.className = "g-num";
+                fillCell(td, c, align[i] === "num");
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -2103,6 +2172,11 @@
                 .split(",").map(Number),
             searchable: el.dataset.gSearchable !== "0",
             sortable: el.dataset.gSortable !== "0",
+            /* "none", "single" or "multiple"; the selected keys live
+               here with the rest of the client-held state, in the
+               order the value lists them */
+            selection: el.dataset.gSelection || "none",
+            selected: [],
             data: {}
         };
 
@@ -2149,7 +2223,50 @@
     function dataTableValue(el, data) {
         var st = dataTableState(el);
         st.data = data || {};
+        /* a row that left the value leaves the selection, and the
+           server hears about it once, and only when something
+           actually changed -- a refresh that keeps every selected
+           row sends nothing */
+        var kept = orderKeys(st.selected, rowKeys(st.data));
+        var changed = kept.length !== st.selected.length;
+        st.selected = kept;
         renderDataTable(el);
+        if (changed) reportSelection(el);
+    }
+
+    /* The selection in data order: the order the value lists the
+       keys, not the order they were clicked, so both clients report
+       the same vector and df[input$grid(), ] reads naturally. */
+    function orderKeys(selected, keys) {
+        return keys.filter(function (k) {
+            return selected.indexOf(k) !== -1;
+        });
+    }
+
+    function reportSelection(el) {
+        var st = el._gdt;
+        var keys = st.selected.slice();
+        noteInput(el.dataset.gOutput, keys);
+        send({ type: "input", id: el.dataset.gOutput, value: keys });
+    }
+
+    /* A row click. Single: the row replaces the selection, and a
+       second click on it clears it. Multiple: the row toggles. The
+       server hears the whole selection each time, never a delta. */
+    function dataTableToggle(el, key) {
+        var st = el._gdt;
+        if (!st || st.selection === "none") return;
+        var at = st.selected.indexOf(key);
+        if (st.selection === "single") {
+            st.selected = at === -1 ? [key] : [];
+        } else if (at === -1) {
+            st.selected.push(key);
+        } else {
+            st.selected.splice(at, 1);
+        }
+        st.selected = orderKeys(st.selected, rowKeys(st.data));
+        renderDataTable(el);
+        reportSelection(el);
     }
 
     function renderDataTable(el) {
@@ -2157,11 +2274,19 @@
         var align = st.data.align || [];
         var header = st.data.header || [];
         var rows = st.data.rows || [];
+        var keys = rowKeys(st.data);
+        var selectable = st.selection !== "none";
+        /* key each row first, then filter and sort: the wire index
+           is gone once the rows are rearranged, and the key is what
+           a selection is matched on */
+        var items = rows.map(function (r, i) {
+            return { key: keys[i], cells: r };
+        });
 
         var q = st.search.toLowerCase();
-        var filtered = !q ? rows : rows.filter(function (r) {
-            return r.some(function (c) {
-                return String(c).toLowerCase().indexOf(q) !== -1;
+        var filtered = !q ? items : items.filter(function (it) {
+            return it.cells.some(function (c) {
+                return cellText(c).toLowerCase().indexOf(q) !== -1;
             });
         });
         if (st.sortCol >= 0) {
@@ -2169,11 +2294,11 @@
             var numCol = align[ci] === "num";
             filtered = filtered.slice().sort(function (a, b) {
                 var d;
+                var x = cellText(a.cells[ci]);
+                var y = cellText(b.cells[ci]);
                 if (numCol) {
-                    d = Number(a[ci]) - Number(b[ci]);
+                    d = Number(x) - Number(y);
                 } else {
-                    var x = String(a[ci]);
-                    var y = String(b[ci]);
                     d = x < y ? -1 : x > y ? 1 : 0;
                 }
                 return st.sortAsc ? d : -d;
@@ -2190,7 +2315,7 @@
 
         st.body.textContent = "";
         var tbl = document.createElement("table");
-        tbl.className = "g-table";
+        tbl.className = "g-table" + (selectable ? " g-dt-selectable" : "");
         var thead = document.createElement("thead");
         var hr = document.createElement("tr");
         header.forEach(function (h, i) {
@@ -2216,12 +2341,20 @@
         thead.appendChild(hr);
         tbl.appendChild(thead);
         var tbody = document.createElement("tbody");
-        pageRows.forEach(function (r) {
+        pageRows.forEach(function (it) {
             var tr = document.createElement("tr");
-            r.forEach(function (c, i) {
+            /* the key rides on the row so the delegated click in
+               bindEvents can name it; no data-g-target, no
+               data-g-value -- the generic input handler must not
+               see a row as a scalar control */
+            tr.setAttribute("data-g-key", it.key);
+            if (selectable && st.selected.indexOf(it.key) !== -1) {
+                tr.className = "g-dt-selected";
+                tr.setAttribute("aria-selected", "true");
+            }
+            it.cells.forEach(function (c, i) {
                 var td = document.createElement("td");
-                td.textContent = c;
-                if (align[i] === "num") td.className = "g-num";
+                fillCell(td, c, align[i] === "num");
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);

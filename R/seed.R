@@ -73,15 +73,22 @@ collect_input_seeds <- function(x) {
 #' an empty text field is "", an untouched checkbox is FALSE, a
 #' single select shows its first choice, a multiple select with
 #' nothing chosen is character(0), a slider with no value sits at the
-#' midpoint (the HTML default). NULL means this component seeds
+#' midpoint (the HTML default), a selectable data table starts with
+#' nothing selected, character(0). NULL means this component seeds
 #' nothing and the input stays auto-NULL: an empty number field,
-#' every button and output.
+#' every button and output -- a data table with no selection mode
+#' included, since it is then not an input at all.
 #'
 #' @param x a component (or its unclassed list form)
 #' @return an initial value, or NULL
 #' @keywords internal
 input_seed_value <- function(x) {
     switch(x$component,
+           data_table = if (identical(x$selection, "none")) {
+            NULL
+        } else {
+            character(0)
+        },
            text_input =,
            password_input =,
            textarea_input =,

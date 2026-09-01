@@ -12,7 +12,7 @@ import 'package:glinty_flutter/glinty_flutter.dart';
 Map<String, dynamic> welcomeWith(Object tree) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': 'r1',
       'ui': tree,
     };
@@ -47,7 +47,180 @@ Future<void> pump(WidgetTester tester, GlintySession s) => tester.pumpWidget(
     MaterialApp(home: Scaffold(body: SingleChildScrollView(
         child: GlintyView(session: s)))));
 
+/// A selectable table: the same shell with a selection mode.
+Map<String, dynamic> selectTree(String selection) => {
+      'component': 'page',
+      'title': 'Grid',
+      'children': [
+        {
+          'component': 'data_table',
+          'id': 'grid',
+          'page_length': 10,
+          'length_menu': [10],
+          'searchable': true,
+          'sortable': true,
+          'selection': selection,
+        },
+      ],
+    };
+
+/// Three keyed rows; the first carries a marked cell. The numeric
+/// column disagrees with text order (10 sorts after 2 as a number,
+/// before it as text), so a sort moves the marked row.
+Map<String, dynamic> keyedValue({List<String> keys = const ['a', 'b', 'c']}) =>
+    {
+      'header': ['state', 'n'],
+      'align': ['text', 'num'],
+      'keys': keys,
+      'rows': [
+        [
+          {'text': 'failed', 'variant': 'danger'},
+          '10'
+        ],
+        ['ok', '2'],
+        ['fine', '3'],
+      ],
+    };
+
+Map<String, dynamic>? lastInput(GlintySession s) {
+  final inputs = s.sent.where((m) => m.type == 'input').toList();
+  return inputs.isEmpty ? null : inputs.last.body;
+}
+
 void main() {
+  testWidgets('multiple selection toggles rows and reports keys in data order',
+      (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(selectTree('multiple')));
+    // seeded from the tree: nothing selected is an empty list, not null
+    expect(s.inputs['grid'], <String>[]);
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ok'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s), {'type': 'input', 'id': 'grid', 'value': ['b']});
+
+    // clicked after b, reported before it: data order, never click order
+    await tester.tap(find.text('failed'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s), {'type': 'input', 'id': 'grid', 'value': ['a', 'b']});
+
+    await tester.tap(find.text('ok'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s), {'type': 'input', 'id': 'grid', 'value': ['a']});
+  });
+
+  testWidgets('single selection replaces, and a second tap clears',
+      (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(selectTree('single')));
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ok'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s)!['value'], ['b']);
+    await tester.tap(find.text('fine'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s)!['value'], ['c']);
+    await tester.tap(find.text('fine'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s)!['value'], <String>[]);
+  });
+
+  testWidgets('a selection survives a re-sort and is pruned by a new value',
+      (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(selectTree('multiple')));
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('failed'));
+    await tester.pumpAndSettle();
+    expect(lastInput(s)!['value'], ['a']);
+    final sentBefore = s.sent.length;
+
+    // sorting is local: the row moves, stays selected, nothing is sent
+    await tester.tap(find.text('n'));
+    await tester.pumpAndSettle();
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.rows.where((r) => r.selected).length, 1);
+    expect(s.sent.length, sentBefore);
+
+    // a value without row a: the selection drops it and says so, once
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(keys: ['x', 'b', 'c']),
+    });
+    // repump: in an app the session-listening ancestor does this
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+    expect(lastInput(s)!['value'], <String>[]);
+    expect(s.sent.length, sentBefore + 1);
+
+    // a value that keeps every selected row sends nothing
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(keys: ['x', 'b', 'c']),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+    expect(s.sent.length, sentBefore + 1);
+  });
+
+  testWidgets('a marked cell shows its text in the variant style, and '
+      'filters and sorts by that text', (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(selectTree('none')));
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+
+    final failed = tester.widget<Text>(find.text('failed'));
+    final scheme = Theme.of(tester.element(find.text('failed'))).colorScheme;
+    expect(failed.style?.color, scheme.error);
+    expect(find.textContaining('{'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'FAIL');
+    await tester.pumpAndSettle();
+    expect(find.text('failed'), findsOneWidget);
+    expect(find.text('ok'), findsNothing);
+  });
+
+  testWidgets('a table with no selection mode reports nothing on tap',
+      (tester) async {
+    final s = GlintySession();
+    s.receive(welcomeWith(selectTree('none')));
+    expect(s.inputs.containsKey('grid'), isFalse);
+    s.receive({
+      'type': 'output', 'id': 'grid', 'kind': 'table',
+      'value': keyedValue(),
+    });
+    await pump(tester, s);
+    await tester.pumpAndSettle();
+    final before = s.sent.length;
+    await tester.tap(find.text('ok'));
+    await tester.pumpAndSettle();
+    expect(s.sent.length, before);
+    expect(find.byType(Checkbox), findsNothing);
+  });
+
   testWidgets('pages the value and reports its place', (tester) async {
     final s = GlintySession();
     s.receive(welcomeWith(gridTree()));

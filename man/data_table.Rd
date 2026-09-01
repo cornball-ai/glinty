@@ -8,7 +8,8 @@ data_table(
   page_length = 10L,
   length_menu = c(10, 25, 50, 100),
   searchable = TRUE,
-  sortable = TRUE
+  sortable = TRUE,
+  selection = "none"
 )
 }
 \arguments{
@@ -21,6 +22,9 @@ data_table(
 \item{searchable}{logical show the filter box}
 
 \item{sortable}{logical allow header-click sorting}
+
+\item{selection}{character "none", "single" or "multiple": whether
+rows can be selected, and how many at once}
 }
 \value{
 A UI component
@@ -37,6 +41,20 @@ sort as text. Feed it with [render_table()] like any table; keep
 the value at a size a client comfortably holds -- sample or
 pre-filter server-side above a few thousand rows.
 }
+\details{
+Given a `selection`, the table is also an input: `input[[id]]` is
+the character vector of selected row keys -- the data.frame's
+`row.names()`, which [render_table()] sends as `keys` -- and
+`character(0)` when nothing is selected, so `df[input$grid(), ]`
+is the selected rows. `"single"` replaces the selection on each
+click and clears it on a second click of the same row;
+`"multiple"` toggles rows. Keys are reported in data order, not
+click order, and a row that leaves the value leaves the selection.
+Sorting and filtering stay local, so a selected row stays selected
+through both.
+
+}
 \examples{
 data_table("results", page_length = 5)
+data_table("runs", selection = "single")
 }

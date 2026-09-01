@@ -715,5 +715,18 @@ expect_true(grepl('data-g-length-menu="5,30,50"', dtab, fixed = TRUE))
 expect_true(grepl('data-g-searchable="0"', dtab, fixed = TRUE))
 expect_true(grepl('data-g-sortable="1"', dtab, fixed = TRUE))
 expect_true(grepl('data-g-output="grid"', dtab, fixed = TRUE))
+expect_true(grepl('data-g-selection="none"', dtab, fixed = TRUE))
 # empty: no table markup until a value arrives
 expect_false(grepl("<table", dtab, fixed = TRUE))
+
+# a selectable table is an input, but its container is still a slot:
+# no data-g-target, or harvestLocal() would read a div as a control
+# and html_el() would write the id twice. The rows carry the binding,
+# and they exist only once a value arrives.
+sel <- component_to_html(component("data_table", id = "runs",
+                                   selection = "multiple"))
+expect_true(grepl('data-g-selection="multiple"', sel, fixed = TRUE))
+expect_true(grepl('data-g-output="runs"', sel, fixed = TRUE))
+expect_false(grepl("data-g-target", sel, fixed = TRUE))
+expect_false(grepl("data-g-message", sel, fixed = TRUE))
+expect_false(grepl("data-g-target", dtab, fixed = TRUE))

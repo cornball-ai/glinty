@@ -62,7 +62,7 @@ class FakeSocket implements WebSocket {
 Map<String, dynamic> welcomeOf(Object tree, String rev) => {
       'type': 'welcome',
       'session': 's1',
-      'protocol': 3,
+      'protocol': 4,
       'ui_revision': rev,
       'ui': tree,
     };
@@ -1139,7 +1139,7 @@ void main() {
 
       // the server hands back a different session
       socket.deliver({
-        'type': 'welcome', 'session': 's2', 'protocol': 3,
+        'type': 'welcome', 'session': 's2', 'protocol': 4,
         'ui_revision': 'ro', 'ui': outputTree, 'resumed': false,
       });
       await tester.pumpAndSettle();

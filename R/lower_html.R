@@ -77,7 +77,11 @@ component_to_html <- function(x) {
                         "1"
                     } else {
                         "0"
-                    }))),
+                    },
+                     # The container stays a slot: no data-g-target, so
+                     # harvestLocal() does not read a div as a control.
+                     # Rows report through their own delegated click.
+                     "data-g-selection" = x$selection))),
            plot_output = html_plot_output(x),
            image_output = html_el("img", c(html_slot(x),
                 list(class = "g-image-output", alt = x$alt)), void = TRUE),

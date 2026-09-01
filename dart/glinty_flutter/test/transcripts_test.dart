@@ -94,7 +94,7 @@ void main() {
       expect((s.theme!['colors'] as Map)['primary'], '#2456d6');
 
       final bare = GlintySession();
-      bare.receive({'type': 'welcome', 'session': 's0', 'protocol': 3});
+      bare.receive({'type': 'welcome', 'session': 's0', 'protocol': 4});
       expect(bare.theme, isNull,
           reason: 'a themeless app leaves the platform defaults alone');
     });
@@ -404,8 +404,10 @@ void main() {
           MaterialApp(home: Scaffold(body: GlintyView(session: s))));
 
       expect(find.text('Incompatible glinty server'), findsOneWidget);
-      expect(find.textContaining('protocol 3'), findsOneWidget);
+      // this client's version and the one the transcript's server
+      // claims (one higher), both named on screen
       expect(find.textContaining('protocol 4'), findsOneWidget);
+      expect(find.textContaining('protocol 5'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
       // and nothing from the tree it refused
       expect(find.text('Demo'), findsNothing);
@@ -664,7 +666,7 @@ void main() {
       s.receive({
         'type': 'welcome',
         'session': 's1',
-        'protocol': 3,
+        'protocol': 4,
         'ui_revision': 'r1',
         'ui': {
           'component': 'page',
@@ -745,7 +747,7 @@ void main() {
       s.receive({
         'type': 'welcome',
         'session': 's1',
-        'protocol': 3,
+        'protocol': 4,
         'ui_revision': 'r1',
         'ui': {
           'component': 'page',

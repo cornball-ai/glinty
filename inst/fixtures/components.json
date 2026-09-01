@@ -1,5 +1,5 @@
 {
-  "protocol": 3,
+  "protocol": 4,
   "vocabulary": {
     "components": ["text", "heading", "link", "icon", "rich_text", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
     "variants": {
@@ -835,7 +835,7 @@
     },
     {
       "name": "data-table",
-      "notes": "same table value, interactive shell: options ride as data attributes, length_menu always an array",
+      "notes": "same table value, interactive shell: options ride as data attributes, length_menu always an array; with a selection mode the table is also an input reporting row keys",
       "component": {
         "component": "data_table",
         "id": "grid",
@@ -846,7 +846,8 @@
           50
         ],
         "searchable": false,
-        "sortable": true
+        "sortable": true,
+        "selection": "single"
       }
     },
     {
@@ -863,7 +864,8 @@
           100
         ],
         "searchable": true,
-        "sortable": true
+        "sortable": true,
+        "selection": "none"
       }
     },
     {

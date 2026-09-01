@@ -39,8 +39,8 @@ void main() {
   final fixtures = loadFixtures();
 
   test('the fixture file declares the protocol this client speaks', () {
-    expect(loadFixtureFile()['protocol'], 3,
-        reason: 'this client renders protocol 3; a newer wire format '
+    expect(loadFixtureFile()['protocol'], 4,
+        reason: 'this client renders protocol 4; a newer wire format '
             'should be refused rather than half-rendered');
   });
 

@@ -292,6 +292,15 @@ one_dt <- component("data_table", id = "g", length_menu = 25)
 expect_true(grepl('"length_menu":[25]', as_json(one_dt), fixed = TRUE))
 expect_error(component("data_table", id = "g", page_length = 0L),
              "must be >= 1")
+# selection is a closed set, and a table with none is not an input
+expect_equal(dt$selection, "none")
+expect_equal(component("data_table", id = "g", selection = "single")$selection,
+             "single")
+expect_equal(component("data_table", id = "g", selection = "multiple")$selection,
+             "multiple")
+expect_error(component("data_table", id = "g", selection = "rows"),
+             "must be one of")
+expect_true(grepl('"selection":"none"', as_json(dt), fixed = TRUE))
 
 # --- fixtures ---
 fx <- component_fixtures()

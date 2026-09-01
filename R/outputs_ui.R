@@ -61,21 +61,35 @@ table_output <- function(id) {
 #' the value at a size a client comfortably holds -- sample or
 #' pre-filter server-side above a few thousand rows.
 #'
+#' Given a `selection`, the table is also an input: `input[[id]]` is
+#' the character vector of selected row keys -- the data.frame's
+#' `row.names()`, which [render_table()] sends as `keys` -- and
+#' `character(0)` when nothing is selected, so `df[input$grid(), ]`
+#' is the selected rows. `"single"` replaces the selection on each
+#' click and clears it on a second click of the same row;
+#' `"multiple"` toggles rows. Keys are reported in data order, not
+#' click order, and a row that leaves the value leaves the selection.
+#' Sorting and filtering stay local, so a selected row stays selected
+#' through both.
+#'
 #' @param id character output ID
 #' @param page_length integer rows shown per page
 #' @param length_menu numeric page-size options offered
 #' @param searchable logical show the filter box
 #' @param sortable logical allow header-click sorting
+#' @param selection character "none", "single" or "multiple": whether
+#'   rows can be selected, and how many at once
 #' @return A UI component
 #' @examples
 #' data_table("results", page_length = 5)
+#' data_table("runs", selection = "single")
 #' @export
 data_table <- function(id, page_length = 10L,
                        length_menu = c(10, 25, 50, 100), searchable = TRUE,
-                       sortable = TRUE) {
+                       sortable = TRUE, selection = "none") {
     component("data_table", id = id, page_length = page_length,
               length_menu = length_menu, searchable = searchable,
-              sortable = sortable)
+              sortable = sortable, selection = selection)
 }
 
 #' Create a plot output slot

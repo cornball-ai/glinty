@@ -1,5 +1,26 @@
 # glinty (development version)
 
+**Protocol 4: a data table can be an input, and a cell can carry a
+variant** (#89). `data_table(selection = "single")` or `"multiple"`
+makes the table report the keys of its selected rows under its own
+id -- `input$grid()` is a character vector, `character(0)` when
+nothing is chosen, so `df[input$grid(), ]` is the selected rows.
+Single replaces (and clears on a second click), multiple toggles,
+keys come back in data order, and a row that leaves the value leaves
+the selection. `render_table()` now sends the data.frame's row names
+as `keys`, which is what a selection names; give the frame meaningful
+row names and a selected row survives a re-sort and a refresh. It
+also takes `variants`, a named list of per-column rules -- one
+variant for the column, a named vector looked up by cell text, or a
+function of the frame -- that mark cells the way `txt()` marks text:
+`variants = list(state = c(failed = "danger"), image = "mono")`.
+Marked cells travel as `{text, variant}` and still filter and sort by
+their text in both clients. The protocol number moves to 4 because an
+older client would draw a working-looking table whose rows do
+nothing, which PROTOCOL.md's honest-failure test refuses; see its
+`v4` section. Not yet: `update_data_table()` to set a selection from
+the server, which is also what a reconnect needs.
+
 **api mount hardening** (#85). Request bodies reach the router as
 plain nested lists (`simplifyVector = FALSE`): scalars stay scalars,
 arrays stay lists, and a field sent as null stays distinct from one

@@ -1,5 +1,5 @@
 {
-  "protocol": 3,
+  "protocol": 4,
   "transcripts": [
     {
       "name": "hello-welcome",
@@ -9,7 +9,7 @@
           "dir": "in",
           "message": {
             "type": "hello",
-            "protocol": 3,
+            "protocol": 4,
             "client": "example/0.0.1",
             "components": ["page", "heading", "text_input", "text_output"],
             "kinds": ["text"],
@@ -21,7 +21,7 @@
           "message": {
             "type": "welcome",
             "session": "s1",
-            "protocol": 3,
+            "protocol": 4,
             "theme": {
               "colors": {
                 "primary": "#2456d6",
@@ -80,7 +80,7 @@
           "dir": "in",
           "message": {
             "type": "hello",
-            "protocol": 3,
+            "protocol": 4,
             "client": "glinty-js/0.5.0",
             "prerendered": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86"
           }
@@ -90,7 +90,7 @@
           "message": {
             "type": "welcome",
             "session": "s2",
-            "protocol": 3,
+            "protocol": 4,
             "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
@@ -128,7 +128,7 @@
           "dir": "in",
           "message": {
             "type": "hello",
-            "protocol": 3,
+            "protocol": 4,
             "client": "glinty-js/0.5.0",
             "token": "eyJhb.example.token"
           }
@@ -138,7 +138,7 @@
           "message": {
             "type": "welcome",
             "session": "s6",
-            "protocol": 3,
+            "protocol": 4,
             "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
@@ -176,7 +176,7 @@
           "dir": "in",
           "message": {
             "type": "hello",
-            "protocol": 3,
+            "protocol": 4,
             "client": "glinty-js/0.5.0",
             "token": "expired.or.wrong"
           }
@@ -223,7 +223,7 @@
           "dir": "in",
           "message": {
             "type": "hello",
-            "protocol": 3,
+            "protocol": 4,
             "client": "glinty-js/0.5.0",
             "prerendered": "0000000000000000000000000000000000000000000000000000000000000000"
           }
@@ -233,7 +233,7 @@
           "message": {
             "type": "welcome",
             "session": "s3",
-            "protocol": 3,
+            "protocol": 4,
             "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
@@ -271,7 +271,7 @@
           "dir": "in",
           "message": {
             "type": "hello",
-            "protocol": 3,
+            "protocol": 4,
             "client": "glinty-js/0.5.0"
           }
         },
@@ -280,7 +280,7 @@
           "message": {
             "type": "welcome",
             "session": "s4",
-            "protocol": 4,
+            "protocol": 5,
             "ui_revision": "b50b4bd3a5e75f047d92c4d3f6da3b18854a1b68e06279ae4563241184944b86",
             "ui": {
               "component": "page",
