@@ -1,6 +1,7 @@
 ^\.github$
 ^\.gitignore$
 ^CLAUDE\.md$
+^AGENTS\.md$
 ^\.claude$
 ^tasks$
 ^.*\.Rproj$
