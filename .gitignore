@@ -2,7 +2,6 @@
 *.Rcheck
 .Rproj.user
 .Rhistory
-CLAUDE.md
 .positai
 *.Rproj
 
