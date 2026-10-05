@@ -353,7 +353,9 @@ raw_response_parts <- function(resp) {
         keys <- sub(":.*$", "", hl)
         vals <- trimws(sub("^[^:]*:", "", hl))
         keep <- !tolower(keys) %in% c("content-length", "connection")
-        headers <- as.list(stats::setNames(vals[keep], keys[keep]))
+        vals <- vals[keep]
+        names(vals) <- keys[keep]
+        headers <- as.list(vals)
     }
     list(status = status, headers = headers, body = body)
 }
