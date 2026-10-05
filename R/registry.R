@@ -15,18 +15,24 @@ reg_reset <- function() {
     REG$conn_counter <- 0L
     REG$dead <- character(0L)
     REG$srv <- NULL
+    REG$transport <- NULL
+    REG$bound <- NULL
     invisible(NULL)
 }
 
 #' Register a newly accepted connection
 #'
-#' @param con a socket connection (non-blocking, binary)
+#' @param con a socket connection (non-blocking, binary) on the base
+#'   transport, or a connection id on civetwebR
 #' @param state character initial state ("http_pending")
+#' @param key character key to register under, or NULL to number it
 #' @return character connection key
 #' @keywords internal
-conn_add <- function(con, state = "http_pending") {
-    REG$conn_counter <- REG$conn_counter + 1L
-    key <- sprintf("c%d", REG$conn_counter)
+conn_add <- function(con, state = "http_pending", key = NULL) {
+    if (is.null(key)) {
+        REG$conn_counter <- REG$conn_counter + 1L
+        key <- sprintf("c%d", REG$conn_counter)
+    }
     entry <- new.env(parent = emptyenv())
     entry$con <- con
     entry$state <- state
@@ -85,11 +91,13 @@ conn_close <- function(key, notify, handlers, code = 1000L) {
     }
     sid <- entry$session_id
     was_ws <- identical(entry$state, "ws_open")
-    if (was_ws) {
-        tryCatch(suppressWarnings(writeBin(ws_close_frame(code), entry$con)),
-                 error = function(e) NULL)
+    transport <- REG$transport
+    if (!is.null(transport)) {
+        if (was_ws) {
+            transport$ws_close(entry, code)
+        }
+        transport$close_conn(entry)
     }
-    tryCatch(close(entry$con), error = function(e) NULL)
     REG$conns[[key]] <- NULL
     REG$dead <- setdiff(REG$dead, key)
     if (!is.null(sid)) {

@@ -3,14 +3,18 @@
 \alias{run_ws_server}
 \title{Run the HTTP + WebSocket server loop}
 \usage{
-run_ws_server(port, handlers, max_tick = 1)
+run_ws_server(port, handlers, max_tick = 1, host = NULL, tls_cert = NULL)
 }
 \arguments{
 \item{port}{integer TCP port}
 
 \item{handlers}{list of on_request, on_open, on_message, on_close}
 
-\item{max_tick}{numeric maximum select timeout in seconds}
+\item{max_tick}{numeric maximum wait timeout in seconds}
+
+\item{host}{character bind address for civetwebR, or NULL}
+
+\item{tls_cert}{character PEM path for civetwebR, or NULL}
 }
 \value{
 invisible(NULL); runs until interrupt
@@ -21,7 +25,12 @@ app layer: on_request(req) returns a raw HTTP response (or NULL
 for 404), on_open(session_id) / on_message(session_id, txt) /
 on_close(session_id) manage sessions. Each loop tick fires due
 timers, flushes reactions, and drains every session's outgoing
-queue before sleeping in socketSelect (timeout capped at max_tick
-seconds so Ctrl-C stays responsive).
+queue before sleeping in the transport's wait (timeout capped at
+max_tick seconds so Ctrl-C stays responsive).
+}
+\details{
+The transport is base R sockets unless a host or a certificate is
+given, which selects civetwebR (see transport_civetweb()).
+
 }
 \keyword{internal}

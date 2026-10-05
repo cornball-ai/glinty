@@ -13,6 +13,6 @@ invisible(NULL)
 }
 \description{
 Closes every connection (1001 going away, with session teardown)
-and the listening socket.
+and the listener.
 }
 \keyword{internal}

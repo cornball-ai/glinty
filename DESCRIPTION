@@ -29,5 +29,6 @@ Imports:
     tools,
     utils
 Suggests:
+    civetwebR (>= 0.0.1.5),
     tinytest
 Encoding: UTF-8
