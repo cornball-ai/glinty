@@ -1,0 +1,35 @@
+name: civetwebR
+description: >
+  civetwebR, glinty's transport (Imports), from GitHub at a pinned
+  commit. It is on neither CRAN nor r2u, so every job that installs
+  glinty's dependencies has to put it in place first: a resolver that
+  reads DESCRIPTION then finds it already present and moves on. One
+  action rather than a step copied into each job, because the pin
+  lives in one place and a job that forgets the step fails exactly the
+  way the ci and flutter jobs did after #98.
+
+inputs:
+  ref:
+    description: The civetwebR commit to install (the one glinty's floor was tested against).
+    required: false
+    default: 23f34306c3b5b2a827676a2bd25e6209b23106f2
+
+runs:
+  using: composite
+  steps:
+    # Cloned rather than fetched through the GitHub API: the runner's
+    # bundled token cannot read a repository it was not minted for,
+    # and a clone needs no token at all for a public one. The checkout
+    # is by commit, not by branch, so a push to civetwebR main cannot
+    # change what this job tests against.
+    - name: civetwebR at ${{ inputs.ref }}
+      shell: bash
+      run: |
+        git clone --quiet https://github.com/cornball-ai/civetwebR /tmp/civetwebR
+        git -C /tmp/civetwebR fetch --quiet origin "${{ inputs.ref }}"
+        git -C /tmp/civetwebR checkout --quiet "${{ inputs.ref }}"
+        # sudo on both runners: r-ci installs into the system library
+        # on macOS as well as Linux, and this has to land where the
+        # resolver that follows will look.
+        sudo R CMD INSTALL /tmp/civetwebR
+        Rscript -e 'cat("civetwebR", as.character(packageVersion("civetwebR")), "\n")'
