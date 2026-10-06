@@ -250,6 +250,9 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
             send_to_session(sid, msg)
         })
         s$principal <- principal
+        # Which tab panel each output sits in, so one behind a hidden
+        # panel waits until the panel opens (see output_visible()).
+        s$panel_of <- panel_env(app_obj$ui)
         # Inputs seed from the tree before the server function runs:
         # reactives read defaults on their first run, and
         # observe_event()'s ignore_init treats them as init state

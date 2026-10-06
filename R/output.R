@@ -24,6 +24,14 @@ make_output_proxy <- function(session) {
         }
         obs <- with_session(session, observe(
                 fn = function() {
+            # An output inside a hidden tab panel waits. Reading the
+            # tabset's selection here, in this observer's context, is
+            # what re-runs it when the panel opens; while hidden it
+            # depends on nothing else, so its own inputs changing
+            # cost nothing until then.
+            if (!output_visible(session, id)) {
+                return(invisible(NULL))
+            }
             # Render errors become error messages for this output;
             # glinty_silent (req) passes through to the observer
             # runner and suppresses the update entirely.
@@ -39,6 +47,9 @@ make_output_proxy <- function(session) {
                 # known state of any output id inside the new tree so
                 # panels appear current, not blank.
                 if (identical(renderer$kind, "ui") && !is.null(result$ok)) {
+                    # and the subtree's outputs now live where this
+                    # slot lives, as far as tab panels go
+                    note_dynamic_panels(session, id, result$ok)
                     for (oid in collect_tree_ids(result$ok)) {
                         if (!identical(oid, id) &&
                             !is.null(session$last_sent[[oid]])) {

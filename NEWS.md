@@ -1,5 +1,16 @@
 # glinty (development version)
 
+**Outputs behind a hidden tab wait.** A `tabset()` shows one panel,
+but on the server every renderer behind every panel ran on every
+invalidation and every `invalidate_later()` behind a hidden panel
+kept polling, so a page made of several tools cost the sum of them
+while one was on screen. Now an output inside a hidden panel of a
+tabset with an id is not rendered until the panel opens, and renders
+once then; while it waits its inputs changing cost nothing and its
+timer is not re-armed. Nested tabsets stack, and outputs built by
+`render_ui()` inside a panel wait with it. Observers are unchanged:
+a polling observer that should pause reads the tabset's input.
+
 **Namespaces, and `app()` refuses colliding ids.** Ids are global
 to a page, and when two independently written subtrees both used
 `x` the last renderer won and nothing said so. `namespace("stt")`
