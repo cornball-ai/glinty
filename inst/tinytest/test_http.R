@@ -1,4 +1,3 @@
-parse_http_head <- glinty:::parse_http_head
 find_header_end <- glinty:::find_header_end
 http_response_raw <- glinty:::http_response_raw
 serve_static <- glinty:::serve_static
@@ -9,19 +8,6 @@ pos <- find_header_end(buf)
 expect_true(pos > 0L)
 expect_equal(rawToChar(buf[seq_len(pos - 1L)]), "GET / HTTP/1.1\r\nHost: x")
 expect_equal(find_header_end(charToRaw("GET / HTTP/1.1\r\nHost")), -1L)
-
-# --- parse: method, path, query, lower-cased headers ---
-req <- parse_http_head(charToRaw(
-    "GET /search?q=hi&n=2 HTTP/1.1\r\nHost: localhost\r\nX-Custom: Yes"
-))
-expect_equal(req$method, "GET")
-expect_equal(req$path, "/search")
-expect_equal(req$query, "q=hi&n=2")
-expect_equal(unname(req$headers[["host"]]), "localhost")
-expect_equal(unname(req$headers[["x-custom"]]), "Yes")
-
-# malformed head
-expect_null(parse_http_head(charToRaw("GARBAGE")))
 
 # --- response bytes ---
 resp <- rawToChar(http_response_raw(200L, "text/plain", "hi"))

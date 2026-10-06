@@ -1,8 +1,6 @@
-ws_decode_frame <- glinty:::ws_decode_frame
-ws_encode_frame <- glinty:::ws_encode_frame
-ws_text_frame <- glinty:::ws_text_frame
-ws_close_frame <- glinty:::ws_close_frame
-ws_pong_frame <- glinty:::ws_pong_frame
+# The RFC 6455 codec the end-to-end test's client speaks (helper_ws.R),
+# pinned to the RFC's sample bytes. The server's framing is CivetWeb's.
+source("helper_ws.R", local = TRUE)
 
 # --- RFC 6455 5.7: unmasked "Hello" is 81 05 48 65 6c 6c 6f ---
 hello_unmasked <- as.raw(c(0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f))

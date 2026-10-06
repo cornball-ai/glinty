@@ -1,5 +1,22 @@
 # glinty (development version)
 
+**civetwebR is the transport.** The base R socket transport is gone:
+`run_app()` always serves through civetwebR (now in Imports, >=
+0.0.1.5), which binds the address, terminates TLS, parses HTTP and
+frames the WebSocket. `host = NULL` still means every interface, as
+base R left no choice, and startup still says so; `host =
+"127.0.0.1"` binds loopback and `tls_cert =` serves https and wss,
+neither selecting anything any more. Gone with it: the RFC 6455
+codec, the handshake, the HTTP head parser and the per-connection
+buffers (R/ws-frame.R, R/ws-handshake.R, the base half of
+R/transport.R and R/event_loop.R). The Origin policy stays, in
+R/origin.R, applied on civetwebR's `ws_connect` event before the
+handshake is answered. The six-operation seam behind `REG$transport`
+stays for a second transport. The end-to-end test's client keeps its
+own codec in inst/tinytest/helper_ws.R, and the base-transport
+scenarios it alone covered (a bogus resume id, the auth gate over a
+real socket) now run over civetwebR.
+
 **A transport seam, and civetwebR behind it: `run_app(host =)` and
 `run_app(tls_cert =)`.** Base R's `serverSocket()` takes no bind
 address, which is why the startup message has always said "listening

@@ -15,9 +15,11 @@ expressions, observers, a UI built in R) with a tinyverse footprint:
 - **2 dependencies**: jsonlite and digest. No httpuv, no R6, no
   htmltools, no later/promises. Shiny pulls ~35 recursive packages;
   glinty pulls 2.
-- **Pure base R transport**: the HTTP server and the RFC 6455
-  WebSocket layer run on `serverSocket()`/`socketSelect()`. No
-  compiled code in the package.
+- **One server dependency**: civetwebR, the CivetWeb C server
+  compiled into that package, binds an address, terminates TLS,
+  parses HTTP and frames the WebSocket. glinty keeps the protocol
+  policy (origins, the hello gate, sessions) in R and has no compiled
+  code of its own.
 - **~48 KB of hand-written JavaScript**, no jQuery, no Bootstrap.
   Shiny's `www/` tree is 6.9 MB; glinty's is under 60 KB.
 - **Session-scoped state**: every browser tab gets its own inputs,
@@ -194,10 +196,9 @@ port is given.
 - Single-threaded: one slow computation stalls all sessions (same
   process model as one Shiny worker, minus the async escape hatches).
 - No bookmarking, no modules yet.
-- `serverSocket()` binds all interfaces -- base R sockets cannot bind
-  selectively or terminate TLS. Gate sessions with `auth =`, and
-  scope the port with a firewall, container namespace, or reverse
-  proxy; startup says this out loud.
+- The default bind is every interface, and startup says so out loud.
+  `run_app(host =)` binds one address and `tls_cert =` serves https
+  and wss; gate sessions with `auth =` either way.
 - The session id remains a weak resume credential within the
   reconnect grace window (auth is re-verified on resume when
   configured).

@@ -14,10 +14,9 @@ the parsed upgrade request, or NULL when the session has
 }
 \description{
 The parsed head only (method, path, query, headers with lower-cased
-names) -- small and bounded by MAX_HTTP_HEAD, never the raw buffer.
-It lives as long as the connection, which is exactly the lifetime
-the hello gate needs it for: a verifier that reads cookie-carried
-credentials (see authenticate_hello()) runs on the first frame of
-the same connection.
+names), never a body. It lives as long as the connection, which is
+exactly the lifetime the hello gate needs it for: a verifier that
+reads cookie-carried credentials (see authenticate_hello()) runs on
+the first frame of the same connection.
 }
 \keyword{internal}

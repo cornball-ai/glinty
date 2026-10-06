@@ -43,8 +43,8 @@ env_secrets_in <- function(text, min_chars = 8L) {
 #' The failure this exists to stop: prefilling an input from
 #' Sys.getenv(), which renders the secret into the page source as a
 #' plain attribute. type="password" masks the screen, not the HTML, so
-#' the value is readable by anyone who can fetch the page -- and base
-#' R's serverSocket() listens on all interfaces.
+#' the value is readable by anyone who can fetch the page -- and the
+#' default bind is every interface.
 #'
 #' Stops rather than warns, because a warning at startup scrolls past
 #' and the app keeps serving the secret.

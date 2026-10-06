@@ -18,8 +18,7 @@ civet_frame(key, entry, ev, handlers)
 invisible(NULL)
 }
 \description{
-The same rules handle_ws_bytes() applies on the base transport:
-binary frames fail the connection with 1003, a continuation without
+Binary frames fail the connection with 1003, a continuation without
 an open message or a new message inside one with 1002, an
 over-sized message with 1009; a complete text message is delivered
 through ws_deliver(), which checks the UTF-8.

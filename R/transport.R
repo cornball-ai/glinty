@@ -1,9 +1,13 @@
-# The transport seam. Two implementations of one small interface sit
-# behind REG$transport: base R sockets (the default, with all of the
-# protocol code in this package behind it) and civetwebR, chosen when
-# run_app() is given a host to bind or a certificate. The registry and
-# the app layer call these operations; nothing else touches a socket or
-# a CivetWeb connection id.
+# The transport: civetwebR. CivetWeb owns the sockets. It binds the
+# address, terminates TLS, parses HTTP, performs the WebSocket
+# handshake and frames; R sees events from civetwebR::next_event()
+# and answers them. What stays in R is policy: the Origin check on an
+# upgrade (R/origin.R), the hello gate, and the message-level rules
+# (text only, reassembly of fragments, the size cap).
+#
+# The seam is a list of six operations behind REG$transport, so a
+# second transport can sit beside this one. The registry and the app
+# layer call these; nothing else touches a CivetWeb connection id.
 #
 #   listen(port, host, tls_cert)  -> list(host, port) as bound
 #   wait(handlers, timeout)       -> block up to timeout seconds, then
@@ -13,133 +17,18 @@
 #   close_conn(entry)             -> release the connection
 #   close()                       -> stop listening
 #
-# An entry is a registry environment (see conn_add()); its `con` is a
-# socket connection for the base transport and a CivetWeb connection
-# id for civetwebR.
+# An entry is a registry environment (see conn_add()); its `con` is
+# the CivetWeb connection id.
 
-#' The base R socket transport
-#'
-#' serverSocket() takes no bind address, so this listens on every
-#' interface. HTTP parsing, the WebSocket handshake and framing all
-#' happen in R, on the bytes each non-blocking connection has buffered.
-#'
-#' @return a transport list
-#' @keywords internal
-transport_base <- function() {
-    list(
-        name = "base",
-        listen = function(port, host, tls_cert) {
-            REG$srv <- serverSocket(as.integer(port))
-            list(host = "0.0.0.0", port = as.integer(port))
-        },
-        wait = function(handlers, timeout) base_wait(handlers, timeout),
-        ws_send = function(entry, text) base_write(entry, ws_text_frame(text)),
-        ws_close = function(entry, code) base_write(entry, ws_close_frame(code)),
-        close_conn = function(entry) {
-            tryCatch(close(entry$con), error = function(e) NULL)
-            invisible(NULL)
-        },
-        close = function() {
-            if (!is.null(REG$srv)) {
-                tryCatch(close(REG$srv), error = function(e) NULL)
-                REG$srv <- NULL
-            }
-            invisible(NULL)
-        }
-    )
-}
-
-#' Write bytes to a base transport connection
-#'
-#' A failed write surfaces from R as a warning, which here means
-#' FALSE; the caller decides whether that marks the connection dead.
-#'
-#' @param entry registry entry
-#' @param bytes raw vector
-#' @return logical success
-#' @keywords internal
-base_write <- function(entry, bytes) {
-    ok <- TRUE
-    tryCatch(
-             withCallingHandlers(
-                                 writeBin(bytes, entry$con),
-                                 warning = function(w) {
-        ok <<- FALSE
-        invokeRestart("muffleWarning")
-    }
-        ),
-             error = function(e) ok <<- FALSE
-    )
-    ok
-}
-
-#' One wait on the base transport
-#'
-#' Sleeps in socketSelect() for up to `timeout` seconds, accepts what
-#' arrived on the listener, and feeds each readable connection's bytes
-#' to its state machine.
-#'
-#' @param handlers the handler list
-#' @param timeout numeric seconds
-#' @return invisible(NULL)
-#' @keywords internal
-base_wait <- function(handlers, timeout) {
-    srv <- REG$srv
-    conn_keys <- names(REG$conns)
-    socks <- c(list(srv),
-               unname(lapply(REG$conns[conn_keys], function(e) e$con)))
-    ready <- socketSelect(socks, write = FALSE, timeout = timeout)
-
-    if (isTRUE(ready[1L])) {
-        con <- tryCatch(
-                        socketAccept(srv, blocking = FALSE, open = "r+b", timeout = 5),
-                        error = function(e) NULL
-        )
-        if (!is.null(con)) {
-            conn_add(con, "http_pending")
-        }
-    }
-
-    readable <- conn_keys[ready[-1L]]
-    for (key in readable) {
-        entry <- REG$conns[[key]]
-        if (is.null(entry)) {
-            next
-        }
-        tryCatch({
-            data <- drain_socket(entry$con)
-            if (length(data) == 0L) {
-                # readable + zero bytes == EOF; close now or the
-                # connection stays "readable" forever and spins us
-                conn_close(key, notify = TRUE, handlers = handlers)
-            } else {
-                entry$buf <- c(entry$buf, data)
-                if (length(entry$buf) > MAX_CONN_BUF) {
-                    conn_close(key, notify = TRUE, handlers = handlers,
-                               code = 1009L)
-                } else if (identical(entry$state, "http_pending")) {
-                    handle_http_bytes(key, handlers)
-                } else if (identical(entry$state, "http_body")) {
-                    handle_http_body(key, handlers)
-                } else {
-                    handle_ws_bytes(key, handlers)
-                }
-            }
-        }, error = function(e) {
-            conn_close(key, notify = TRUE, handlers = handlers)
-        })
-    }
-    invisible(NULL)
-}
+# The opcode of a text frame: what civet_frame() records while a
+# fragmented message is open.
+WS_TEXT <- 1L
 
 #' The civetwebR transport
 #'
-#' CivetWeb owns the sockets: it binds the given host, terminates TLS,
-#' parses HTTP, performs the WebSocket handshake and frames. R sees
-#' events from civetwebR::next_event() and answers them. What stays in
-#' R is policy: the Origin check on an upgrade, the hello gate, and the
-#' message-level rules the base transport applies (text only,
-#' reassembly of fragments, the size cap).
+#' `host = NULL` binds every interface, which is what base R's
+#' serverSocket() always did and what the startup message warns
+#' about; an address binds that one.
 #'
 #' @return a transport list
 #' @keywords internal
@@ -148,14 +37,15 @@ transport_civetweb <- function() {
     list(
         name = "civetwebR",
         listen = function(port, host, tls_cert) {
+            bind <- if (is.null(host)) "0.0.0.0" else host
             srv <<- civetwebR::start_server(
-                port = as.integer(port), host = host, register = FALSE,
+                port = as.integer(port), host = bind, register = FALSE,
                 ws_path = "/ws", keep_alive = FALSE,
                 max_body_size = getOption("glinty.max_upload", 10485760L),
                 tls_cert = tls_cert
             )
             REG$srv <- srv
-            list(host = host, port = civetwebR::server_port(srv))
+            list(host = bind, port = civetwebR::server_port(srv))
         },
         wait = function(handlers, timeout) {
             ev <- civetwebR::next_event(as.integer(round(timeout * 1000)), srv)
@@ -211,14 +101,16 @@ civet_dispatch <- function(ev, handlers, srv) {
         civetwebR::send_response(ev$id, raw_response_parts(resp), srv)
     },
            ws_connect = {
-        # CivetWeb has already checked the upgrade itself; the policy
-        # decision is the same one the base transport makes.
+        # CivetWeb has checked the upgrade itself; the policy decision
+        # is glinty's, before the handshake is answered.
         req <- civet_request(ev)
         if (ws_origin_allowed(get_header(req, "origin"), get_header(req, "host"),
                               .globals$origins)) {
             conn_add(ev$id, "ws_pending", key = key)
-            # Kept for the hello gate, as the base transport keeps it
-            # (see handle_http_bytes()).
+            # The parsed head survives on the entry (headers included)
+            # so the hello gate can hand it to a verifier: an HttpOnly
+            # session cookie rides the upgrade request, never the
+            # hello frame.
             REG$conns[[key]]$upgrade_req <- req
             civetwebR::send_response(ev$id, TRUE, srv)
         } else {
@@ -253,8 +145,7 @@ civet_dispatch <- function(ev, handlers, srv) {
 
 #' Apply the message rules to one civetwebR data frame
 #'
-#' The same rules handle_ws_bytes() applies on the base transport:
-#' binary frames fail the connection with 1003, a continuation without
+#' Binary frames fail the connection with 1003, a continuation without
 #' an open message or a new message inside one with 1002, an
 #' over-sized message with 1009; a complete text message is delivered
 #' through ws_deliver(), which checks the UTF-8.
@@ -304,8 +195,8 @@ civet_frame <- function(key, entry, ev, handlers) {
 
 #' A civetwebR event as a glinty request
 #'
-#' The shape parse_http_head() produces: method, path, query and
-#' headers with lower-cased names, plus the raw body when there is one.
+#' The shape the router reads: method, path, query and headers with
+#' lower-cased names, plus the raw body when there is one.
 #'
 #' @param ev a cw_request
 #' @return list(method, path, query, headers[, body])

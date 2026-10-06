@@ -1226,39 +1226,25 @@ keeps refusing to ship.
 
 ### Binding and TLS
 
-**Neither loopback-only binding nor TLS is implementable in glinty
-itself**, and the spec should not pretend otherwise.
+Both are the server's, which is civetwebR (the CivetWeb C server
+compiled into that package): `run_app(host =)` binds one address and
+`run_app(tls_cert =)` serves https and wss from a PEM file. The
+default bind is every interface, as it was when base R's
+`serverSocket()` left no choice, and startup names the exposure in
+the same breath as the URL rather than burying it in `?run_app`.
 
-Base R's `serverSocket(port)` takes no bind address and listens on all
-interfaces. There is no argument to pass. A loopback default would
-need native code, another server dependency, or network isolation —
-so "default to loopback" was wrong in the previous draft and is
-withdrawn.
+An earlier draft held that neither was implementable in glinty
+itself, because base R sockets take no bind address and cannot
+terminate TLS. That transport is gone (0.0.5.64); the containment it
+delegated to firewall rules, a container network namespace or a
+reverse proxy still applies wherever a raw port must not be reachable
+at all, since a proxy in front of a reachable port is one of several
+ways in. The deployment contract is: **glinty binds what it is told
+and warns, authentication gates the session, and the scheduler
+isolates the port.**
 
-What glinty can do is **say so loudly at startup**, naming the
-interface exposure in the same breath as the URL, rather than burying
-it in `?run_app`.
-
-The containment belongs to the layer that can actually enforce it:
-firewall rules, a container network namespace, or viento's own network
-isolation around the allocated port. A reverse proxy alone is not
-enough — if the raw glinty port stays reachable, the proxy is simply
-one of several ways in.
-
-So the deployment contract is: **glinty warns, authentication gates
-the session, and the scheduler isolates the port.** No native code, no
-extra dependency, and the one component that can bind selectively is
-the one doing it.
-
-TLS is the same story for a different reason: base R sockets cannot
-terminate it, and `openssl` being an Import buys the primitives, not
-a TLS socket. The supported deployment is a reverse proxy
-terminating TLS in front of glinty, with the network scoped by
-firewall or namespace.
-
-Apple's ATS makes TLS non-negotiable for a mobile client, so a
-documented, tested proxy configuration is a precondition for the Dart
-client rather than polish.
+Apple's ATS makes TLS non-negotiable for a mobile client; `tls_cert =`
+or a terminating proxy satisfies it.
 
 ## Deployment surface
 
