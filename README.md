@@ -94,10 +94,20 @@ calling them (`input$x()` instead of `input$x`).
 | `fluidPage(...)` | `page(...)` |
 | `shinyApp(ui, server)` | `app(ui, server)` |
 | `runApp(x, port)` | `run_app(x, port)` |
+| `NS("stt")` / `moduleServer` | `namespace("stt")` / `scoped(ns, input, output, session)` |
 
 The server function takes `(input, output)` or
 `(input, output, session)`; the session argument is what the
 `update_*_input()` family needs.
+
+Ids are global to a page, and `app()` refuses a tree where one names
+two things. A subtree written on its own keeps its ids apart with a
+namespace: `ns <- namespace("stt")` builds the UI with `ns("file")`,
+and `scoped(ns, input, output, session)` gives its server code
+proxies under which `input$file`, `output$status <-` and
+`download_handler(session, "md", ...)` all mean the prefixed id.
+`component_ids()` lists a tree's ids by kind for a host that wants to
+check them itself.
 
 ## How it works
 

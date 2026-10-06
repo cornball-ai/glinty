@@ -62,6 +62,7 @@ feed <- function(id, keep = 200L, grow = NULL, width = NULL) {
 #' }
 #' @export
 feed_append <- function(session, id, item) {
+    id <- scoped_id(session, id)
     st <- feed_state(session, id)
     item <- feed_check_item(item, "feed_append")
     st$items <- c(st$items, list(item))
@@ -88,6 +89,7 @@ feed_append <- function(session, id, item) {
 #' }
 #' @export
 feed_patch <- function(session, id, item) {
+    id <- scoped_id(session, id)
     st <- feed_state(session, id)
     if (length(st$items) == 0L) {
         stop("feed_patch(): feed '", id, "' is empty; ",
@@ -115,6 +117,7 @@ feed_patch <- function(session, id, item) {
 #' }
 #' @export
 feed_reset <- function(session, id, items = list()) {
+    id <- scoped_id(session, id)
     st <- feed_state(session, id)
     items <- check_children(items, "feed_reset")
     st$items <- lapply(items, unclass_recursive)

@@ -43,6 +43,7 @@ download_handler <- function(session, id, filename, content) {
         stop("filename must be a string or a function returning one",
              call. = FALSE)
     }
+    id <- scoped_id(session, id)
     session$downloads[[id]] <- list(filename = filename, content = content)
     invisible(NULL)
 }
