@@ -1,11 +1,10 @@
 #' Send a text frame to a session's WebSocket
 #'
-#' Immediate framed write; the kernel socket buffer is the queue.
-#' There is no concurrent writer in a single-threaded process, and
-#' partial-write stalls are bounded by the connection timeout set at
-#' accept. A failed write (surfaced by R as a warning) marks the
-#' connection dead; the actual close happens at the top of the next
-#' loop iteration.
+#' Immediate write through the transport; the kernel socket buffer is
+#' the queue. There is no concurrent writer in a single-threaded
+#' process, and partial-write stalls are bounded by the connection
+#' timeout. A failed write marks the connection dead; the actual close
+#' happens at the top of the next loop iteration.
 #'
 #' @param session_id character session id
 #' @param text character message (one JSON object)
@@ -17,20 +16,11 @@ send_to_session <- function(session_id, text) {
         return(invisible(FALSE))
     }
     entry <- REG$conns[[key]]
-    if (is.null(entry) || !identical(entry$state, "ws_open")) {
+    if (is.null(entry) || !identical(entry$state, "ws_open") ||
+        is.null(REG$transport)) {
         return(invisible(FALSE))
     }
-    ok <- TRUE
-    tryCatch(
-             withCallingHandlers(
-                                 writeBin(ws_text_frame(text), entry$con),
-                                 warning = function(w) {
-        ok <<- FALSE
-        invokeRestart("muffleWarning")
-    }
-        ),
-             error = function(e) ok <<- FALSE
-    )
+    ok <- isTRUE(REG$transport$ws_send(entry, text))
     if (!ok) {
         mark_dead(key)
     }

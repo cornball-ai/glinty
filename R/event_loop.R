@@ -13,23 +13,33 @@ MAX_CONN_BUF <- 16777216L
 #' for 404), on_open(session_id) / on_message(session_id, txt) /
 #' on_close(session_id) manage sessions. Each loop tick fires due
 #' timers, flushes reactions, and drains every session's outgoing
-#' queue before sleeping in socketSelect (timeout capped at max_tick
-#' seconds so Ctrl-C stays responsive).
+#' queue before sleeping in the transport's wait (timeout capped at
+#' max_tick seconds so Ctrl-C stays responsive).
+#'
+#' The transport is base R sockets unless a host or a certificate is
+#' given, which selects civetwebR (see transport_civetweb()).
 #'
 #' @param port integer TCP port
 #' @param handlers list of on_request, on_open, on_message, on_close
-#' @param max_tick numeric maximum select timeout in seconds
+#' @param max_tick numeric maximum wait timeout in seconds
+#' @param host character bind address for civetwebR, or NULL
+#' @param tls_cert character PEM path for civetwebR, or NULL
 #' @return invisible(NULL); runs until interrupt
 #' @keywords internal
-run_ws_server <- function(port, handlers, max_tick = 1) {
+run_ws_server <- function(port, handlers, max_tick = 1, host = NULL,
+                          tls_cert = NULL) {
     reg_reset()
-    srv <- serverSocket(as.integer(port))
-    REG$srv <- srv
+    REG$transport <- if (is.null(host) && is.null(tls_cert)) {
+        transport_base()
+    } else {
+        transport_civetweb()
+    }
+    REG$bound <- REG$transport$listen(port, host, tls_cert)
     on.exit(loop_shutdown(handlers), add = TRUE)
 
     tryCatch(
         repeat {
-            loop_tick(srv, handlers, max_tick)
+            loop_tick(handlers, max_tick)
         },
              interrupt = function(e) message("\nglinty server stopped.")
     )
@@ -38,12 +48,11 @@ run_ws_server <- function(port, handlers, max_tick = 1) {
 
 #' One iteration of the event loop
 #'
-#' @param srv the server socket
 #' @param handlers the handler list
-#' @param max_tick numeric maximum select timeout in seconds
+#' @param max_tick numeric maximum wait timeout in seconds
 #' @return invisible(NULL)
 #' @keywords internal
-loop_tick <- function(srv, handlers, max_tick) {
+loop_tick <- function(handlers, max_tick) {
     # Deferred closes from failed writes, then timers, then the
     # reactive flush, then push everything queued out the door.
     for (key in REG$dead) {
@@ -67,50 +76,7 @@ loop_tick <- function(srv, handlers, max_tick) {
         tmo <- 0
     }
 
-    conn_keys <- names(REG$conns)
-    socks <- c(list(srv),
-               unname(lapply(REG$conns[conn_keys], function(e) e$con)))
-    ready <- socketSelect(socks, write = FALSE, timeout = tmo)
-
-    if (isTRUE(ready[1L])) {
-        con <- tryCatch(
-                        socketAccept(srv, blocking = FALSE, open = "r+b", timeout = 5),
-                        error = function(e) NULL
-        )
-        if (!is.null(con)) {
-            conn_add(con, "http_pending")
-        }
-    }
-
-    readable <- conn_keys[ready[-1L]]
-    for (key in readable) {
-        entry <- REG$conns[[key]]
-        if (is.null(entry)) {
-            next
-        }
-        tryCatch({
-            data <- drain_socket(entry$con)
-            if (length(data) == 0L) {
-                # readable + zero bytes == EOF; close now or the
-                # connection stays "readable" forever and spins us
-                conn_close(key, notify = TRUE, handlers = handlers)
-            } else {
-                entry$buf <- c(entry$buf, data)
-                if (length(entry$buf) > MAX_CONN_BUF) {
-                    conn_close(key, notify = TRUE, handlers = handlers,
-                               code = 1009L)
-                } else if (identical(entry$state, "http_pending")) {
-                    handle_http_bytes(key, handlers)
-                } else if (identical(entry$state, "http_body")) {
-                    handle_http_body(key, handlers)
-                } else {
-                    handle_ws_bytes(key, handlers)
-                }
-            }
-        }, error = function(e) {
-            conn_close(key, notify = TRUE, handlers = handlers)
-        })
-    }
+    REG$transport$wait(handlers, tmo)
     invisible(NULL)
 }
 
@@ -147,10 +113,7 @@ handle_http_bytes <- function(key, handlers) {
     pos <- find_header_end(entry$buf)
     if (pos < 0L) {
         if (length(entry$buf) > MAX_HTTP_HEAD) {
-            tryCatch(suppressWarnings(writeBin(
-                        http_response_raw(400L, "text/plain", "Bad Request"),
-                        entry$con
-                    )), error = function(e) NULL)
+            base_write(entry, http_response_raw(400L, "text/plain", "Bad Request"))
             conn_close(key, notify = FALSE, handlers = handlers)
         }
         return(invisible(NULL))
@@ -169,10 +132,7 @@ handle_http_bytes <- function(key, handlers) {
     }
     req <- parse_http_head(head_raw)
     if (is.null(req)) {
-        tryCatch(suppressWarnings(writeBin(
-                    http_response_raw(400L, "text/plain", "Bad Request"),
-                    entry$con
-                )), error = function(e) NULL)
+        base_write(entry, http_response_raw(400L, "text/plain", "Bad Request"))
         conn_close(key, notify = FALSE, handlers = handlers)
         return(invisible(NULL))
     }
@@ -180,10 +140,7 @@ handle_http_bytes <- function(key, handlers) {
     if (identical(req$method, "GET") && identical(req$path, "/ws") &&
         ws_is_upgrade(req)) {
         hs <- ws_handshake_result(req, .globals$origins)
-        write_ok <- tryCatch({
-            suppressWarnings(writeBin(hs$response, entry$con))
-            TRUE
-        }, error = function(e) FALSE)
+        write_ok <- base_write(entry, hs$response)
         if (hs$ok && write_ok) {
             entry$state <- "ws_open"
             sid <- new_session_id()
@@ -210,11 +167,8 @@ handle_http_bytes <- function(key, handlers) {
     if (!identical(req$method, "GET") && length(clen) == 1L &&
         !is.na(clen) && clen > 0L) {
         if (clen > getOption("glinty.max_upload", 10485760L)) {
-            tryCatch(suppressWarnings(writeBin(
-                        http_response_raw(413L, "text/plain",
-                            "Payload Too Large"),
-                        entry$con
-                    )), error = function(e) NULL)
+            base_write(entry, http_response_raw(413L, "text/plain",
+                                                "Payload Too Large"))
             conn_close(key, notify = FALSE, handlers = handlers)
             return(invisible(NULL))
         }
@@ -268,8 +222,7 @@ respond_and_close <- function(key, req, handlers) {
     if (is.null(resp)) {
         resp <- http_response_raw(404L, "text/plain", "Not found")
     }
-    tryCatch(suppressWarnings(writeBin(resp, entry$con)),
-             error = function(e) NULL)
+    base_write(entry, resp)
     conn_close(key, notify = FALSE, handlers = handlers)
     invisible(NULL)
 }
@@ -348,11 +301,9 @@ handle_ws_bytes <- function(key, handlers) {
             conn_close(key, notify = TRUE, handlers = handlers)
             return(invisible(NULL))
         } else if (op == WS_PING) {
-            tryCatch(
-                     suppressWarnings(writeBin(ws_pong_frame(frame$payload),
-                        entry$con)),
-                     error = function(e) mark_dead(key)
-            )
+            if (!base_write(entry, ws_pong_frame(frame$payload))) {
+                mark_dead(key)
+            }
         } else if (op == WS_PONG) {
             # ignore
         } else {
@@ -415,7 +366,7 @@ drain_all_sessions <- function() {
 #' Shut the server down
 #'
 #' Closes every connection (1001 going away, with session teardown)
-#' and the listening socket.
+#' and the listener.
 #'
 #' @param handlers the handler list
 #' @return invisible(NULL)
@@ -424,9 +375,8 @@ loop_shutdown <- function(handlers) {
     for (key in names(REG$conns)) {
         conn_close(key, notify = TRUE, handlers = handlers, code = 1001L)
     }
-    if (!is.null(REG$srv)) {
-        tryCatch(close(REG$srv), error = function(e) NULL)
-        REG$srv <- NULL
+    if (!is.null(REG$transport)) {
+        REG$transport$close()
     }
     invisible(NULL)
 }

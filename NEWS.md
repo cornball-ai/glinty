@@ -1,5 +1,23 @@
 # glinty (development version)
 
+**A transport seam, and civetwebR behind it: `run_app(host =)` and
+`run_app(tls_cert =)`.** Base R's `serverSocket()` takes no bind
+address, which is why the startup message has always said "listening
+on all interfaces". The event loop now drives one of two transports
+through a six-operation interface (listen, wait, ws_send, ws_close,
+close_conn, close; R/transport.R). The default is unchanged: base R
+sockets, every interface, HTTP and WebSocket spoken in R. Giving
+`host = "127.0.0.1"` (or a tailnet address) or a `tls_cert =` PEM
+selects civetwebR (in Suggests, >= 0.0.1.5): CivetWeb binds the
+address, terminates TLS, parses HTTP and frames the WebSocket, and
+the app sees the same sessions through the same handlers. Policy
+stays in R on both: the Origin check on an upgrade runs on
+civetwebR's `ws_connect` event before the handshake, the hello gate
+is untouched, and data frames pass the same rules (text only,
+fragments reassembled, the message cap). The rest of the package does
+not know which transport is under it; `send_to_session()` and
+`conn_close()` go through the seam.
+
 **data_table polish: align "right", and chrome that answers the
 value** (#93). `render_table(align = c(size = "right"))` right-aligns
 a pre-formatted string column -- "1.2 GiB", "3m 12s" -- while it

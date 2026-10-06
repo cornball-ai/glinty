@@ -13,6 +13,8 @@ run_app(
   max_upload = 10485760L,
   check_secrets = TRUE,
   api = NULL,
+  host = NULL,
+  tls_cert = NULL,
   quiet = FALSE
 )
 }
@@ -102,16 +104,30 @@ answer, answer 500 with a generic
 body; the condition message goes to the server log, not the
 wire.}
 
+\item{host}{character address to bind, such as "127.0.0.1" or a
+tailnet address, or NULL (the default) to listen on every
+interface. Base R's serverSocket() takes no bind address, so a
+host selects the civetwebR transport (package civetwebR, in
+Suggests): CivetWeb binds the address and speaks the protocols,
+and the app sees the same sessions either way.}
+
+\item{tls_cert}{character path of a PEM file holding the
+certificate (and chain) followed by its private key, or NULL for
+plain http. A certificate also selects the civetwebR transport;
+the port then speaks https and wss.}
+
 \item{quiet}{logical suppress the startup message}
 }
 \value{
 invisible(NULL); runs until interrupt
 }
 \description{
-Serves the app over HTTP with a WebSocket per browser tab, all on
-base R sockets in a single-threaded event loop. Blocks until
-interrupted (Ctrl-C). Note base R's serverSocket() listens on all
-interfaces; treat the port as reachable from the local network.
+Serves the app over HTTP with a WebSocket per browser tab, in a
+single-threaded event loop. Blocks until interrupted (Ctrl-C). By
+default the transport is base R sockets, whose serverSocket()
+listens on all interfaces; treat the port as reachable from the
+local network, or give `host` to bind one address through
+civetwebR.
 }
 \details{
 Dropped connections detach their session rather than ending it:
@@ -126,5 +142,6 @@ for the localhost/LAN tool scope, but treat it accordingly.
 \examples{
 \dontrun{
 run_app(app_obj, port = 8080)
+run_app(app_obj, port = 8080, host = "127.0.0.1")
 }
 }

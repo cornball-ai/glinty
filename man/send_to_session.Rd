@@ -14,11 +14,10 @@ send_to_session(session_id, text)
 logical success, invisibly
 }
 \description{
-Immediate framed write; the kernel socket buffer is the queue.
-There is no concurrent writer in a single-threaded process, and
-partial-write stalls are bounded by the connection timeout set at
-accept. A failed write (surfaced by R as a warning) marks the
-connection dead; the actual close happens at the top of the next
-loop iteration.
+Immediate write through the transport; the kernel socket buffer is
+the queue. There is no concurrent writer in a single-threaded
+process, and partial-write stalls are bounded by the connection
+timeout. A failed write marks the connection dead; the actual close
+happens at the top of the next loop iteration.
 }
 \keyword{internal}

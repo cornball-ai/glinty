@@ -3,14 +3,12 @@
 \alias{loop_tick}
 \title{One iteration of the event loop}
 \usage{
-loop_tick(srv, handlers, max_tick)
+loop_tick(handlers, max_tick)
 }
 \arguments{
-\item{srv}{the server socket}
-
 \item{handlers}{the handler list}
 
-\item{max_tick}{numeric maximum select timeout in seconds}
+\item{max_tick}{numeric maximum wait timeout in seconds}
 }
 \value{
 invisible(NULL)
