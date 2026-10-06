@@ -542,7 +542,7 @@ same as safe to add.
 | `plot_output` | `id` | `width: int?`, `height: int?`, `alt` |
 | `audio_output` | `id` | `controls: bool` (true), `autoplay: bool` (false) |
 | `video_output` | `id` | `controls: bool` (true), `autoplay: bool` (false), `muted: bool` (false), `loop: bool` (false), `report: bool` (false) |
-| `tabset` | `id`, `panels: [{title, children}]` | `selected` |
+| `tabset` | `id`, `panels: [{title, children}]` | `selected` — the server renders an output inside a panel only while that panel is the tabset's input value, and once more when it becomes so; a client that reports the open tab sees every panel current when it opens it |
 | `conditional_panel` | `condition`, `children: []` | — |
 | `feed` | `id` | `keep: int` (200, min 1), `grow: int`, `width: int` — **no `children`**; items arrive only by `feed` frames |
 

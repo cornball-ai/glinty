@@ -384,3 +384,56 @@ expect_equal(msg$session, a_sid)
 close(con)
 
 auth$kill()
+
+# --- 11. outputs behind a hidden tab wait, over a real socket ---
+tabs_port <- free_port()
+if (is.null(tabs_port)) exit_file("no free port for the tabs server")
+tabs <- spawn(c(
+    "library(glinty)",
+    'a <- app(ui = page(tabset(tab_panel("A", text_output("a")),',
+    '                          tab_panel("B", text_output("b")),',
+    '                          id = "tabs"), title = "tabs"),',
+    "         server = function(input, output, session) {",
+    "             n <- 0L",
+    '             output$a <- render_text(function() "A")',
+    "             output$b <- render_text(function() {",
+    "                 n <<- n + 1L",
+    '                 paste0("B", n)',
+    "             })",
+    "         })",
+    sprintf('run_app(a, port = %dL, host = "127.0.0.1", quiet = TRUE)',
+            tabs_port)
+), "tabs")
+on.exit(tabs$kill(), add = TRUE)
+if (!wait_up(tabs_port)) {
+    exit_file(paste("tabs server never came up:", tabs$log()))
+}
+con <- ws_handshake(tabs_port)
+writeBin(text_frame('{"type":"hello","protocol":4,"client":"e2e/1"}',
+    mask = TRUE), con)
+expect_equal(next_json()$type, "welcome")
+# the open panel's output arrives; the hidden one's does not
+msg <- next_json()
+expect_equal(msg$id, "a")
+expect_equal(msg$value, "A")
+expect_error(next_json(timeout = 1), "timeout")
+# opening B renders b, once
+writeBin(text_frame('{"type":"input","id":"tabs","value":"B"}',
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$id, "b")
+expect_equal(msg$value, "B1")
+# back to A: a renders again (it may have missed something), b does not
+writeBin(text_frame('{"type":"input","id":"tabs","value":"A"}',
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$id, "a")
+expect_error(next_json(timeout = 1), "timeout")
+# and B again is b's second render, not a replay of the first
+writeBin(text_frame('{"type":"input","id":"tabs","value":"B"}',
+    mask = TRUE), con)
+msg <- next_json()
+expect_equal(msg$id, "b")
+expect_equal(msg$value, "B2")
+close(con)
+tabs$kill()
