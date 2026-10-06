@@ -9,11 +9,8 @@ transport_civetweb()
 a transport list
 }
 \description{
-CivetWeb owns the sockets: it binds the given host, terminates TLS,
-parses HTTP, performs the WebSocket handshake and frames. R sees
-events from civetwebR::next_event() and answers them. What stays in
-R is policy: the Origin check on an upgrade, the hello gate, and the
-message-level rules the base transport applies (text only,
-reassembly of fragments, the size cap).
+`host = NULL` binds every interface, which is what base R's
+serverSocket() always did and what the startup message warns
+about; an address binds that one.
 }
 \keyword{internal}

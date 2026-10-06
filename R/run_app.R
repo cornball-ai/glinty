@@ -38,11 +38,11 @@ app <- function(ui, server, theme = NULL) {
 #' Run a glinty application
 #'
 #' Serves the app over HTTP with a WebSocket per browser tab, in a
-#' single-threaded event loop. Blocks until interrupted (Ctrl-C). By
-#' default the transport is base R sockets, whose serverSocket()
-#' listens on all interfaces; treat the port as reachable from the
-#' local network, or give `host` to bind one address through
-#' civetwebR.
+#' single-threaded event loop. Blocks until interrupted (Ctrl-C). The
+#' server is civetwebR: it binds `host`, every interface by default
+#' (treat the port as reachable from the local network unless you
+#' bind one address), terminates TLS when `tls_cert` is given, and
+#' speaks HTTP and WebSocket; the app's event loop stays one thread.
 #'
 #' Dropped connections detach their session rather than ending it:
 #' observers and timers stay alive for
@@ -130,14 +130,10 @@ app <- function(ui, server, theme = NULL) {
 #'   wire.
 #' @param host character address to bind, such as "127.0.0.1" or a
 #'   tailnet address, or NULL (the default) to listen on every
-#'   interface. Base R's serverSocket() takes no bind address, so a
-#'   host selects the civetwebR transport (package civetwebR, in
-#'   Suggests): CivetWeb binds the address and speaks the protocols,
-#'   and the app sees the same sessions either way.
+#'   interface.
 #' @param tls_cert character path of a PEM file holding the
 #'   certificate (and chain) followed by its private key, or NULL for
-#'   plain http. A certificate also selects the civetwebR transport;
-#'   the port then speaks https and wss.
+#'   plain http. With a certificate the port speaks https and wss.
 #' @param quiet logical suppress the startup message
 #' @return invisible(NULL); runs until interrupt
 #' @examples
@@ -162,12 +158,6 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
             length(tls_cert) != 1L || is.na(tls_cert) ||
             !file.exists(tls_cert))) {
         stop("tls_cert must be the path of an existing PEM file, or NULL",
-             call. = FALSE)
-    }
-    if ((!is.null(host) || !is.null(tls_cert)) &&
-        !requireNamespace("civetwebR", quietly = TRUE)) {
-        stop("host = and tls_cert = need package civetwebR, which binds ",
-             "an address and terminates TLS; base R sockets do neither",
              call. = FALSE)
     }
     if (!is.null(auth) && !is.function(auth)) {
@@ -341,18 +331,14 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
         scheme <- if (is.null(tls_cert)) "http" else "https"
         message("glinty app running at ", scheme, "://",
                 if (is.null(host)) "localhost" else host, ":", port)
-        if (is.null(host) && is.null(tls_cert)) {
-            # Named in the same breath as the URL, not buried in
-            # ?run_app: base R's serverSocket() takes no bind address,
-            # so the one component that can bind selectively is the
-            # firewall or namespace around this port.
-            message("listening on all interfaces (base R sockets cannot ",
-                    "bind selectively); gate sessions with auth = and ",
-                    "scope the port with a firewall or namespace, or ",
-                    "give host = to bind one address through civetwebR")
+        # The exposure, named in the same breath as the URL rather
+        # than buried in ?run_app.
+        if (is.null(host)) {
+            message("listening on all interfaces; gate sessions with ",
+                    "auth = and give host = to bind one address",
+                    if (is.null(tls_cert)) "" else " (TLS on)")
         } else {
-            message("transport: civetwebR, bound to ",
-                    if (is.null(host)) "every interface" else host,
+            message("bound to ", host,
                     if (is.null(tls_cert)) "" else ", TLS on")
         }
         if (is.null(auth)) {

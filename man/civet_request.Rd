@@ -12,7 +12,7 @@ civet_request(ev)
 list(method, path, query, headers[, body])
 }
 \description{
-The shape parse_http_head() produces: method, path, query and
-headers with lower-cased names, plus the raw body when there is one.
+The shape the router reads: method, path, query and headers with
+lower-cased names, plus the raw body when there is one.
 }
 \keyword{internal}

@@ -3,13 +3,12 @@
 \alias{conn_add}
 \title{Register a newly accepted connection}
 \usage{
-conn_add(con, state = "http_pending", key = NULL)
+conn_add(con, state = "ws_pending", key = NULL)
 }
 \arguments{
-\item{con}{a socket connection (non-blocking, binary) on the base
-transport, or a connection id on civetwebR}
+\item{con}{the transport's connection id}
 
-\item{state}{character initial state ("http_pending")}
+\item{state}{character initial state ("ws_pending")}
 
 \item{key}{character key to register under, or NULL to number it}
 }

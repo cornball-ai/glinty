@@ -1,10 +1,7 @@
-# The single-threaded select loop. Every accepted connection is
-# non-blocking with a per-connection byte buffer, so a slow or
-# malicious client parks bytes in its own buffer and can never stall
-# other sessions.
-
-MAX_HTTP_HEAD <- 16384L
-MAX_CONN_BUF <- 16777216L
+# The single-threaded event loop. CivetWeb accepts, reads and frames
+# on its own threads and queues events; each tick here fires due
+# timers, flushes reactions, drains every session's outgoing queue,
+# then sleeps in the transport's wait until the next events arrive.
 
 #' Run the HTTP + WebSocket server loop
 #'
@@ -16,24 +13,17 @@ MAX_CONN_BUF <- 16777216L
 #' queue before sleeping in the transport's wait (timeout capped at
 #' max_tick seconds so Ctrl-C stays responsive).
 #'
-#' The transport is base R sockets unless a host or a certificate is
-#' given, which selects civetwebR (see transport_civetweb()).
-#'
 #' @param port integer TCP port
 #' @param handlers list of on_request, on_open, on_message, on_close
 #' @param max_tick numeric maximum wait timeout in seconds
-#' @param host character bind address for civetwebR, or NULL
-#' @param tls_cert character PEM path for civetwebR, or NULL
+#' @param host character bind address, or NULL for every interface
+#' @param tls_cert character PEM path, or NULL for plain http
 #' @return invisible(NULL); runs until interrupt
 #' @keywords internal
 run_ws_server <- function(port, handlers, max_tick = 1, host = NULL,
                           tls_cert = NULL) {
     reg_reset()
-    REG$transport <- if (is.null(host) && is.null(tls_cert)) {
-        transport_base()
-    } else {
-        transport_civetweb()
-    }
+    REG$transport <- transport_civetweb()
     REG$bound <- REG$transport$listen(port, host, tls_cert)
     on.exit(loop_shutdown(handlers), add = TRUE)
 
@@ -78,239 +68,6 @@ loop_tick <- function(handlers, max_tick) {
 
     REG$transport$wait(handlers, tmo)
     invisible(NULL)
-}
-
-#' Read everything currently buffered on a non-blocking socket
-#'
-#' @param con a socket connection
-#' @return raw vector (length 0 means EOF if select said readable)
-#' @keywords internal
-drain_socket <- function(con) {
-    out <- raw(0L)
-    repeat {
-        chunk <- readBin(con, "raw", 65536L)
-        out <- c(out, chunk)
-        if (length(chunk) < 65536L) {
-            break
-        }
-    }
-    out
-}
-
-#' Advance an http_pending connection
-#'
-#' Waits for a complete head, then routes: WebSocket upgrades promote
-#' the connection and open a session; anything else gets a plain HTTP
-#' response and Connection: close. GET only in v0.1 -- the WebSocket
-#' carries the app after page load.
-#'
-#' @param key character connection key
-#' @param handlers the handler list
-#' @return invisible(NULL)
-#' @keywords internal
-handle_http_bytes <- function(key, handlers) {
-    entry <- REG$conns[[key]]
-    pos <- find_header_end(entry$buf)
-    if (pos < 0L) {
-        if (length(entry$buf) > MAX_HTTP_HEAD) {
-            base_write(entry, http_response_raw(400L, "text/plain", "Bad Request"))
-            conn_close(key, notify = FALSE, handlers = handlers)
-        }
-        return(invisible(NULL))
-    }
-
-    if (pos > 1L) {
-        head_raw <- entry$buf[seq_len(pos - 1L)]
-    } else {
-        head_raw <- raw(0L)
-    }
-    # keep any bytes past the head: a request body may ride along
-    entry$buf <- if (length(entry$buf) > pos + 3L) {
-        entry$buf[(pos + 4L):length(entry$buf)]
-    } else {
-        raw(0L)
-    }
-    req <- parse_http_head(head_raw)
-    if (is.null(req)) {
-        base_write(entry, http_response_raw(400L, "text/plain", "Bad Request"))
-        conn_close(key, notify = FALSE, handlers = handlers)
-        return(invisible(NULL))
-    }
-
-    if (identical(req$method, "GET") && identical(req$path, "/ws") &&
-        ws_is_upgrade(req)) {
-        hs <- ws_handshake_result(req, .globals$origins)
-        write_ok <- base_write(entry, hs$response)
-        if (hs$ok && write_ok) {
-            entry$state <- "ws_open"
-            sid <- new_session_id()
-            entry$session_id <- sid
-            # The parsed head survives on the entry (headers included)
-            # so the hello gate can hand it to a verifier: an HttpOnly
-            # session cookie rides the upgrade request, never the
-            # hello frame. A GET upgrade has no body, so this is the
-            # whole head and nothing more.
-            entry$upgrade_req <- req
-            REG$sessions[[sid]] <- key
-            if (!is.null(handlers$on_open)) {
-                handlers$on_open(sid)
-            }
-        } else {
-            conn_close(key, notify = FALSE, handlers = handlers)
-        }
-        return(invisible(NULL))
-    }
-
-    # Requests with a body (uploads): buffer until Content-Length
-    # bytes have arrived, then route with the raw body attached.
-    clen <- suppressWarnings(as.integer(get_header(req, "content-length")))
-    if (!identical(req$method, "GET") && length(clen) == 1L &&
-        !is.na(clen) && clen > 0L) {
-        if (clen > getOption("glinty.max_upload", 10485760L)) {
-            base_write(entry, http_response_raw(413L, "text/plain",
-                                                "Payload Too Large"))
-            conn_close(key, notify = FALSE, handlers = handlers)
-            return(invisible(NULL))
-        }
-        entry$state <- "http_body"
-        entry$pending_req <- req
-        entry$body_needed <- clen
-        handle_http_body(key, handlers)
-        return(invisible(NULL))
-    }
-
-    respond_and_close(key, req, handlers)
-}
-
-#' Advance an http_body connection
-#'
-#' Waits until the buffered bytes cover the declared Content-Length,
-#' then routes the request with its raw body (never coerced to
-#' character -- uploads are binary).
-#'
-#' @param key character connection key
-#' @param handlers the handler list
-#' @return invisible(NULL)
-#' @keywords internal
-handle_http_body <- function(key, handlers) {
-    entry <- REG$conns[[key]]
-    if (length(entry$buf) < entry$body_needed) {
-        return(invisible(NULL))
-    }
-    req <- entry$pending_req
-    req$body <- entry$buf[seq_len(entry$body_needed)]
-    entry$buf <- raw(0L)
-    entry$pending_req <- NULL
-    respond_and_close(key, req, handlers)
-}
-
-#' Route a complete request and close the connection
-#'
-#' @param key character connection key
-#' @param req parsed request (with body when present)
-#' @param handlers the handler list
-#' @return invisible(NULL)
-#' @keywords internal
-respond_and_close <- function(key, req, handlers) {
-    entry <- REG$conns[[key]]
-    resp <- NULL
-    if (!is.null(handlers$on_request)) {
-        resp <- tryCatch(handlers$on_request(req), error = function(e) {
-            http_response_raw(500L, "text/plain", conditionMessage(e))
-        })
-    }
-    if (is.null(resp)) {
-        resp <- http_response_raw(404L, "text/plain", "Not found")
-    }
-    base_write(entry, resp)
-    conn_close(key, notify = FALSE, handlers = handlers)
-    invisible(NULL)
-}
-
-#' Advance a ws_open connection
-#'
-#' Decodes and dispatches EVERY complete frame in the buffer (a
-#' single readable event can deliver several), leaving partial bytes
-#' for the next wake. Client frames must be masked. Fragmented text
-#' is reassembled; control frames may interleave.
-#'
-#' @param key character connection key
-#' @param handlers the handler list
-#' @return invisible(NULL)
-#' @keywords internal
-handle_ws_bytes <- function(key, handlers) {
-    max_message <- getOption("glinty.max_message", 8388608L)
-    repeat {
-        entry <- REG$conns[[key]]
-        if (is.null(entry)) {
-            return(invisible(NULL))
-        }
-        frame <- ws_decode_frame(entry$buf)
-        if (is.null(frame)) {
-            return(invisible(NULL))
-        }
-        if (isTRUE(frame$error)) {
-            ws_fail(key, frame$code, handlers)
-            return(invisible(NULL))
-        }
-        entry$buf <- frame$rest
-
-        if (!frame$masked) {
-            ws_fail(key, 1002L, handlers)
-            return(invisible(NULL))
-        }
-
-        op <- frame$opcode
-        if (op == WS_TEXT || op == WS_BINARY) {
-            if (op == WS_BINARY) {
-                ws_fail(key, 1003L, handlers)
-                return(invisible(NULL))
-            }
-            if (!is.null(entry$frag_opcode)) {
-                # new data frame while a fragmented message is open
-                ws_fail(key, 1002L, handlers)
-                return(invisible(NULL))
-            }
-            if (frame$fin) {
-                if (!ws_deliver(key, frame$payload, handlers)) {
-                    return(invisible(NULL))
-                }
-            } else {
-                entry$frag_opcode <- op
-                entry$frag_buf <- frame$payload
-            }
-        } else if (op == WS_CONT) {
-            if (is.null(entry$frag_opcode)) {
-                ws_fail(key, 1002L, handlers)
-                return(invisible(NULL))
-            }
-            entry$frag_buf <- c(entry$frag_buf, frame$payload)
-            if (length(entry$frag_buf) > max_message) {
-                ws_fail(key, 1009L, handlers)
-                return(invisible(NULL))
-            }
-            if (frame$fin) {
-                payload <- entry$frag_buf
-                entry$frag_opcode <- NULL
-                entry$frag_buf <- raw(0L)
-                if (!ws_deliver(key, payload, handlers)) {
-                    return(invisible(NULL))
-                }
-            }
-        } else if (op == WS_CLOSE) {
-            conn_close(key, notify = TRUE, handlers = handlers)
-            return(invisible(NULL))
-        } else if (op == WS_PING) {
-            if (!base_write(entry, ws_pong_frame(frame$payload))) {
-                mark_dead(key)
-            }
-        } else if (op == WS_PONG) {
-            # ignore
-        } else {
-            ws_fail(key, 1002L, handlers)
-            return(invisible(NULL))
-        }
-    }
 }
 
 #' Deliver a complete text payload to the app layer

@@ -106,15 +106,11 @@ wire.}
 
 \item{host}{character address to bind, such as "127.0.0.1" or a
 tailnet address, or NULL (the default) to listen on every
-interface. Base R's serverSocket() takes no bind address, so a
-host selects the civetwebR transport (package civetwebR, in
-Suggests): CivetWeb binds the address and speaks the protocols,
-and the app sees the same sessions either way.}
+interface.}
 
 \item{tls_cert}{character path of a PEM file holding the
 certificate (and chain) followed by its private key, or NULL for
-plain http. A certificate also selects the civetwebR transport;
-the port then speaks https and wss.}
+plain http. With a certificate the port speaks https and wss.}
 
 \item{quiet}{logical suppress the startup message}
 }
@@ -123,11 +119,11 @@ invisible(NULL); runs until interrupt
 }
 \description{
 Serves the app over HTTP with a WebSocket per browser tab, in a
-single-threaded event loop. Blocks until interrupted (Ctrl-C). By
-default the transport is base R sockets, whose serverSocket()
-listens on all interfaces; treat the port as reachable from the
-local network, or give `host` to bind one address through
-civetwebR.
+single-threaded event loop. Blocks until interrupted (Ctrl-C). The
+server is civetwebR: it binds `host`, every interface by default
+(treat the port as reachable from the local network unless you
+bind one address), terminates TLS when `tls_cert` is given, and
+speaks HTTP and WebSocket; the app's event loop stays one thread.
 }
 \details{
 Dropped connections detach their session rather than ending it:

@@ -1,6 +1,6 @@
-# Buffer-based HTTP parsing and response writing. The event loop's
-# connections are non-blocking, so nothing here reads from a socket;
-# parsing operates on the bytes a connection has already buffered.
+# HTTP responses and static files. CivetWeb parses requests; the app
+# layer builds complete responses here and the transport splits them
+# (raw_response_parts()) for CivetWeb to write.
 
 #' Find the end of an HTTP head in a buffer
 #'
@@ -22,52 +22,6 @@ find_header_end <- function(buf) {
         }
     }
     -1L
-}
-
-#' Parse an HTTP request head
-#'
-#' @param head_raw raw bytes of the request line and headers (without
-#'   the terminating CRLFCRLF)
-#' @return list(method, path, query, headers) with lower-cased header
-#'   names, or NULL on a malformed head
-#' @keywords internal
-parse_http_head <- function(head_raw) {
-    txt <- tryCatch(rawToChar(head_raw), error = function(e) NULL)
-    if (is.null(txt)) {
-        return(NULL)
-    }
-    lines <- strsplit(txt, "\r\n", fixed = TRUE)[[1L]]
-    if (length(lines) < 1L) {
-        return(NULL)
-    }
-
-    parts <- strsplit(lines[1L], " ", fixed = TRUE)[[1L]]
-    if (length(parts) < 2L) {
-        return(NULL)
-    }
-    method <- parts[1L]
-    target <- parts[2L]
-
-    path <- target
-    query <- ""
-    qpos <- regexpr("?", target, fixed = TRUE)
-    if (qpos > 0L) {
-        path <- substr(target, 1L, qpos - 1L)
-        query <- substr(target, qpos + 1L, nchar(target))
-    }
-
-    headers <- character(0L)
-    if (length(lines) > 1L) {
-        hl <- lines[-1L]
-        hl <- hl[nzchar(hl)]
-        has_colon <- grepl(":", hl, fixed = TRUE)
-        hl <- hl[has_colon]
-        keys <- tolower(sub(":.*$", "", hl))
-        vals <- trimws(sub("^[^:]*:", "", hl))
-        names(vals) <- keys
-        headers <- vals
-    }
-    list(method = method, path = path, query = query, headers = headers)
 }
 
 #' Look up a request header

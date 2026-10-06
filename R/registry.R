@@ -1,7 +1,7 @@
-# Transport-side connection registry. Maps live socket connections to
-# their state and sessions to connections. The session OBJECTS live in
-# the reactive core (.globals$sessions); the transport only routes ids
-# to sockets.
+# Transport-side connection registry. Maps live connections to their
+# state and sessions to connections. The session OBJECTS live in the
+# reactive core (.globals$sessions); the transport only routes ids to
+# connections.
 
 REG <- new.env(parent = emptyenv())
 
@@ -22,13 +22,12 @@ reg_reset <- function() {
 
 #' Register a newly accepted connection
 #'
-#' @param con a socket connection (non-blocking, binary) on the base
-#'   transport, or a connection id on civetwebR
-#' @param state character initial state ("http_pending")
+#' @param con the transport's connection id
+#' @param state character initial state ("ws_pending")
 #' @param key character key to register under, or NULL to number it
 #' @return character connection key
 #' @keywords internal
-conn_add <- function(con, state = "http_pending", key = NULL) {
+conn_add <- function(con, state = "ws_pending", key = NULL) {
     if (is.null(key)) {
         REG$conn_counter <- REG$conn_counter + 1L
         key <- sprintf("c%d", REG$conn_counter)
@@ -36,7 +35,6 @@ conn_add <- function(con, state = "http_pending", key = NULL) {
     entry <- new.env(parent = emptyenv())
     entry$con <- con
     entry$state <- state
-    entry$buf <- raw(0L)
     entry$session_id <- NULL
     entry$frag_opcode <- NULL
     entry$frag_buf <- raw(0L)
@@ -49,11 +47,10 @@ conn_add <- function(con, state = "http_pending", key = NULL) {
 #' The HTTP request that upgraded a session's connection
 #'
 #' The parsed head only (method, path, query, headers with lower-cased
-#' names) -- small and bounded by MAX_HTTP_HEAD, never the raw buffer.
-#' It lives as long as the connection, which is exactly the lifetime
-#' the hello gate needs it for: a verifier that reads cookie-carried
-#' credentials (see authenticate_hello()) runs on the first frame of
-#' the same connection.
+#' names), never a body. It lives as long as the connection, which is
+#' exactly the lifetime the hello gate needs it for: a verifier that
+#' reads cookie-carried credentials (see authenticate_hello()) runs on
+#' the first frame of the same connection.
 #'
 #' @param sid character session id
 #' @return the parsed upgrade request, or NULL when the session has
@@ -74,9 +71,9 @@ upgrade_request_for <- function(sid) {
 #' Close a connection and clean up
 #'
 #' Idempotent. Sends a best-effort close frame on open WebSockets,
-#' closes the socket, removes registry entries, and (when notify is
-#' TRUE and a session was attached) fires the on_close handler so the
-#' reactive core tears the session down.
+#' releases the connection, removes registry entries, and (when
+#' notify is TRUE and a session was attached) fires the on_close
+#' handler so the reactive core tears the session down.
 #'
 #' @param key character connection key
 #' @param notify logical whether to fire on_close
@@ -150,13 +147,12 @@ transport_rebind <- function(from_sid, to_sid) {
 
 #' Generate a session id
 #'
-#' 32 hex characters from digest over pid, wall clock, a monotonic
-#' counter, and a tempfile name. Deliberately NOT the R RNG: an
-#' earlier save/restore-.Random.seed approach replayed the same draw
-#' on every call after the first, so consecutive ids collided and
-#' sessions swallowed each other's connections. The counter
-#' guarantees in-process uniqueness. Within the resume grace window
-#' the id acts as a weak credential; see ?run_app for scope.
+#' 32 hex characters from the CSPRNG a ticket uses. Deliberately NOT
+#' the R RNG: an earlier save/restore-.Random.seed approach replayed
+#' the same draw on every call after the first, so consecutive ids
+#' collided and sessions swallowed each other's connections. Within
+#' the resume grace window the id acts as a weak credential; see
+#' ?run_app for scope.
 #'
 #' @return character session id
 #' @keywords internal

@@ -19,8 +19,8 @@ invisible(NULL)
 }
 \description{
 Idempotent. Sends a best-effort close frame on open WebSockets,
-closes the socket, removes registry entries, and (when notify is
-TRUE and a session was attached) fires the on_close handler so the
-reactive core tears the session down.
+releases the connection, removes registry entries, and (when
+notify is TRUE and a session was attached) fires the on_close
+handler so the reactive core tears the session down.
 }
 \keyword{internal}

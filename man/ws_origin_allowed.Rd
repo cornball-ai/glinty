@@ -17,12 +17,11 @@ containing "*" to disable the check, or NULL for same-host only}
 logical
 }
 \description{
-The policy behind the guard above. Same-host means the Origin's
-host equals the request's Host and the ports agree -- explicit
-ports numerically, an implied origin port (80/443 by scheme)
-against a portless Host, which is a default-port deployment. The
-comparison is Origin against Host, never against a hardcoded
-localhost: an app reached over a tailnet has a tailnet Host, and
-its own pages must keep connecting.
+Same-host means the Origin's host equals the request's Host and
+the ports agree -- explicit ports numerically, an implied origin
+port (80/443 by scheme) against a portless Host, which is a
+default-port deployment. The comparison is Origin against Host,
+never against a hardcoded localhost: an app reached over a tailnet
+has a tailnet Host, and its own pages must keep connecting.
 }
 \keyword{internal}

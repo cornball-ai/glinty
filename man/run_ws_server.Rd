@@ -12,9 +12,9 @@ run_ws_server(port, handlers, max_tick = 1, host = NULL, tls_cert = NULL)
 
 \item{max_tick}{numeric maximum wait timeout in seconds}
 
-\item{host}{character bind address for civetwebR, or NULL}
+\item{host}{character bind address, or NULL for every interface}
 
-\item{tls_cert}{character PEM path for civetwebR, or NULL}
+\item{tls_cert}{character PEM path, or NULL for plain http}
 }
 \value{
 invisible(NULL); runs until interrupt
@@ -27,10 +27,5 @@ on_close(session_id) manage sessions. Each loop tick fires due
 timers, flushes reactions, and drains every session's outgoing
 queue before sleeping in the transport's wait (timeout capped at
 max_tick seconds so Ctrl-C stays responsive).
-}
-\details{
-The transport is base R sockets unless a host or a certificate is
-given, which selects civetwebR (see transport_civetweb()).
-
 }
 \keyword{internal}

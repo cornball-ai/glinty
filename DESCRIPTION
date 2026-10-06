@@ -1,15 +1,15 @@
 Package: glinty
 Type: Package
 Title: Tiny Reactive Web Application Framework
-Version: 0.0.5.63
+Version: 0.0.5.64
 Authors@R: c(
     person("Troy", "Hernandez", email = "troy@cornball.ai",
            role = c("aut", "cre"),
            comment = c(ORCID = "0009-0005-4248-604X")),
     person("cornball.ai", role = "cph"))
 Description: Build interactive web applications in R with a pure base R
-    reactive engine, a semantic component vocabulary, and a built-in
-    HTTP and 'WebSocket' server implemented on base R sockets.
+    reactive engine, a semantic component vocabulary, and an HTTP and
+    'WebSocket' server through 'civetwebR'.
     Session-scoped inputs, outputs, observers, and reactive
     expressions. The wire carries components rather than markup, so a
     frontend that is not a browser can render the same application:
@@ -22,6 +22,7 @@ BugReports: https://github.com/cornball-ai/glinty/issues
 Depends: R (>= 4.1)
 Imports:
     callr,
+    civetwebR (>= 0.0.1.5),
     digest,
     grDevices,
     jsonlite,
@@ -29,6 +30,5 @@ Imports:
     tools,
     utils
 Suggests:
-    civetwebR (>= 0.0.1.5),
     tinytest
 Encoding: UTF-8
