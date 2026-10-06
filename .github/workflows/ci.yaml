@@ -1,7 +1,11 @@
 name: ci
 
+# A PR runs once, on the pull_request event. With a bare `push:` as
+# well, every commit to a PR branch ran the whole matrix twice, and a
+# five-PR stack produced ten red runs per failure.
 on:
   push:
+    branches: [main]
   pull_request:
 
 env:
@@ -20,6 +24,11 @@ jobs:
 
       - name: Setup
         uses: eddelbuettel/github-actions/r-ci@master
+
+      # Before install_deps: r-ci's resolver reads DESCRIPTION and
+      # asks CRAN, where civetwebR is not. Installed first, the
+      # resolver finds it present at or above the floor and moves on.
+      - uses: ./.github/actions/civetwebr
 
       - name: Dependencies
         run: ./run.sh install_deps
@@ -55,17 +64,9 @@ jobs:
 
       # civetwebR (Imports: the transport) is GitHub-only until its
       # R-universe build appears, so the resolver below has to find it
-      # already installed. Pinned to the main commit this branch was
-      # tested against (civetwebR#5, 0.0.1.5). It needs a C compiler
-      # and GNU make, which r-base-dev brought.
-      - name: civetwebR (GitHub-only Import)
-        env:
-          CIVETWEBR_REF: 23f34306c3b5b2a827676a2bd25e6209b23106f2
-        run: |
-          git clone https://github.com/cornball-ai/civetwebR /tmp/civetwebR
-          git -C /tmp/civetwebR fetch --quiet origin "$CIVETWEBR_REF"
-          git -C /tmp/civetwebR checkout --quiet "$CIVETWEBR_REF"
-          sudo R CMD INSTALL /tmp/civetwebR
+      # already installed. It needs a C compiler and GNU make, which
+      # r-base-dev brought.
+      - uses: ./.github/actions/civetwebr
 
       # Read from DESCRIPTION rather than a hardcoded list: a
       # hardcoded one drifts the moment a dependency is added, and
@@ -144,13 +145,23 @@ jobs:
       # needs root either way.
       - uses: ./.github/actions/r2u
 
+      # civetwebR has no apt binary (r2u builds CRAN, and it is not
+      # there), so it comes from GitHub like everywhere else in this
+      # file, and the apt list below leaves it out. r-base-dev is the
+      # compiler and headers its C sources need.
+      - name: Build tools for civetwebR
+        run: sudo apt-get install -y --no-install-recommends r-base-dev
+      - uses: ./.github/actions/civetwebr
+
       # The Imports list is read out of DESCRIPTION rather than
       # written here twice. Hardcoded, it drifts: adding callr turned
       # this job red for a reason that had nothing to do with Flutter.
+      # Anything already installed (base R, civetwebR above) is left
+      # out, since r2u has no package for it.
       - name: glinty and its dependencies
         working-directory: .
         run: |
-          deps=$(Rscript --vanilla -e 'imports <- read.dcf("DESCRIPTION")[1, "Imports"]; pkgs <- trimws(gsub("\\(.*?\\)", "", strsplit(imports, ",")[[1]])); pkgs <- setdiff(pkgs, rownames(installed.packages(priority = "base"))); cat(paste0("r-cran-", tolower(pkgs)), sep = " ")')
+          deps=$(Rscript --vanilla -e 'imports <- read.dcf("DESCRIPTION")[1, "Imports"]; pkgs <- trimws(gsub("\\(.*?\\)", "", strsplit(imports, ",")[[1]])); pkgs <- setdiff(pkgs, rownames(installed.packages())); cat(paste0("r-cran-", tolower(pkgs)), sep = " ")')
           echo "installing: $deps"
           sudo apt-get install -y --no-install-recommends $deps
           sudo R CMD INSTALL .
