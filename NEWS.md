@@ -1,5 +1,21 @@
 # glinty (development version)
 
+**Namespaces, and `app()` refuses colliding ids.** Ids are global
+to a page, and when two independently written subtrees both used
+`x` the last renderer won and nothing said so. `namespace("stt")`
+is an id builder (`ns("file")` is `"stt_file"`), and
+`scoped(ns, input, output, session)` gives a subtree's server code
+proxies under which `input$file`, `output$status <-`,
+`download_handler()`, the `update_*()` family, the feed verbs and
+`path_picker()` all address the prefixed id; `session$ns` is the
+namespace for ids built inside `render_ui()`, and everything else on
+the session passes through to the real one. `component_ids()` is
+the tree walker, exported, naming each id by component kind. And
+`app()` now refuses a tree in which an id names two things:
+buttons, download buttons and shortcuts may share one (a Save
+button and its ctrl+s), inputs, outputs, tabsets and containers may
+not, and an id is never both.
+
 **Several static directories.** `run_app(static_dir =)` takes a
 named character vector, `c(fleet = "/a", notes = "/b")`, served
 under `/static/fleet/` and `/static/notes/`, so a page assembled from

@@ -48,6 +48,6 @@ update_video <- function(session, id, current_time = NULL, playing = NULL) {
     if (length(fields) == 0L) {
         return(invisible(NULL))
     }
-    session$send(video_update_msg(id, fields))
+    session$send(video_update_msg(scoped_id(session, id), fields))
     invisible(NULL)
 }

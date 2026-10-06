@@ -224,6 +224,7 @@ send_input_update <- function(session, id, fields, sync_value = NULL) {
     if (length(fields) == 0L) {
         return(invisible(NULL))
     }
+    id <- scoped_id(session, id)
     session$send(input_update_msg(id, fields))
     if (!is.null(sync_value)) {
         handle_input(session, id, sync_value)

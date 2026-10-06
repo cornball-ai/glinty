@@ -31,6 +31,9 @@ app <- function(ui, server, theme = NULL) {
     if (!is.null(theme) && !inherits(theme, "glinty_theme")) {
         stop("theme must come from app_theme(), or be NULL", call. = FALSE)
     }
+    # The tree is fully known here, so a collision is refused now
+    # rather than shipped as one panel showing another's data.
+    check_tree_ids(ui)
     structure(list(ui = ui, server = server, theme = theme),
               class = "glinty_app")
 }

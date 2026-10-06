@@ -239,6 +239,11 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
     if (!is.character(id) || length(id) != 1L || !nzchar(id)) {
         stop("id must be a non-empty string", call. = FALSE)
     }
+    # Under a namespace the stem is prefixed once, here; the derived
+    # ids are then read through the plain proxy so they are not
+    # prefixed again.
+    id <- scoped_id(session, id)
+    input <- unscoped_input(input)
     kind <- match.arg(kind)
     if (!is.null(root)) {
         if (!is.character(root) || length(root) != 1L || !dir.exists(root)) {
