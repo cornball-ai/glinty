@@ -61,7 +61,6 @@ make_output_proxy <- function(session) {
 
 #' Register an output renderer
 #'
-#' @usage \method{$}{glinty_output}(x, name) <- value
 #' @param x a glinty_output proxy
 #' @param name character output ID
 #' @param value a function that computes the output, or a renderer
@@ -75,7 +74,6 @@ make_output_proxy <- function(session) {
 
 #' Register an output renderer by name
 #'
-#' @usage \method{[[}{glinty_output}(x, name) <- value
 #' @param x a glinty_output proxy
 #' @param name character output ID
 #' @param value a function that computes the output, or a renderer
