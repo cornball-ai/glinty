@@ -51,13 +51,12 @@ jobs:
 
       # civetwebR (Suggests: the transport behind run_app(host =)) is
       # GitHub-only until its R-universe build appears, so the resolver
-      # below has to find it already installed. Pinned to the commit
-      # this branch was tested against; a full clone, since a squash
-      # merge leaves that commit reachable only through the PR ref.
+      # below has to find it already installed. Pinned to the main
+      # commit this branch was tested against (civetwebR#5, 0.0.1.5).
       # It needs a C compiler and GNU make, which r-base-dev brought.
       - name: civetwebR (GitHub-only Suggests)
         env:
-          CIVETWEBR_REF: 6ee7abae1f395583cb5e36be7490b3159ff42cfe
+          CIVETWEBR_REF: 23f34306c3b5b2a827676a2bd25e6209b23106f2
         run: |
           git clone https://github.com/cornball-ai/civetwebR /tmp/civetwebR
           git -C /tmp/civetwebR fetch --quiet origin "$CIVETWEBR_REF"
