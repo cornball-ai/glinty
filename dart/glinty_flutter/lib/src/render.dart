@@ -59,6 +59,10 @@ const supportedComponents = <String>{
 /// client answers for it -- render it, or refuse it by name.
 const unsupportedComponents = <String>{
   'date_input', // showDatePicker is a dialog, not an inline control
+  // The microphone needs a recorder package and a permission flow,
+  // both outside the SDK. Refused by name, and `record` stays out of
+  // hello, until an onRecord seam exists beside onUpload.
+  'audio_input',
   // Both carry markup, which has no Flutter equivalent by design.
   // raw_html is markup in the tree; html_output is markup arriving
   // as a value. Same refusal for the same reason.

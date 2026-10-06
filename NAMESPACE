@@ -2,6 +2,7 @@
 
 export(app)
 export(app_theme)
+export(audio_input)
 export(audio_output)
 export(button)
 export(checkbox_group)

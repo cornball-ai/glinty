@@ -17,7 +17,9 @@ minted over the WebSocket and binds the session and the input id,
 so neither appears in the URL. File parts are written under a
 per-session temp dir (removed when the session ends) and the input
 becomes a data.frame with one row per file: name, size, type,
-datapath. Dependent outputs update over the WebSocket on the next
+datapath. Text fields in the body become further columns, one
+value each down every row (a chunked recording's index travels
+this way). Dependent outputs update over the WebSocket on the next
 tick.
 }
 \keyword{internal}

@@ -57,6 +57,7 @@ component_to_html <- function(x) {
            range_slider = html_range_slider(x),
            date_input = html_text_like(x, "date"),
            file_input = html_file(x),
+           audio_input = html_audio_input(x),
            button = html_button(x),
            download_button = html_button(x, "g-download"),
            text_output = html_text_output(x),
@@ -924,6 +925,24 @@ html_file <- function(x) {
         attrs$accept <- paste(x$accept, collapse = ",")
     }
     html_field_group(x, html_el("input", attrs, void = TRUE))
+}
+
+html_audio_input <- function(x) {
+    # A button that reports as an input: its value is the recording,
+    # which arrives over HTTP like a file_input's files. data-g-record
+    # is what the client's click delegation looks for; the chunk
+    # period and preferred type ride as data for it to read.
+    attrs <- c(html_bind(x), list(type = "button", class = "g-btn g-record"))
+    attrs[["data-g-record"]] <- x$id
+    if (!is.null(x$chunk)) {
+        attrs[["data-g-chunk"]] <- as.character(x$chunk)
+    }
+    if (!is.null(x$mime)) {
+        attrs[["data-g-mime"]] <- x$mime
+    }
+    # No <label for>: the button's text is its label.
+    html_el("div", list(class = "g-field"),
+            html_el("button", attrs, html_escape(x$label)))
 }
 
 html_button <- function(x, extra_class = NULL) {

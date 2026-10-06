@@ -555,6 +555,31 @@ a.g-run {
     color: var(--g-on-primary);
 }
 
+/* The microphone button while a take is being recorded: the danger
+   colours and a pulsing dot, so the state is visible from across the
+   room. */
+.g-record.g-recording {
+    border-color: var(--g-danger);
+    background: var(--g-danger);
+    color: var(--g-on-primary);
+}
+
+.g-record.g-recording::before {
+    content: "";
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    border-radius: 50%;
+    background: currentColor;
+    margin-right: 0.4em;
+    animation: g-record-pulse 1s ease-in-out infinite;
+}
+
+@keyframes g-record-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
 .g-btn-ghost {
     border-color: transparent;
     background: transparent;
