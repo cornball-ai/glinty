@@ -122,7 +122,8 @@ html_feed <- function(x) {
             paste0(html_el("div", list(class = "g-feed-items")),
                    html_el("button",
                            list(type = "button", class = "g-feed-jump", hidden = "hidden"),
-                           html_escape("↓ Latest"))))
+                           # U+2193 downwards arrow, spelled in ASCII
+                           html_escape(paste(intToUtf8(0x2193L), "Latest")))))
 }
 
 #' A key binding, lowered to a hidden marker the client binds from

@@ -145,7 +145,9 @@ md_blocks <- function(text) {
             prefix <- if (grepl("^\\d", marker)) {
                 paste0(marker, " ")
             } else {
-                "• " # the bullet; the source marker is style
+                # the bullet (U+2022, spelled in ASCII for R CMD check);
+                # the source marker is style
+                paste0(intToUtf8(0x2022L), " ")
             }
             # source indent rides in front of the prefix: nesting
             # renders as the author wrote it, and pre-wrap keeps it
