@@ -5,7 +5,9 @@
 #' so neither appears in the URL. File parts are written under a
 #' per-session temp dir (removed when the session ends) and the input
 #' becomes a data.frame with one row per file: name, size, type,
-#' datapath. Dependent outputs update over the WebSocket on the next
+#' datapath. Text fields in the body become further columns, one
+#' value each down every row (a chunked recording's index travels
+#' this way). Dependent outputs update over the WebSocket on the next
 #' tick.
 #'
 #' @param req parsed request with raw body
@@ -29,10 +31,15 @@ handle_upload <- function(req) {
     }
     parts <- parse_multipart(req$body, boundary)
     files <- list()
+    fields <- list()
     for (name in names(parts)) {
         for (part in parts[[name]]) {
             if (!is.na(part$filename) && nzchar(part$filename)) {
                 files <- c(files, list(part))
+            } else if (is.null(fields[[name]])) {
+                # a text field: the column it becomes below
+                fields[[name]] <- tryCatch(rawToChar(part$value),
+                                           error = function(e) NA_character_)
             }
         }
     }
@@ -53,7 +60,15 @@ handle_upload <- function(req) {
                    type = NA_character_, datapath = datapath,
                    stringsAsFactors = FALSE)
     })
-    handle_input(session, input_id, do.call(rbind, rows))
+    value <- do.call(rbind, rows)
+    # Text fields become columns, one value each down every row. A
+    # file column keeps its name against a field spelled the same.
+    for (nm in names(fields)) {
+        if (!nm %in% names(value)) {
+            value[[nm]] <- fields[[nm]]
+        }
+    }
+    handle_input(session, input_id, value)
     http_response_raw(200L, "application/json", '{"ok":true}')
 }
 

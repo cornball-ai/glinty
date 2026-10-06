@@ -19,6 +19,7 @@
        missing from this list -- hello under-declared and nothing
        noticed, which is the drift that test exists to catch. */
     var SUPPORTED_COMPONENTS = [
+        "audio_input",
         "audio_output", "button", "checkbox_group", "checkbox_input",
         "column", "data_table",
         "conditional_panel", "date_input", "divider", "download_button",
@@ -42,7 +43,7 @@
        implements, and just as much a thing the server would believe. */
     var SUPPORTED_FEATURES = [
         "upload", "download", "modal", "progress", "measure",
-        "video_control"
+        "video_control", "record"
     ];
 
     /* The one reserved component id: a button carrying it closes the
@@ -124,6 +125,8 @@
     function harvestLocal() {
         document.querySelectorAll("[data-g-target]").forEach(function (el) {
             if (el.dataset.gMessage === "event") return; /* buttons: no state */
+            /* a record button's value is a recording nobody has made */
+            if (el.dataset.gRecord !== undefined) return;
             if (el.dataset.gValue !== undefined) {
                 /* click-selected state (tab buttons): the active one
                    holds the group's value */
@@ -640,6 +643,11 @@
                data-g-value is click-selected state (a tab): that is
                an input. Anything else reports through its own
                input/change events, not through clicks. */
+            if (el.dataset.gRecord !== undefined) {
+                /* the microphone: a press starts or stops a take */
+                toggleRecording(el);
+                return;
+            }
             if (el.dataset.gMessage === "event") {
                 if (el.dataset.gDownload === undefined) {
                     /* A button may carry a value, which rides along so
@@ -878,6 +886,176 @@
            made once is still theirs. */
         pending = pending.filter(function (msg) {
             return msg.type !== "ticket";
+        });
+    }
+
+    /* ---------- microphone capture (audio_input) ---------- */
+
+    /* A recording is an upload the browser made. The take goes
+       through the same ticketed POST a file_input uses, under the
+       component's id, so the server sees the shape it already knows
+       (name, size, type, datapath). With `chunk` set, each chunk also
+       posts as it closes, under "<id>_chunk" with an `index` field
+       the upload route turns into a column. "<id>_state" reports
+       idle, recording, denied, unsupported or insecure as a plain
+       input, so an app can say why nothing is happening. */
+    var recorders = {};
+
+    function buildAudioInput(c) {
+        var attrs = assign(bindAttrs(c, "input"), {
+            type: "button",
+            "class": "g-btn g-record",
+            "data-g-record": c.id
+        });
+        if (c.chunk !== null && c.chunk !== undefined) {
+            attrs["data-g-chunk"] = c.chunk;
+        }
+        if (c.mime) attrs["data-g-mime"] = c.mime;
+        var btn = el("button", attrs);
+        btn.textContent = c.label || "Record";
+        /* no <label for>: the button's text is its label */
+        return fieldGroup({ id: c.id }, btn);
+    }
+
+    function setRecordState(btn, state) {
+        var id = btn.dataset.gRecord;
+        if (btn._gLabel === undefined) btn._gLabel = btn.textContent;
+        btn.classList.toggle("g-recording", state === "recording");
+        btn.textContent = state === "recording" ? "Stop" : btn._gLabel;
+        noteInput(id + "_state", state);
+        send({ type: "input", id: id + "_state", value: state });
+    }
+
+    function recordingExt(mime) {
+        if (/webm/i.test(mime)) return "webm";
+        if (/ogg/i.test(mime)) return "ogg";
+        if (/mp4|aac|m4a/i.test(mime)) return "m4a";
+        if (/wav/i.test(mime)) return "wav";
+        return "bin";
+    }
+
+    /* WebM from MediaRecorder: the first chunk carries the EBML
+       header and the rest are bare clusters, which no decoder reads
+       alone. The header (everything before the first Cluster element,
+       1F 43 B6 75) is kept from the first chunk and prepended to each
+       later one, so every chunk decodes on its own. */
+    function clusterOffset(bytes) {
+        for (var i = 0; i + 3 < bytes.length; i++) {
+            if (bytes[i] === 0x1F && bytes[i + 1] === 0x43 &&
+                bytes[i + 2] === 0xB6 && bytes[i + 3] === 0x75) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function standaloneChunk(rec, data, type) {
+        if (!/webm/i.test(type)) return Promise.resolve(data);
+        if (rec.header) {
+            return Promise.resolve(new Blob([rec.header, data], { type: type }));
+        }
+        return data.arrayBuffer().then(function (buf) {
+            var at = clusterOffset(new Uint8Array(buf));
+            if (at > 0) rec.header = buf.slice(0, at);
+            return data;
+        });
+    }
+
+    function uploadBlob(id, blob, filename, fields, done) {
+        var fd = new FormData();
+        fd.append("file", blob, filename);
+        Object.keys(fields || {}).forEach(function (k) {
+            fd.append(k, String(fields[k]));
+        });
+        requestTicket(id, "upload", function (ticket) {
+            fetch(
+                "/upload?ticket=" + encodeURIComponent(ticket.token),
+                { method: "POST", body: fd }
+            ).then(function (resp) {
+                if (!resp.ok) throw new Error("upload failed: " + resp.status);
+                done(null);
+            }).catch(function (e) {
+                done((e && e.message) || "the upload did not complete");
+            });
+        }, function (message) {
+            done(message);
+        });
+    }
+
+    function toggleRecording(btn) {
+        var rec = recorders[btn.dataset.gRecord];
+        if (rec && rec.recorder.state !== "inactive") {
+            rec.recorder.stop();
+            return;
+        }
+        startRecording(btn);
+    }
+
+    function startRecording(btn) {
+        var id = btn.dataset.gRecord;
+        if (!sessionId) return;
+        if (!window.isSecureContext) {
+            setRecordState(btn, "insecure");
+            showTransferNotice(btn, "the microphone needs https or localhost");
+            return;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia ||
+            typeof MediaRecorder === "undefined") {
+            setRecordState(btn, "unsupported");
+            showTransferNotice(btn, "this browser cannot record audio");
+            return;
+        }
+        clearTransferNotice(btn);
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+            var wanted = btn.dataset.gMime || "";
+            var mime = wanted && MediaRecorder.isTypeSupported(wanted) ? wanted
+                : (MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "");
+            var recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+            var chunkMs = Math.round(Number(btn.dataset.gChunk || 0) * 1000);
+            var type = recorder.mimeType || mime || "audio/webm";
+            var ext = recordingExt(type);
+            var rec = { recorder: recorder, parts: [], index: 0, header: null };
+            recorders[id] = rec;
+            recorder.ondataavailable = function (ev) {
+                if (!ev.data || ev.data.size === 0) return;
+                rec.parts.push(ev.data);
+                /* the flush on stop is not a chunk: the take carries it */
+                if (chunkMs > 0 && recorder.state === "recording") {
+                    var i = rec.index++;
+                    standaloneChunk(rec, ev.data, type).then(function (blob) {
+                        uploadBlob(id + "_chunk", blob, "chunk-" + i + "." + ext,
+                                   { index: i }, function (err) {
+                            if (err) showTransferNotice(btn, err);
+                        });
+                    });
+                }
+            };
+            recorder.onstop = function () {
+                stream.getTracks().forEach(function (t) { t.stop(); });
+                delete recorders[id];
+                setRecordState(btn, "idle");
+                var take = new Blob(rec.parts, { type: type });
+                if (take.size === 0) return;
+                btn.disabled = true;
+                uploadBlob(id, take, "recording." + ext, {}, function (err) {
+                    btn.disabled = false;
+                    if (err) showTransferNotice(btn, err);
+                });
+            };
+            recorder.onerror = function () {
+                stream.getTracks().forEach(function (t) { t.stop(); });
+                delete recorders[id];
+                setRecordState(btn, "idle");
+                showTransferNotice(btn, "recording failed");
+            };
+            if (chunkMs > 0) recorder.start(chunkMs); else recorder.start();
+            setRecordState(btn, "recording");
+        }).catch(function (err) {
+            var denied = err && (err.name === "NotAllowedError" ||
+                                 err.name === "SecurityError");
+            setRecordState(btn, denied ? "denied" : "unsupported");
+            showTransferNotice(btn, denied ? "microphone access was refused"
+                : ((err && err.message) || "no microphone"));
         });
     }
 
@@ -1892,6 +2070,8 @@
         }
         case "file_input":
             return buildFile(c);
+        case "audio_input":
+            return buildAudioInput(c);
         case "button":
             return buildButton(c);
         case "download_button":

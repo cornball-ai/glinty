@@ -1,5 +1,19 @@
 # glinty (development version)
 
+**`audio_input()`: the microphone, as a component.** A button that
+records from the device and reports as an input whose value is the
+take, uploaded through the same transfer ticket a `file_input`'s
+files use, so the value is the same one-row data frame (name, size,
+type, datapath). `input$<id>_state` says idle, recording, denied,
+unsupported or insecure; `chunk = 5` posts every five seconds to
+`input$<id>_chunk` with an `index` column, each chunk decodable on
+its own, so a live transcription reads the take while it is spoken,
+and the whole take still arrives on stop. The browser client
+declares the new `record` feature; a client that cannot record
+refuses the component by name (glinty-dart does, for now). Text
+fields in an upload body now become columns on the input's data
+frame, which is how the chunk index travels.
+
 **civetwebR is the transport.** The base R socket transport is gone:
 `run_app()` always serves through civetwebR (now in Imports, >=
 0.0.1.5), which binds the address, terminates TLS, parses HTTP and

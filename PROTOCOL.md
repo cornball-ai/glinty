@@ -402,7 +402,7 @@ rule is lowered as its text, unlinked.
 **Inputs**: `text_input`, `password_input`, `textarea_input`,
 `number_input`, `select_input`, `checkbox_input`, `checkbox_group`,
 `radio_buttons`, `slider_input`, `range_slider`, `date_input`,
-`file_input`, `button`, `download_button`, `shortcut`
+`file_input`, `audio_input`, `button`, `download_button`, `shortcut`
 
 `shortcut` is a button you cannot see: it emits the same `event` frame,
 so one server handler serves the visible control and its accelerator
@@ -445,6 +445,29 @@ than offering to save the page.
 The binding lives in the tree, not in a registry beside it. A rebuilt
 UI then has exactly the shortcuts its new tree declares, with none left
 over from the old one — the drift a `bind_key()` call could not avoid.
+
+`audio_input` is the microphone: a button that records from the
+device and reports as an input whose value is the take, uploaded over
+HTTP through a transfer ticket exactly as a `file_input`'s files are,
+so the server sees the same `name`/`size`/`type`/`datapath` row. Two
+inputs ride beside it under its id. `<id>_state` is a plain string
+input: `idle`, `recording`, `denied` (permission refused),
+`unsupported` (no recorder in this client) or `insecure` (a browser
+opens a microphone only on https or localhost). With `chunk` set,
+`<id>_chunk` arrives once per chunk while recording, carrying an
+`index` field the upload route turns into a column, so a live
+transcription reads the take as it is spoken; each chunk decodes on
+its own (the browser prepends the WebM header it kept from the
+first). The whole take still arrives on stop.
+
+```json
+{"component": "audio_input", "id": "take", "label": "Record",
+ "chunk": 5, "mime": null}
+```
+
+A client that cannot record leaves `record` out of its `hello`
+features and refuses the component by name, as the Flutter column
+says.
 
 **Outputs**: `text_output`, `verbatim_output`, `table_output`,
 `data_table`, `plot_output`, `image_output`, `audio_output`,
@@ -656,6 +679,7 @@ rather than an intention.
 | `audio_output` | the embedder's player, through `audioBuilder` | src resolved, `mime` passed on; without a builder the slot names the gap, and `hello` does not claim the component |
 | `video_output` | the embedder's player, through `videoBuilder` | the same seam as audio (video_player, media_kit: the embedder's pick); src and poster resolved, `mime` passed on; `report` hands the player an `onReport` whose throttle glinty owns |
 | `file_input` | the embedder.s picker and POST, through `onUpload` | glinty owns the ticket in between, and asks for it only once files are in hand |
+| `audio_input` | the embedder's recorder, through an `onRecord` seam | not wired yet: **refused by name**, and `record` stays out of `hello` until it is |
 | `html_output`, `raw_html` | — | **refused by name**; see below |
 
 Of the three this table flagged before any Dart existed, one turned
@@ -1061,7 +1085,7 @@ adapts the wire format in response.
  "components": ["text_input", "select_input", "..."],
  "kinds": ["text", "table", "image", "audio", "video", "ui", "html"],
  "features": ["upload", "download", "modal", "progress", "measure",
-              "video_control"]}
+              "video_control", "record"]}
 ```
 
 Three lists, not one: a client may render every component and still
@@ -1179,6 +1203,12 @@ to one session, one resource id, one purpose, and a few seconds
 success or not -- a retry asks for a new one over the socket, and a
 replayed URL gets nothing. The session id never appears in a URL,
 and a leaked ticket is dead within seconds either way.
+
+An upload's file parts become the rows of the input's data frame;
+any text fields in the same body become further columns, one value
+each down every row. That is how a chunked `audio_input` carries a
+chunk's `index`. A file column keeps its name against a field spelled
+the same.
 
 The ticket is an opaque token held server-side, not a signed
 payload: a single-process server is the authority on what it issued,

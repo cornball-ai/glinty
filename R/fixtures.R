@@ -410,6 +410,14 @@ component_fixtures <- function() {
                       notes = "its value arrives over HTTP, not the socket"
         ),
                  list(
+                      name = "audio-input",
+                      component = component("audio_input", id = "take",
+                label = "Record", chunk = 5),
+                      notes = paste("a recording is an upload the client made;",
+                                    "a client without a microphone refuses it",
+                                    "by name")
+        ),
+                 list(
                       name = "download-button",
                       component = component("download_button", id = "report",
                 label = "Download", variant = "primary"),

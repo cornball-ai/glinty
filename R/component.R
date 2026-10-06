@@ -354,6 +354,14 @@ COMPONENT_SCHEMA <- list(
         accept = field("any"),
         multiple = field("bool", default = FALSE)
     ),
+                         # the microphone: its value is a recording, which arrives
+                         # as a file_input's files do
+                         audio_input = list(
+        id = field("string", required = TRUE),
+        label = field("string", default = "Record"),
+        chunk = field("number"),
+        mime = field("string")
+    ),
 
                          # events, not inputs: they carry no value the server keeps
                          button = list(
@@ -536,6 +544,7 @@ INPUT_META <- list(
                    range_slider = list(message = "input", value_type = "numbers"),
                    date_input = list(message = "input", value_type = "string"),
                    file_input = list(message = "input", value_type = "files"),
+                   audio_input = list(message = "input", value_type = "files"),
                    # A button's event carries a value when the component
                    # declared one, and carries none otherwise: the press
                    # is then the whole message. Two entries rather than

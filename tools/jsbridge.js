@@ -553,7 +553,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             modal: "showModal",
             progress: "applyProgress",
             measure: "reportPlotDims",
-            video_control: "applyVideoUpdate"
+            video_control: "applyVideoUpdate",
+            record: "startRecording"
         };
         const src = CLIENT_SRC;
         check("every declared feature has a function behind it",
