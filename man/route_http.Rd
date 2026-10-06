@@ -20,8 +20,9 @@ route_http(
 
 \item{pkg_www}{character package asset dir (served at /glinty/)}
 
-\item{static_dir}{character app asset dir (served at /static/),
-or NULL}
+\item{static_dir}{the app's static mounts from static_mounts():
+NULL, one directory (served at /static/), or a named vector
+(each served at /static/<name>/)}
 
 \item{started}{numeric epoch seconds the server came up, for
 /healthz uptime}

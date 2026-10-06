@@ -77,7 +77,12 @@ app <- function(ui, server, theme = NULL) {
 #'   deployment behind a TLS proxy that forwards a nonstandard
 #'   Host:port should list its public origin here.
 #' @param static_dir character directory served under /static/
-#'   (default "www" in the working directory; skipped if absent)
+#'   (default "www" in the working directory; skipped if absent), or
+#'   a named character vector of directories each served under
+#'   /static/<name>/, for a page assembled from parts that each bring
+#'   assets. One entry may stay unnamed: it is the root mount and
+#'   answers for whatever no name claims. A named directory that does
+#'   not exist is refused at startup; see static_mounts()
 #' @param check_secrets logical refuse to start when the rendered page
 #'   contains the value of a secret-looking environment variable (see
 #'   env_secrets_in()). The usual cause is prefilling an input from
@@ -228,9 +233,7 @@ run_app <- function(app_obj, port = NULL, auth = NULL, origins = NULL,
     }
 
     pkg_www <- system.file("www", package = "glinty")
-    if (!is.null(static_dir) && !dir.exists(static_dir)) {
-        static_dir <- NULL
-    }
+    static_dir <- static_mounts(static_dir)
 
     n_formals <- length(formals(app_obj$server))
     started <- as.numeric(Sys.time())
@@ -412,8 +415,9 @@ refuse_conn <- function(sid, message) {
 #' @param req parsed request
 #' @param page_html character full page document
 #' @param pkg_www character package asset dir (served at /glinty/)
-#' @param static_dir character app asset dir (served at /static/),
-#'   or NULL
+#' @param static_dir the app's static mounts from static_mounts():
+#'   NULL, one directory (served at /static/), or a named vector
+#'   (each served at /static/<name>/)
 #' @param started numeric epoch seconds the server came up, for
 #'   /healthz uptime
 #' @param api application router, or NULL (see run_app())
@@ -449,8 +453,8 @@ route_http <- function(req, page_html, pkg_www, static_dir,
             return(serve_static(sub("^/glinty/", "", req$path), pkg_www, range))
         }
         if (!is.null(static_dir) && startsWith(req$path, "/static/")) {
-            return(serve_static(sub("^/static/", "", req$path), static_dir,
-                                range))
+            return(serve_mounted(sub("^/static/", "", req$path), static_dir,
+                                 range))
         }
     }
     if (!is.null(api)) {

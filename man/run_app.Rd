@@ -48,7 +48,12 @@ deployment behind a TLS proxy that forwards a nonstandard
 Host:port should list its public origin here.}
 
 \item{static_dir}{character directory served under /static/
-(default "www" in the working directory; skipped if absent)}
+(default "www" in the working directory; skipped if absent), or
+a named character vector of directories each served under
+/static/<name>/, for a page assembled from parts that each bring
+assets. One entry may stay unnamed: it is the root mount and
+answers for whatever no name claims. A named directory that does
+not exist is refused at startup; see static_mounts()}
 
 \item{job_lanes}{named list sizing the background-job lanes this
 app offers, each list(concurrency =, queue =). A job picks its

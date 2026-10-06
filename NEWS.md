@@ -1,5 +1,14 @@
 # glinty (development version)
 
+**Several static directories.** `run_app(static_dir =)` takes a
+named character vector, `c(fleet = "/a", notes = "/b")`, served
+under `/static/fleet/` and `/static/notes/`, so a page assembled from
+parts that each bring a stylesheet or a font serves all of them; one
+entry may stay unnamed as the root mount. The single-directory form
+is unchanged. `static_mounts()` is the normaliser, exported so a host
+can check a configuration before starting; a named directory that
+does not exist is refused at startup.
+
 **`audio_input()`: the microphone, as a component.** A button that
 records from the device and reports as an input whose value is the
 take, uploaded through the same transfer ticket a `file_input`'s
