@@ -6,6 +6,10 @@ on:
 
 env:
   _R_CHECK_FORCE_SUGGESTS_: "false"
+  # glinty is not on CRAN, so the incoming-feasibility NOTE ("New
+  # submission", Suggests not in mainstream repositories) is
+  # structural; keep it out of the gate, as veleta does.
+  _R_CHECK_CRAN_INCOMING_: "false"
 
 jobs:
   ci:

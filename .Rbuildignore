@@ -9,3 +9,5 @@
 ^\.positai$
 ^tools$
 ^dart$
+^sandbox$
+^PROTOCOL\.md$

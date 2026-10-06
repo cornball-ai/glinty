@@ -3,7 +3,7 @@
 \alias{$<-.glinty_output}
 \title{Register an output renderer}
 \usage{
-\method{$<-}{glinty_output}(x, name, value)
+\method{$}{glinty_output}(x, name) <- value
 }
 \arguments{
 \item{x}{a glinty_output proxy}
