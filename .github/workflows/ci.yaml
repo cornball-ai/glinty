@@ -91,11 +91,16 @@ jobs:
       # every job here stayed green, so the build's own account of what
       # it threw away is now read.
       - name: Build and check
+        # R CMD build's WARNINGs go to stdout with exit 0 and never
+        # reach 00check.log: an .rds saved in serialization version 3
+        # adds Depends: R (>= 3.5.0) to the tarball, invalid files are
+        # excluded silently.
         run: |
+          set -o pipefail
           R CMD build . 2>&1 | tee /tmp/build.log
-          if grep -q "excluding invalid files" /tmp/build.log; then
-            echo "::error::R CMD build excluded files from the tarball"
-            sed -n '/excluding invalid files/,/^\*/p' /tmp/build.log
+          if grep -qE "WARNING|excluding invalid files|now depends on R" /tmp/build.log; then
+            echo "::error::R CMD build reported a problem"
+            grep -n -E "WARNING|excluding invalid files|now depends on R" /tmp/build.log
             exit 1
           fi
           _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --as-cran glinty_*.tar.gz
