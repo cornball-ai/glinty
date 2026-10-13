@@ -1,5 +1,14 @@
 # glinty (development version)
 
+**`install_github("cornball-ai/glinty")` finds civetwebR.** civetwebR
+is on neither CRAN nor r2u, and DESCRIPTION named it in Imports
+without saying where it lives, so the README's install line, and any
+package that installs glinty from GitHub (cornball's CI among them),
+stopped at "dependency 'civetwebR' is not available". A `Remotes:`
+field now points remotes at cornball-ai/civetwebR. glinty's own CI
+is unchanged: it still installs civetwebR at a pinned commit first,
+and remotes sees it already present.
+
 **Outputs behind a hidden tab wait.** A `tabset()` shows one panel,
 but on the server every renderer behind every panel ran on every
 invalidation and every `invalidate_later()` behind a hidden panel

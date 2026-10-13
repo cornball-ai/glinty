@@ -1,7 +1,7 @@
 Package: glinty
 Type: Package
 Title: Tiny Reactive Web Application Framework
-Version: 0.0.5.68
+Version: 0.0.5.69
 Authors@R: c(
     person("Troy", "Hernandez", email = "troy@cornball.ai",
            role = c("aut", "cre"),
@@ -31,4 +31,6 @@ Imports:
     utils
 Suggests:
     tinytest
+Remotes:
+    cornball-ai/civetwebR
 Encoding: UTF-8
