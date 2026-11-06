@@ -8,12 +8,13 @@
 # server path. So the server offers a listing and the user walks it,
 # the shape shinyFiles has served in the Shiny ecosystem for years.
 #
-# Deliberately a helper over existing vocabulary -- buttons carrying
-# values, a modal rebuilt per step -- not a component with a listing
-# protocol message. A listing message would move the browser UI into
-# each frontend: breadcrumbs and rows drawn twice, drifting twice,
-# for no capability the modal lacks. If a native client ever wants
-# the platform dialog against a local server, the seam is an embedder
+# Deliberately a helper over existing vocabulary -- a data_table for
+# the listing, buttons carrying values for the places and the path, a
+# modal rebuilt per step -- not a component with a listing protocol
+# message. A listing message would move the browser UI into each
+# frontend: columns and crumbs drawn twice, drifting twice, for no
+# capability the modal lacks. If a native client ever wants the
+# platform dialog against a local server, the seam is an embedder
 # callback on a field component, not a listing message.
 
 #' The entries of a directory, as the picker shows them
@@ -49,6 +50,60 @@ picker_entries <- function(dir, kind = "dir", pattern = NULL, hidden = FALSE) {
         files <- files[order(tolower(files))]
     }
     list(dirs = dirs, files = files)
+}
+
+#' The listing as the dialog's table shows it
+#'
+#' One row per entry, folders first: the name, what it is (a folder,
+#' or the file's extension), when it changed and, for a file, how big
+#' it is. The row names are the absolute paths, which is what a row
+#' click reports back as the table's key.
+#'
+#' @param dir character the directory, canonical
+#' @param entries list(dirs, files) of bare names
+#' @return data.frame(Name, Kind, Modified, Size)
+#' @keywords internal
+picker_listing <- function(dir, entries) {
+    names <- c(entries$dirs, entries$files)
+    paths <- file.path(dir, names)
+    info <- file.info(paths, extra_cols = FALSE)
+    is_file <- c(rep(FALSE, length(entries$dirs)),
+                 rep(TRUE, length(entries$files)))
+    ext <- tools::file_ext(entries$files)
+    ext[!nzchar(ext)] <- "file"
+    modified <- ifelse(is.na(info$mtime), "",
+                       format(info$mtime, "%Y-%m-%d %H:%M"))
+    size <- ifelse(is_file, picker_size(info$size), "")
+    df <- data.frame(Name = names,
+                     Kind = c(rep("folder", length(entries$dirs)), ext),
+                     Modified = modified, Size = size,
+                     stringsAsFactors = FALSE)
+    row.names(df) <- paths
+    df
+}
+
+#' A size in bytes, as a short string
+#'
+#' @param bytes numeric
+#' @return character, "" for NA
+#' @keywords internal
+picker_size <- function(bytes) {
+    vapply(bytes, function(b) {
+        if (is.na(b)) {
+            return("")
+        }
+        if (b < 1024) {
+            return(paste(b, "B"))
+        }
+        units <- c("KB", "MB", "GB", "TB")
+        x <- b / 1024
+        i <- 1L
+        while (x >= 1024 && i < length(units)) {
+            x <- x / 1024
+            i <- i + 1L
+        }
+        paste(format(round(x, 1L), nsmall = 1L), units[[i]])
+    }, "")
 }
 
 #' The path split into the pieces you can jump back to, root first
@@ -155,12 +210,15 @@ check_shortcut_shape <- function(x) {
 #' Picks a directory or file on the machine running the server -- the
 #' job \code{file_input()} cannot do, since a browser dialog browses
 #' the client's disk and uploads contents rather than naming a server
-#' path. The dialog is ordinary components in a modal: breadcrumbs
-#' and one row per entry, every one a \code{button()} carrying its
-#' target path as the value. Two observers serve all of it, split by
-#' meaning: one id navigates (crumbs and directory rows), the other
-#' commits a result (file rows, shortcuts, and the footer's confirm
-#' button, which carries the on-screen directory).
+#' path. The dialog is ordinary components in a large modal of fixed
+#' size: the places above, the path as crumbs, and the listing as a
+#' \code{\link{data_table}} -- name, kind, modified, size -- that
+#' sorts by any column, filters as you type, and scrolls under the
+#' title and the footer. A click on a folder steps into it; on a
+#' file, picks it. Three observers serve all of it, split by
+#' meaning: the table's row click steps or picks by what the row is,
+#' the crumbs navigate, and the shortcuts and the footer's confirm
+#' button (which carries the on-screen directory) commit.
 #'
 #' Call once in the server function and keep the handle:
 #' \code{open()} shows the dialog -- always; \code{start} says where
@@ -184,21 +242,22 @@ check_shortcut_shape <- function(x) {
 #' is a visible control naming exactly what it opens; app state may
 #' feed the list, but the picker never writes app state back.
 #'
-#' Button values arrive from the client, so navigation trusts none of
-#' them: every step is canonicalized and, when \code{root} is set,
-#' refused if it leaves it -- which also refuses symlinks pointing
-#' out. \code{root} is a browsing boundary, not the app's security
-#' boundary (the input channel is same-origin, and any path input the
-#' app offers elsewhere is as reachable): NULL browses the whole
-#' filesystem, which is what a personal tool usually means, and a
-#' deployment with a real boundary states one.
+#' Row keys and button values arrive from the client, so navigation
+#' trusts none of them: every step is canonicalized and, when
+#' \code{root} is set, refused if it leaves it -- which also refuses
+#' symlinks pointing out. \code{root} is a browsing boundary, not the
+#' app's security boundary (the input channel is same-origin, and any
+#' path input the app offers elsewhere is as reachable): NULL browses
+#' the whole filesystem, which is what a personal tool usually means,
+#' and a deployment with a real boundary states one.
 #'
-#' The picker binds \code{paste0(id, "_go")} and
-#' \code{paste0(id, "_choose")} on the wire; leave those ids to it.
+#' The picker binds \code{paste0(id, "_rows")}, \code{paste0(id,
+#' "_go")} and \code{paste0(id, "_choose")} on the wire; leave those
+#' ids to it.
 #'
 #' @param session a glinty_session
 #' @param input the server function's input proxy
-#' @param id character stem for the picker's event ids
+#' @param id character stem for the picker's ids
 #' @param kind "dir" to choose a directory, "file" to choose a file
 #' @param root character topmost browsable directory, or NULL for the
 #'   whole filesystem
@@ -212,8 +271,8 @@ check_shortcut_shape <- function(x) {
 #' @param pattern character regex shown files must match; directories
 #'   always show, or there is no way through them
 #' @param hidden logical show dotfiles
-#' @param limit integer most rows shown; the rest are counted in a
-#'   note -- step deeper to narrow down
+#' @param limit integer most entries listed; the rest are counted in
+#'   a note -- step deeper to narrow down
 #' @return list(open = function(start = NULL), value = reactive_val)
 #' @examples
 #' \dontrun{
@@ -229,7 +288,7 @@ check_shortcut_shape <- function(x) {
 path_picker <- function(session, input, id, kind = c("dir", "file"),
                         root = NULL, start = NULL, shortcuts = NULL,
                         title = NULL, pattern = NULL, hidden = FALSE,
-                        limit = 60L) {
+                        limit = 500L) {
     if (!inherits(session, "glinty_session")) {
         stop("session must be a glinty_session", call. = FALSE)
     }
@@ -266,6 +325,7 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
         }
     }
 
+    rows_id <- paste0(id, "_rows")
     nav_id <- paste0(id, "_go")
     choose_id <- paste0(id, "_choose")
     cwd <- reactive_val(NULL)
@@ -322,17 +382,17 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
 
     # The dialog, rebuilt on every show and every step, because its
     # contents ARE the current directory. show_modal() replaces an
-    # open dialog, so a step is one call.
+    # open dialog, so a step is one call. The listing's rows follow
+    # as the table's value, the output frame a render_table() would
+    # send, so the slot is filled in the same flush that drew it.
     show <- function() {
         d <- isolate(cwd())
         e <- picker_entries(d, kind = kind, pattern = pattern, hidden = hidden)
         cr <- picker_crumbs(d, root = root)
-        # A separator between crumbs, so the row reads as one path
-        # rather than scattered words.
         crumbs <- list()
         for (i in seq_len(nrow(cr))) {
             if (i > 1L) {
-                crumbs <- c(crumbs, list(txt(">", variant = "muted")))
+                crumbs <- c(crumbs, list(txt("/", variant = "muted")))
             }
             crumbs <- c(crumbs,
                         list(button(nav_id, cr$name[[i]], variant = "ghost",
@@ -340,25 +400,9 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
         }
         shown_dirs <- utils::head(e$dirs, limit)
         shown_files <- utils::head(e$files, max(0L, limit - length(shown_dirs)))
-        rows <- c(
-                  lapply(shown_dirs, function(nm) {
-            button(nav_id, nm, variant = "listing", icon = "folder",
-                   value = file.path(d, nm))
-        }),
-                  lapply(shown_files, function(nm) {
-            button(choose_id, nm, variant = "listing", icon = "file",
-                   value = file.path(d, nm))
-        })
-        )
         left_out <- (length(e$dirs) - length(shown_dirs)) +
         (length(e$files) - length(shown_files))
-        if (length(rows) == 0L) {
-            rows <- list(txt("nothing in here", variant = "muted"))
-        } else if (left_out > 0L) {
-            rows <- c(rows, list(txt(
-                                     sprintf("%d more not shown -- step into a folder to narrow down",
-                            left_out), variant = "small")))
-        }
+        listing <- picker_listing(d, list(dirs = shown_dirs, files = shown_files))
         sc <- shortcuts_now()
         quick <- lapply(seq_along(sc), function(i) {
             button(choose_id, names(sc)[[i]], variant = "secondary",
@@ -379,23 +423,34 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
             if (length(quick) > 0L) {
                 list(do.call(row, c(quick, list(gap = 4L))), divider())
             },
-                  list(do.call(row, c(crumbs, list(gap = 0L, align = "center"))),
-                       divider(),
-                       # gap 0: listing rows touch, and the hover
-                       # highlight is what separates them
-                       do.call(column, c(rows, list(gap = 0L))))
+                  list(do.call(row, c(crumbs, list(gap = 0L, align = "center")))),
+            if (nrow(listing) == 0L) {
+                list(txt("nothing in here", variant = "muted"))
+            } else {
+                # one page, so the listing scrolls as one list and the
+                # page-size chrome stays hidden; the search box is the
+                # type-to-narrow every file dialog has
+                list(data_table(rows_id, page_length = limit,
+                                length_menu = limit, selection = "single"))
+            },
+            if (left_out > 0L) {
+                list(txt(sprintf("%d more not shown -- step into a folder to narrow down",
+                                 left_out), variant = "small"))
+            }
         )
         do.call(show_modal, c(list(session), body,
-                              list(title = title, footer = do.call(row, footer))))
+                              list(title = title, footer = do.call(row, footer),
+                                   size = "large")))
+        if (nrow(listing) > 0L) {
+            session$send(output_msg(rows_id, "table",
+                                    df_to_table(listing,
+                        align = c(Modified = "right", Size = "right"))))
+        }
         invisible(NULL)
     }
 
-    # Two observers, split by meaning rather than by widget. nav_id
-    # only ever navigates: crumbs and directory rows share it, and
-    # the press says which target through the button value. Both are
-    # gated on cwd, so a stray event before the first open() cannot
-    # conjure the dialog or commit a value.
-    observe_event(input[[nav_id]], function(target) {
+    # One step: canonicalized, bounded, and a no-op unless it moves.
+    step_to <- function(target) {
         now <- isolate(cwd())
         if (is.null(now)) {
             return(invisible(NULL))
@@ -406,13 +461,12 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
             show()
         }
         invisible(NULL)
-    })
+    }
 
-    # choose_id commits the path its press carries: a file row, a
-    # shortcut, or the footer's confirm with the on-screen directory.
-    # The value is client-supplied, so it is held to exactly what the
-    # tree could commit -- existing, kind-matched, inside root.
-    observe_event(input[[choose_id]], function(target) {
+    # One commit: the value is client-supplied, so it is held to
+    # exactly what the tree could commit -- existing, kind-matched,
+    # inside root.
+    commit <- function(target) {
         if (is.null(isolate(cwd()))) {
             return(invisible(NULL))
         }
@@ -434,7 +488,36 @@ path_picker <- function(session, input, id, kind = c("dir", "file"),
         chosen(picked)
         remove_modal(session)
         invisible(NULL)
+    }
+
+    # Three observers, split by meaning rather than by widget. All
+    # are gated on cwd, so a stray frame before the first open()
+    # cannot conjure the dialog or commit a value.
+    #
+    # A row click reports the row's key, the entry's path: a folder
+    # is a step, a file (on a file picker) is the pick. The table
+    # reports its whole selection, one key here, and [] when a
+    # second click clears it, which means nothing.
+    observe_event(input[[rows_id]], function(keys) {
+        keys <- as.character(unlist(keys))
+        if (length(keys) != 1L || !nzchar(keys)) {
+            return(invisible(NULL))
+        }
+        if (dir.exists(keys)) {
+            step_to(keys)
+        } else if (identical(kind, "file")) {
+            commit(keys)
+        }
+        invisible(NULL)
     })
+
+    # nav_id only ever navigates: the crumbs, and the press says
+    # which target through the button value.
+    observe_event(input[[nav_id]], function(target) step_to(target))
+
+    # choose_id commits the path its press carries: a shortcut, or
+    # the footer's confirm with the on-screen directory.
+    observe_event(input[[choose_id]], function(target) commit(target))
 
     list(
          open = function(start = NULL) {

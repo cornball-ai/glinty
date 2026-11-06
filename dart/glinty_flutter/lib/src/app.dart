@@ -398,6 +398,9 @@ class _ModalLayer extends StatelessWidget {
     final title = frame['title'];
     final body = frame['body'];
     final footer = frame['footer'];
+    // size = "large" asks for a fixed, generous dialog (a file
+    // browser); the default fits its content up to a reading width.
+    final large = frame['size'] == 'large';
     final scheme = Theme.of(context).colorScheme;
     return KeyedSubtree(
       key: ValueKey('glinty-modal-$generation'),
@@ -415,7 +418,11 @@ class _ModalLayer extends StatelessWidget {
           child: Card(
             margin: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
+              constraints: large
+                  ? const BoxConstraints(
+                      minWidth: 960, maxWidth: 960, minHeight: 640,
+                      maxHeight: 640)
+                  : const BoxConstraints(maxWidth: 560),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(

@@ -14,7 +14,7 @@ field(
 }
 \arguments{
 \item{type}{character one of "string", "number", "int", "bool",
-"enum", "choices", "panels", "condition", "children", "any"}
+"enum", "choices", "panels", "condition", "children", "blocks", "any"}
 
 \item{required}{logical must be supplied}
 

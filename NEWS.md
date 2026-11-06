@@ -1,5 +1,36 @@
 # glinty (development version)
 
+**`prompter()`: a teleprompter, as a component.** The words of a
+markdown text, centered and scrolling up at a pace in words a
+minute, with the reading line a little above the middle; headings
+stay as the places to take a breath, and with `pause_at_headings`
+the scroll stops at each one until play is pressed again. Rules,
+fenced code and whole-line bracketed markers stay out, and
+`prompter_blocks()` says exactly what is shown. The bar has play,
+the pace, the text size, pause at headings, the colours (black on
+white by day, white on black at night, or one held), start over and
+fullscreen; space, the arrows, plus and minus, Page Up and Page Down
+and Home do the same from the keyboard. The content rides in the
+tree as blocks, lowered at build time like `markdown()`, and the
+motion is the client's; the settings come back as one input under
+the id when the user changes one, so an app can keep them.
+glinty-dart refuses the component by name for now.
+
+**The file browser is a file dialog.** `path_picker()` lists a
+directory as a `data_table` -- name, kind, modified, size -- that
+sorts by any column and filters as you type, inside a large modal of
+fixed size whose listing scrolls under the title and the footer. A
+click on a folder steps into it; on a file, picks it. The listing
+rides as the table's value right behind the modal frame, and the
+picker binds one more id, `<id>_rows`. `limit` now defaults to 500.
+Before, the listing was a column of buttons in a shrink-wrapped box
+that grew with the directory until Cancel fell below the fold.
+
+**`show_modal(size = "large")`.** A fixed, generous dialog for a
+file browser or a long form; the default still fits its content up
+to a reading width. In both, the title and the footer now stay put
+while a long body scrolls between them.
+
 **Outputs behind a hidden tab wait.** A `tabset()` shows one panel,
 but on the server every renderer behind every panel ran on every
 invalidation and every `invalidate_later()` behind a hidden panel

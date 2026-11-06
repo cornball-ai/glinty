@@ -68,6 +68,10 @@ const unsupportedComponents = <String>{
   // as a value. Same refusal for the same reason.
   'raw_html',
   'html_output',
+  // The scrolling words need a ticker, a reading line and a key map
+  // of their own; a Flutter prompter exists in an app (cornball's)
+  // and is not ported here yet. Refused by name until it is.
+  'prompter',
 };
 
 /// The spec's fallback rule: unknown variants take the first listed,

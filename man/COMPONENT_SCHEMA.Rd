@@ -4,7 +4,7 @@
 \alias{COMPONENT_SCHEMA}
 \title{Component field schemas}
 \format{
-An object of class \code{list} of length 44.
+An object of class \code{list} of length 45.
 }
 \usage{
 COMPONENT_SCHEMA

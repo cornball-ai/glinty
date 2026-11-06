@@ -47,6 +47,12 @@ s$outgoing <- list()
 show_modal(s, txt("x"), easy_close = FALSE)
 expect_false(json(s$outgoing[[1]])$easy_close)
 expect_null(json(s$outgoing[[1]])$title)
+# the size rides the frame: default unless asked, and only the two
+expect_equal(json(s$outgoing[[1]])$size, "default")
+s$outgoing <- list()
+show_modal(s, txt("x"), size = "large")
+expect_equal(json(s$outgoing[[1]])$size, "large")
+expect_error(show_modal(s, txt("x"), size = "huge"))
 
 s$outgoing <- list()
 remove_modal(s)

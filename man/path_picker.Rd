@@ -14,7 +14,7 @@ path_picker(
   title = NULL,
   pattern = NULL,
   hidden = FALSE,
-  limit = 60L
+  limit = 500L
 )
 }
 \arguments{
@@ -22,7 +22,7 @@ path_picker(
 
 \item{input}{the server function's input proxy}
 
-\item{id}{character stem for the picker's event ids}
+\item{id}{character stem for the picker's ids}
 
 \item{kind}{"dir" to choose a directory, "file" to choose a file}
 
@@ -44,8 +44,8 @@ always show, or there is no way through them}
 
 \item{hidden}{logical show dotfiles}
 
-\item{limit}{integer most rows shown; the rest are counted in a
-note -- step deeper to narrow down}
+\item{limit}{integer most entries listed; the rest are counted in
+a note -- step deeper to narrow down}
 }
 \value{
 list(open = function(start = NULL), value = reactive_val)
@@ -54,12 +54,15 @@ list(open = function(start = NULL), value = reactive_val)
 Picks a directory or file on the machine running the server -- the
 job \code{file_input()} cannot do, since a browser dialog browses
 the client's disk and uploads contents rather than naming a server
-path. The dialog is ordinary components in a modal: breadcrumbs
-and one row per entry, every one a \code{button()} carrying its
-target path as the value. Two observers serve all of it, split by
-meaning: one id navigates (crumbs and directory rows), the other
-commits a result (file rows, shortcuts, and the footer's confirm
-button, which carries the on-screen directory).
+path. The dialog is ordinary components in a large modal of fixed
+size: the places above, the path as crumbs, and the listing as a
+\code{\link{data_table}} -- name, kind, modified, size -- that
+sorts by any column, filters as you type, and scrolls under the
+title and the footer. A click on a folder steps into it; on a
+file, picks it. Three observers serve all of it, split by
+meaning: the table's row click steps or picks by what the row is,
+the crumbs navigate, and the shortcuts and the footer's confirm
+button (which carries the on-screen directory) commit.
 }
 \details{
 Call once in the server function and keep the handle:
@@ -84,17 +87,18 @@ are left out of the dialog rather than rendered dead. A shortcut
 is a visible control naming exactly what it opens; app state may
 feed the list, but the picker never writes app state back.
 
-Button values arrive from the client, so navigation trusts none of
-them: every step is canonicalized and, when \code{root} is set,
-refused if it leaves it -- which also refuses symlinks pointing
-out. \code{root} is a browsing boundary, not the app's security
-boundary (the input channel is same-origin, and any path input the
-app offers elsewhere is as reachable): NULL browses the whole
-filesystem, which is what a personal tool usually means, and a
-deployment with a real boundary states one.
+Row keys and button values arrive from the client, so navigation
+trusts none of them: every step is canonicalized and, when
+\code{root} is set, refused if it leaves it -- which also refuses
+symlinks pointing out. \code{root} is a browsing boundary, not the
+app's security boundary (the input channel is same-origin, and any
+path input the app offers elsewhere is as reachable): NULL browses
+the whole filesystem, which is what a personal tool usually means,
+and a deployment with a real boundary states one.
 
-The picker binds \code{paste0(id, "_go")} and
-\code{paste0(id, "_choose")} on the wire; leave those ids to it.
+The picker binds \code{paste0(id, "_rows")}, \code{paste0(id,
+"_go")} and \code{paste0(id, "_choose")} on the wire; leave those
+ids to it.
 
 }
 \examples{
