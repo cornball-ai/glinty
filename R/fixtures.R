@@ -418,6 +418,21 @@ component_fixtures <- function() {
                                     "by name")
         ),
                  list(
+                      name = "prompter",
+                      component = prompter("read",
+                "# Opening\n\nHello, and welcome back.\n\n[cut to b-roll]\n\n## The tools\n\nFirst, the fleet.",
+                pace = 120L),
+                      notes = paste("blocks lowered from markdown at build time,",
+                                    "like markdown(); the client owns the",
+                                    "motion and reports the settings as one",
+                                    "input under the id")
+        ),
+                 list(
+                      name = "prompter-empty",
+                      component = prompter("read", blocks = list()),
+                      notes = "nothing to say is a normal state the client names"
+        ),
+                 list(
                       name = "download-button",
                       component = component("download_button", id = "report",
                 label = "Download", variant = "primary"),

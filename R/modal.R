@@ -7,11 +7,18 @@
 #'
 #' Only one dialog shows at a time; a second replaces the first.
 #'
+#' The title and footer stay put while a long body scrolls between
+#' them. \code{size = "large"} asks for a dialog of fixed, generous
+#' size -- a file browser, a long form -- so it neither grows and
+#' shrinks with each step nor shrink-wraps a short listing.
+#'
 #' @param session a glinty_session
 #' @param ... body components
 #' @param title character heading, or NULL
 #' @param footer footer components; wrap several in row()
 #' @param easy_close logical allow dismissing by backdrop or Escape
+#' @param size "default" fits the content, up to a reading width;
+#'   "large" is a fixed, wider and taller dialog
 #' @return invisible(NULL)
 #' @examples
 #' \dontrun{
@@ -24,16 +31,18 @@
 #' }
 #' @export
 show_modal <- function(session, ..., title = NULL, footer = NULL,
-                       easy_close = TRUE) {
+                       easy_close = TRUE, size = c("default", "large")) {
     if (!inherits(session, "glinty_session")) {
         stop("session must be a glinty_session", call. = FALSE)
     }
+    size <- match.arg(size)
     body <- check_children(list(...), "show_modal")
     session$send(modal_msg(
                            title = title,
                            body = lapply(body, unclass_recursive),
                            footer = if (is.null(footer)) NULL else unclass_recursive(footer),
-                           easy_close = isTRUE(easy_close)
+                           easy_close = isTRUE(easy_close),
+                           size = size
         ))
     invisible(NULL)
 }

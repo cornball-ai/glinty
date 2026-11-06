@@ -1,7 +1,7 @@
 {
   "protocol": 4,
   "vocabulary": {
-    "components": ["text", "heading", "link", "icon", "rich_text", "key_value", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "audio_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "tabset", "conditional_panel", "shortcut", "raw_html"],
+    "components": ["text", "heading", "link", "icon", "rich_text", "key_value", "divider", "spacer", "page", "row", "column", "panel", "image", "collapse", "text_input", "password_input", "textarea_input", "number_input", "select_input", "checkbox_input", "radio_buttons", "checkbox_group", "slider_input", "range_slider", "date_input", "file_input", "audio_input", "button", "download_button", "text_output", "verbatim_output", "table_output", "data_table", "plot_output", "image_output", "audio_output", "video_output", "html_output", "ui_output", "feed", "prompter", "tabset", "conditional_panel", "shortcut", "raw_html"],
     "variants": {
       "text": ["normal", "muted", "strong", "heading", "mono", "small", "success", "warning", "danger"],
       "divider": ["line", "labelled"],
@@ -838,6 +838,49 @@
         "id": "take",
         "label": "Record",
         "chunk": 5
+      }
+    },
+    {
+      "name": "prompter",
+      "notes": "blocks lowered from markdown at build time, like markdown(); the client owns the motion and reports the settings as one input under the id",
+      "component": {
+        "component": "prompter",
+        "id": "read",
+        "blocks": [
+          {
+            "kind": "heading",
+            "text": "Opening"
+          },
+          {
+            "kind": "speech",
+            "text": "Hello, and welcome back."
+          },
+          {
+            "kind": "heading",
+            "text": "The tools"
+          },
+          {
+            "kind": "speech",
+            "text": "First, the fleet."
+          }
+        ],
+        "pace": 120,
+        "scale": 1,
+        "pause_at_headings": true,
+        "theme": "system"
+      }
+    },
+    {
+      "name": "prompter-empty",
+      "notes": "nothing to say is a normal state the client names",
+      "component": {
+        "component": "prompter",
+        "id": "read",
+        "blocks": [],
+        "pace": 150,
+        "scale": 1,
+        "pause_at_headings": true,
+        "theme": "system"
       }
     },
     {

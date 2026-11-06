@@ -56,6 +56,26 @@ any addition that is not clearly in the "fails visibly" column bumps
 the version, or gates itself behind a declared capability. There is
 no third option where it is fine because the field is optional.
 
+### v4.2
+
+Protocol still 4. Two additions, both safe by the test at the top.
+
+`prompter`, a new component: the words to say, centered and
+scrolling up at a pace in words a minute. Its content rides in the
+tree as `blocks`, lowered from markdown at build time the way
+`markdown()` lowers to `rich_text`; the motion is the client's and
+the settings come back as one input under the id. A client that has
+never seen it draws a placeholder naming it, and glinty-dart refuses
+it by name for now. The full contract is in "The prompter" below.
+
+`size` on the `modal` frame: `"default"` (the box fits its content,
+up to a reading width) or `"large"` (a fixed, generous dialog, for a
+file browser or a long form). A client that ignores it draws the
+default box: smaller than asked, visible, nothing stops working.
+Beside it, a presentation rule with no wire change: a modal's title
+and footer stay put while a long body scrolls between them, so a
+listing never pushes Cancel below the fold.
+
 ### v4.1
 
 Protocol still 4. A table's `align` may now say `"right"` as well as
@@ -500,6 +520,14 @@ type fills, item by item, without re-rendering what the client
 already has. Neither layout nor output: the full contract (the ops,
 the window bound, the stick-to-bottom scroll) is in "The feed" below.
 
+**Moved by the client**: `prompter`
+
+`prompter` is the teleprompter — the words to say, in the tree as
+blocks, scrolling up in the client at a pace the reader sets. Its
+content is static and its motion is local; the settings (pace, text
+size, pause at headings, colours) report as one input under its id.
+The contract is in "The prompter" below.
+
 **Escape hatch**: `raw_html` — what `tag()` now produces:
 `{"component": "raw_html", "html": "<details>..."}`, a single opaque
 string. Rendered by the browser client, reported unsupported by
@@ -545,6 +573,7 @@ same as safe to add.
 | `tabset` | `id`, `panels: [{title, children}]` | `selected` — the server renders an output inside a panel only while that panel is the tabset's input value, and once more when it becomes so; a client that reports the open tab sees every panel current when it opens it |
 | `conditional_panel` | `condition`, `children: []` | — |
 | `feed` | `id` | `keep: int` (200, min 1), `grow: int`, `width: int` — **no `children`**; items arrive only by `feed` frames |
+| `prompter` | `id`, `blocks: [{kind, text, speaker?}]` (may be empty; `kind` is `heading` or `speech`, and only speech names a `speaker`) | `pace: int` (150, 40..400), `scale: num` (1, 0.5..3), `pause_at_headings: bool` (true), `theme`: `system` \| `light` \| `dark` (`system`), `height: int` (px), `grow: int` |
 
 `password_input` has no `value` field **in the schema**, not merely by
 convention. A field that cannot be expressed cannot leak.
@@ -680,6 +709,7 @@ rather than an intention.
 | `video_output` | the embedder's player, through `videoBuilder` | the same seam as audio (video_player, media_kit: the embedder's pick); src and poster resolved, `mime` passed on; `report` hands the player an `onReport` whose throttle glinty owns |
 | `file_input` | the embedder.s picker and POST, through `onUpload` | glinty owns the ticket in between, and asks for it only once files are in hand |
 | `audio_input` | the embedder's recorder, through an `onRecord` seam | not wired yet: **refused by name**, and `record` stays out of `hello` until it is |
+| `prompter` | a ticker-driven `SingleChildScrollView` with a reading line | an app (cornball) has the widget; not ported into this client yet: **refused by name** |
 | `html_output`, `raw_html` | — | **refused by name**; see below |
 
 Of the three this table flagged before any Dart existed, one turned
@@ -791,6 +821,69 @@ record to choose, the browser gets the same answer from CSS. Both are
 correct, but only the first gives the stick contract something to
 hold on to.
 
+### The prompter
+
+A teleprompter is the one place a tick must not cross the wire: the
+words move sixty times a second, and a server that drove that would
+stutter on every round trip. So the split is the feed's in reverse.
+The **content is static and in the tree**: `blocks`, each a
+`heading` or `speech` with its `text` (and a `speaker` for speech),
+lowered from markdown by the R constructor the way `markdown()`
+lowers to `rich_text`, so no client parses anything. The **motion is
+the client's**: play and pause, where the text has got to, the stop
+at a heading.
+
+The reading line sits at **35% of the view's height** from the top, a
+little above the middle, so the words still to come are the larger
+part of the window. The first block starts on the line and the last
+can reach it: the view is padded by 35% above the words and 65%
+below. Both edges of the line carry a small marker that crosses no
+words.
+
+The pace is in **words a minute**, and the contract is that the whole
+text passes the reading line in `words / pace` minutes whatever the
+text size or the window's width: the client scrolls the full extent
+in that time (`pixels per second = extent / (words / pace * 60)`),
+counting a word as a run of non-space characters in the speech
+blocks. Headings count no words. With `pause_at_headings` the scroll
+stops at the next heading whose top crosses the line, snapping to it,
+and waits for play; a heading already on the line was paused at
+already, and play means past it. Reaching the end pauses; play from
+the end starts over.
+
+The bar is client chrome, not vocabulary, and both lowerings draw the
+same one: play/pause, a pace slider (40..400 by 10), the pace and the
+time the words still below the line take at it (`150 wpm · 4:20`),
+smaller and bigger text, pause at headings, the colours, start over,
+fullscreen. Keys, while the prompter has focus: space plays and
+pauses, up and down change the pace by 10, plus and minus the text
+size by 0.1, Page Up and Page Down jump between headings (the start
+and the end count as stops), Home starts over. A key the prompter
+takes does not also reach a page `shortcut`. The wheel and the
+scrollbar move the text by hand.
+
+Colours are the prompter's own, read from across a room: `system` is
+black on white under a light scheme and white on black under a dark
+one, by the client's `prefers-color-scheme`; `light` and `dark` hold
+one. The theme around it does not reach in.
+
+What comes back: **the settings, as one input under the id**, only
+when the user changes one — `{pace, scale, pause_at_headings,
+theme}`, the whole set each time, so an app keeps them and hands them
+back as the next tree's declared values. Nothing is seeded: until a
+change, the input is null and the tree's values stand. Where the text
+has scrolled to is not reported, as with the feed: it is the reader's.
+A `ui` frame that replaces the prompter (the words changed) starts it
+over, paused, at the new tree's settings.
+
+```json
+{"component": "prompter", "id": "read",
+ "blocks": [{"kind": "heading", "text": "Opening"},
+            {"kind": "speech", "text": "Hello, and welcome back."}],
+ "pace": 150, "scale": 1, "pause_at_headings": true,
+ "theme": "system"}
+```
+
 ### Frames beyond the tree
 
 Three message types are about the app rather than parts of it, and
@@ -801,6 +894,12 @@ both clients draw all three:
 | `modal` | an overlay built from the body tree | an overlay `Card` behind a scrim |
 | `progress` | a stack of `.g-progress` bars | a stack of `LinearProgressIndicator`s |
 | `custom` | the handler registered with `Glinty.addCustomMessageHandler()` | the handler passed as `GlintyApp(customHandlers:)` |
+
+A `modal` frame carries `size`: `default`, where the box fits its
+content up to a reading width, or `large`, a fixed, generous dialog
+for a file browser or a long form, which neither grows and shrinks
+with each step nor shrink-wraps a short listing. Either way the
+title and the footer stay put and a long body scrolls between them.
 
 A `custom` frame naming a handler nothing registered is warned about
 in the browser console and named on screen in Flutter. The same rule

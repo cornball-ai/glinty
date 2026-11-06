@@ -3,7 +3,7 @@
 \alias{modal_msg}
 \title{Create a modal open message}
 \usage{
-modal_msg(title, body, footer, easy_close)
+modal_msg(title, body, footer, easy_close, size = "default")
 }
 \arguments{
 \item{title}{character heading, or NULL}
@@ -13,6 +13,8 @@ modal_msg(title, body, footer, easy_close)
 \item{footer}{an unclassed tag tree, or NULL}
 
 \item{easy_close}{logical dismiss on backdrop click or Escape}
+
+\item{size}{character "default" or "large"}
 }
 \value{
 character JSON string

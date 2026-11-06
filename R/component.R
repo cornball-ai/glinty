@@ -48,7 +48,7 @@ KEY_NAMES <- c(letters, as.character(0:9), paste0("f", 1:12), "space",
 #' Declare one component field
 #'
 #' @param type character one of "string", "number", "int", "bool",
-#'   "enum", "choices", "panels", "condition", "children", "any"
+#'   "enum", "choices", "panels", "condition", "children", "blocks", "any"
 #' @param required logical must be supplied
 #' @param default value filled in when absent; NULL means the field
 #'   stays absent rather than becoming null on the wire
@@ -466,6 +466,29 @@ COMPONENT_SCHEMA <- list(
                                      width = field("int")
     ),
 
+                         # The prompter: the words to say, centered and
+                         # scrolling up at a pace in words a minute, the
+                         # reading line a little above the middle. The
+                         # content rides in the tree as blocks (a heading,
+                         # or speech to say), lowered from markdown by
+                         # prompter() the way markdown() lowers to
+                         # rich_text, so no client parses anything. The
+                         # motion is the client's -- play, pace, where the
+                         # text has got to -- and the settings come back as
+                         # one input under the id, only when the user
+                         # changes one.
+                         prompter = list(
+        id = field("string", required = TRUE),
+        blocks = field("blocks", required = TRUE),
+        pace = field("int", default = 150L, min = 40, max = 400),
+        scale = field("number", default = 1, min = 0.5, max = 3),
+        pause_at_headings = field("bool", default = TRUE),
+        theme = field("enum", default = "system",
+                      values = c("system", "light", "dark")),
+        height = field("int", min = 120, max = 4096),
+        grow = field("int")
+    ),
+
                          # composite layout
                          tabset = list(
                                        id = field("string", required = TRUE),
@@ -831,6 +854,47 @@ check_field <- function(value, spec, type, nm) {
                 if (!identical(vr, "normal")) {
                     keep$variant <- vr
                 }
+            }
+            keep
+        })
+        return(unname(out))
+    },
+           blocks = {
+        # prompter's blocks: a heading, or speech to say, each a
+        # single string; speech may name its speaker. Empty is
+        # allowed -- nothing written yet is a normal state -- and the
+        # client says so rather than drawing an empty stage.
+        if (!is.list(value)) {
+            stop(where, " must be a list of blocks", call. = FALSE)
+        }
+        out <- lapply(seq_along(value), function(i) {
+            b <- value[[i]]
+            if (!is.list(b) || !is.character(b$kind) || length(b$kind) != 1L ||
+                      is.na(b$kind) || !b$kind %in% c("heading", "speech")) {
+                stop(where, " block ", i, " needs kind \"heading\" or \"speech\"",
+                     call. = FALSE)
+            }
+            if (!is.character(b$text) || length(b$text) != 1L || is.na(b$text)) {
+                stop(where, " block ", i, " needs text (a single string)",
+                     call. = FALSE)
+            }
+            extra <- setdiff(names(b), c("kind", "text", "speaker"))
+            if (length(extra) > 0L) {
+                stop(where, " block ", i, " has unknown fields: ",
+                     paste(extra, collapse = ", "), call. = FALSE)
+            }
+            keep <- list(kind = b$kind, text = b$text)
+            if (!is.null(b$speaker)) {
+                if (!is.character(b$speaker) || length(b$speaker) != 1L ||
+                          is.na(b$speaker) || !nzchar(b$speaker)) {
+                    stop(where, " block ", i, " speaker must be a non-empty string",
+                         call. = FALSE)
+                }
+                if (identical(b$kind, "heading")) {
+                    stop(where, " block ", i, ": a heading has no speaker",
+                         call. = FALSE)
+                }
+                keep$speaker <- b$speaker
             }
             keep
         })

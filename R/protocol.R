@@ -74,12 +74,14 @@ custom_msg <- function(handler, value) {
 #' @param body list of unclassed tag trees
 #' @param footer an unclassed tag tree, or NULL
 #' @param easy_close logical dismiss on backdrop click or Escape
+#' @param size character "default" or "large"
 #' @return character JSON string
 #' @keywords internal
-modal_msg <- function(title, body, footer, easy_close) {
+modal_msg <- function(title, body, footer, easy_close, size = "default") {
     as.character(jsonlite::toJSON(
                                   list(type = "modal", action = "show", title = title,
-                                       body = body, footer = footer, easy_close = easy_close),
+                                       body = body, footer = footer, easy_close = easy_close,
+                                       size = size),
                                   auto_unbox = TRUE, null = "null"
         ))
 }

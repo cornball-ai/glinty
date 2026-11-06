@@ -26,7 +26,8 @@
         "collapse", "file_input", "heading", "html_output", "icon",
         "image", "image_output", "key_value",
         "link", "number_input", "page", "panel", "password_input",
-        "plot_output", "radio_buttons", "range_slider", "raw_html", "row",
+        "plot_output", "prompter", "radio_buttons", "range_slider",
+        "raw_html", "row",
         "feed", "rich_text",
         "select_input", "shortcut",
         "slider_input", "spacer", "table_output", "tabset", "text",
@@ -696,6 +697,8 @@
                 startDownload(dl);
             }
         });
+
+        bindPrompter(root);
 
         root.addEventListener("input", function (ev) {
             var el = ev.target;
@@ -1572,6 +1575,452 @@
         return node;
     }
 
+    /* The prompter, byte-for-byte the markup html_prompter() serves:
+       the stage with the scrolling view and the reading-line marker
+       beside it, the bar at rest below. Settings ride as data-g-* so
+       the state the client creates on first touch starts where the
+       tree says. */
+    function buildPrompter(c) {
+        var theme = c.theme || "system";
+        var style = ["--g-prompter-scale:" + (c.scale || 1)];
+        if (c.height !== null && c.height !== undefined) {
+            style.push("height:" + c.height + "px");
+        }
+        style = style.concat(flexStyle(c));
+        var node = el("div", {
+            "class": "g-prompter g-prompter-" + theme + sizedClass(c),
+            id: c.id,
+            tabindex: "0",
+            "data-g-prompter": c.id,
+            "data-g-pace": c.pace || 150,
+            "data-g-scale": c.scale || 1,
+            "data-g-pause": c.pause_at_headings === false ? "0" : "1",
+            "data-g-theme": theme,
+            style: style.join(";")
+        });
+        var stage = el("div", { "class": "g-prompter-stage" });
+        var view = el("div", { "class": "g-prompter-view" });
+        var words = el("div", { "class": "g-prompter-words" });
+        (c.blocks || []).forEach(function (b) {
+            if (b.kind === "heading") {
+                var h = el("div", { "class": "g-prompter-heading" });
+                h.textContent = b.text;
+                words.appendChild(h);
+                return;
+            }
+            var s = el("div", { "class": "g-prompter-speech" });
+            if (b.speaker) {
+                var who = el("div", { "class": "g-prompter-speaker" });
+                who.textContent = b.speaker;
+                s.appendChild(who);
+            }
+            var p = el("p", {});
+            p.textContent = b.text;
+            s.appendChild(p);
+            words.appendChild(s);
+        });
+        view.appendChild(words);
+        stage.appendChild(view);
+        if (!(c.blocks || []).length) {
+            var empty = el("div", { "class": "g-prompter-empty" });
+            empty.textContent = "Nothing to read yet: write the words first.";
+            stage.appendChild(empty);
+        }
+        stage.appendChild(el("span", { "class": "g-prompter-line" }));
+        node.appendChild(stage);
+
+        var bar = el("div", { "class": "g-prompter-bar" });
+        function btn(cls, label, title) {
+            var b = el("button", {
+                type: "button",
+                "class": "g-prompter-btn " + cls,
+                title: title
+            });
+            b.textContent = label;
+            return b;
+        }
+        bar.appendChild(btn("g-prompter-play", "Play", "Play (space)"));
+        bar.appendChild(el("input", {
+            type: "range",
+            "class": "g-prompter-pace",
+            min: "40",
+            max: "400",
+            step: "10",
+            value: String(c.pace || 150),
+            title: "Pace (up and down)"
+        }));
+        var status = el("span", { "class": "g-prompter-status" });
+        status.textContent = (c.pace || 150) + " wpm";
+        bar.appendChild(status);
+        bar.appendChild(btn("g-prompter-smaller", "A-", "Smaller text (-)"));
+        bar.appendChild(btn("g-prompter-bigger", "A+", "Bigger text (+)"));
+        var pause = el("label", { "class": "g-prompter-pause" });
+        pause.appendChild(el("input", {
+            type: "checkbox",
+            checked: c.pause_at_headings === false ? null : "checked"
+        }));
+        pause.appendChild(document.createTextNode(" Pause at headings"));
+        bar.appendChild(pause);
+        var sel = el("select", { "class": "g-prompter-theme", title: "Colours" });
+        [["system", "Colours of the desktop"], ["light", "Black on white"],
+         ["dark", "White on black"]].forEach(function (o) {
+            var opt = el("option", {
+                value: o[0],
+                selected: theme === o[0] ? "selected" : null
+            });
+            opt.textContent = o[1];
+            sel.appendChild(opt);
+        });
+        bar.appendChild(sel);
+        bar.appendChild(btn("g-prompter-restart", "Start over", "Start over (Home)"));
+        bar.appendChild(btn("g-prompter-full", "Fullscreen", "Fullscreen"));
+        node.appendChild(bar);
+        return node;
+    }
+
+    /* ---------- prompter motion ---------- */
+
+    /* Everything that moves is local: the server lowered the script
+       to blocks, and play, pace, the pause at a heading and where
+       the text has got to never cross the wire. State is created on
+       first touch, which serves an adopted page and a built one
+       alike; the handlers are delegated from the root like every
+       other control's. The settings report as one input under the
+       id when the user changes one -- the position is the reader's
+       and stays here. */
+    var PROMPTER_LINE = 0.35;
+    var PROMPTER_PACE_STEP = 10;
+    var PROMPTER_SCALE_STEP = 0.1;
+
+    function prompterState(el) {
+        var st = el._gp;
+        if (st) return st;
+        var words = 0;
+        el.querySelectorAll(".g-prompter-speech p").forEach(function (p) {
+            var m = p.textContent.match(/\S+/g);
+            if (m) words += m.length;
+        });
+        st = el._gp = {
+            id: el.dataset.gPrompter,
+            pace: Number(el.dataset.gPace) || 150,
+            scale: Number(el.dataset.gScale) || 1,
+            pause: el.dataset.gPause !== "0",
+            theme: el.dataset.gTheme || "system",
+            words: words,
+            playing: false,
+            raf: 0,
+            last: 0,
+            /* the position as a float: at a reading pace a frame
+               moves a fraction of a pixel, and a scrollTop written
+               back as 0.3 reads back as 0, so the text never moves.
+               The view is set from this; a hand scroll (wheel,
+               scrollbar) shows as a view that disagrees with it, and
+               resyncs it. */
+            pos: 0,
+            view: el.querySelector(".g-prompter-view")
+        };
+        return st;
+    }
+
+    /* The position to go on from: the float, unless the reader
+       moved the text by hand since it was last written. */
+    function prompterFrom(st) {
+        var shown = st.view.scrollTop;
+        if (Math.abs(shown - st.pos) > 1) st.pos = shown;
+        return st.pos;
+    }
+
+    function prompterGo(st, to) {
+        st.pos = to;
+        st.view.scrollTop = to;
+    }
+
+    function prompterLine(st) {
+        return st.view.clientHeight * PROMPTER_LINE;
+    }
+
+    /* The scroll offsets that put each heading on the reading line,
+       in the script's order. offsetTop is relative to the view, the
+       nearest positioned ancestor, and already includes the words'
+       top padding. */
+    function prompterStops(el) {
+        var st = el._gp;
+        var line = prompterLine(st);
+        var out = [];
+        el.querySelectorAll(".g-prompter-heading").forEach(function (h) {
+            out.push(h.offsetTop - line);
+        });
+        return out;
+    }
+
+    function prompterMax(st) {
+        return Math.max(0, st.view.scrollHeight - st.view.clientHeight);
+    }
+
+    /* The pace, and how long the words still below the line take at
+       it. */
+    function prompterStatus(el) {
+        var st = el._gp;
+        var out = st.pace + " wpm";
+        if (st.words > 0) {
+            var max = prompterMax(st);
+            var left = max <= 0 ? 0 : 1 - st.view.scrollTop / max;
+            var secs = Math.round(left * st.words / st.pace * 60);
+            var s = String(secs % 60);
+            out += " · " + Math.floor(secs / 60) + ":" +
+                (s.length < 2 ? "0" + s : s);
+        }
+        var box = el.querySelector(".g-prompter-status");
+        if (box) box.textContent = out;
+    }
+
+    function prompterTick(el, now) {
+        var st = el._gp;
+        if (!st || !st.playing) return;
+        if (!el.isConnected) {
+            st.playing = false;
+            return;
+        }
+        var dt = st.last ? (now - st.last) / 1000 : 0;
+        st.last = now;
+        var view = st.view;
+        var max = prompterMax(st);
+        /* the scroll runs the text's height in the time the words
+           take, so the pace holds whatever the text size or width */
+        var pps = st.words > 0 ? max / (st.words / st.pace * 60) : 0;
+        var from = prompterFrom(st);
+        var to = Math.min(max, from + pps * dt);
+        if (st.pause) {
+            /* the first heading still below the line; one sitting on
+               it was paused at already, and play means past it */
+            var stop = null;
+            prompterStops(el).forEach(function (s) {
+                if (s > from + 0.5 && (stop === null || s < stop)) stop = s;
+            });
+            if (stop !== null && stop <= to) {
+                prompterGo(st, stop);
+                prompterPause(el);
+                prompterStatus(el);
+                return;
+            }
+        }
+        prompterGo(st, to);
+        prompterStatus(el);
+        if (to >= max - 0.5) {
+            prompterPause(el);
+            return;
+        }
+        st.raf = requestAnimationFrame(function (t) { prompterTick(el, t); });
+    }
+
+    function prompterPlayButton(el, playing) {
+        var b = el.querySelector(".g-prompter-play");
+        if (!b) return;
+        b.textContent = playing ? "Pause" : "Play";
+        b.title = playing ? "Pause (space)" : "Play (space)";
+    }
+
+    function prompterPlay(el) {
+        var st = prompterState(el);
+        if (st.playing || st.words === 0) return;
+        if (prompterFrom(st) >= prompterMax(st) - 0.5) prompterGo(st, 0);
+        st.last = 0;
+        st.playing = true;
+        prompterPlayButton(el, true);
+        st.raf = requestAnimationFrame(function (t) { prompterTick(el, t); });
+    }
+
+    function prompterPause(el) {
+        var st = prompterState(el);
+        if (!st.playing) return;
+        cancelAnimationFrame(st.raf);
+        st.playing = false;
+        prompterPlayButton(el, false);
+    }
+
+    function prompterRestart(el) {
+        var st = prompterState(el);
+        prompterPause(el);
+        prompterGo(st, 0);
+        prompterStatus(el);
+    }
+
+    /* To the next heading below the line, or the last one above it;
+       the start and the end count as stops. */
+    function prompterJump(el, forward) {
+        var st = prompterState(el);
+        var from = prompterFrom(st);
+        var stops = prompterStops(el).concat([0, prompterMax(st)]);
+        var to = null;
+        stops.forEach(function (s) {
+            if (forward ? s > from + 1 : s < from - 1) {
+                if (to === null || (forward ? s < to : s > to)) to = s;
+            }
+        });
+        if (to === null) return;
+        prompterGo(st, Math.max(0, Math.min(prompterMax(st), to)));
+        prompterStatus(el);
+    }
+
+    function prompterReport(el) {
+        var st = el._gp;
+        var value = {
+            pace: st.pace,
+            scale: st.scale,
+            pause_at_headings: st.pause,
+            theme: st.theme
+        };
+        noteInput(st.id, value);
+        send({ type: "input", id: st.id, value: value });
+    }
+
+    function prompterSetPace(el, pace) {
+        var st = prompterState(el);
+        pace = Math.max(40, Math.min(400, Math.round(pace)));
+        if (pace === st.pace) return;
+        st.pace = pace;
+        var range = el.querySelector(".g-prompter-pace");
+        if (range) range.value = String(pace);
+        prompterStatus(el);
+        prompterReport(el);
+    }
+
+    function prompterSetScale(el, scale) {
+        var st = prompterState(el);
+        scale = Math.round(Math.max(0.5, Math.min(3, scale)) * 100) / 100;
+        if (scale === st.scale) return;
+        /* keep the line where the eye is: the text reflows, so the
+           scroll position is carried as a fraction of the extent */
+        var max = prompterMax(st);
+        var frac = max > 0 ? prompterFrom(st) / max : 0;
+        st.scale = scale;
+        el.style.setProperty("--g-prompter-scale", String(scale));
+        prompterGo(st, frac * prompterMax(st));
+        prompterStatus(el);
+        prompterReport(el);
+    }
+
+    function prompterSetPause(el, pause) {
+        var st = prompterState(el);
+        pause = !!pause;
+        if (pause === st.pause) return;
+        st.pause = pause;
+        var box = el.querySelector(".g-prompter-pause input");
+        if (box) box.checked = pause;
+        prompterReport(el);
+    }
+
+    function prompterSetTheme(el, theme) {
+        var st = prompterState(el);
+        if (["system", "light", "dark"].indexOf(theme) === -1) return;
+        if (theme === st.theme) return;
+        el.classList.remove("g-prompter-" + st.theme);
+        st.theme = theme;
+        el.classList.add("g-prompter-" + theme);
+        var sel = el.querySelector(".g-prompter-theme");
+        if (sel) sel.value = theme;
+        prompterReport(el);
+    }
+
+    function prompterKey(el, ev) {
+        var st = prompterState(el);
+        switch (ev.key) {
+        case " ":
+            if (st.playing) prompterPause(el); else prompterPlay(el);
+            break;
+        case "ArrowUp":
+            prompterSetPace(el, st.pace + PROMPTER_PACE_STEP);
+            break;
+        case "ArrowDown":
+            prompterSetPace(el, st.pace - PROMPTER_PACE_STEP);
+            break;
+        case "+":
+        case "=":
+            prompterSetScale(el, st.scale + PROMPTER_SCALE_STEP);
+            break;
+        case "-":
+        case "_":
+            prompterSetScale(el, st.scale - PROMPTER_SCALE_STEP);
+            break;
+        case "PageDown":
+            prompterJump(el, true);
+            break;
+        case "PageUp":
+            prompterJump(el, false);
+            break;
+        case "Home":
+            prompterRestart(el);
+            break;
+        default:
+            return false;
+        }
+        return true;
+    }
+
+    function bindPrompter(root) {
+        root.addEventListener("click", function (ev) {
+            var el = ev.target.closest(".g-prompter");
+            if (!el) return;
+            var t = ev.target;
+            if (t.closest(".g-prompter-play")) {
+                var st = prompterState(el);
+                if (st.playing) prompterPause(el); else prompterPlay(el);
+            } else if (t.closest(".g-prompter-smaller")) {
+                prompterSetScale(el, prompterState(el).scale - PROMPTER_SCALE_STEP);
+            } else if (t.closest(".g-prompter-bigger")) {
+                prompterSetScale(el, prompterState(el).scale + PROMPTER_SCALE_STEP);
+            } else if (t.closest(".g-prompter-restart")) {
+                prompterRestart(el);
+            } else if (t.closest(".g-prompter-full")) {
+                if (document.fullscreenElement === el) {
+                    document.exitFullscreen();
+                } else if (el.requestFullscreen) {
+                    el.requestFullscreen();
+                }
+            } else if (t.closest(".g-prompter-pace, .g-prompter-pause, .g-prompter-theme")) {
+                return;
+            }
+            /* the bar takes no focus, so the keys keep working after
+               a click on it */
+            el.focus({ preventScroll: true });
+        });
+        root.addEventListener("input", function (ev) {
+            var t = ev.target;
+            if (!t.classList || !t.classList.contains("g-prompter-pace")) return;
+            var el = t.closest(".g-prompter");
+            if (el) prompterSetPace(el, Number(t.value));
+        });
+        root.addEventListener("change", function (ev) {
+            var t = ev.target;
+            var el = t.closest && t.closest(".g-prompter");
+            if (!el) return;
+            if (t.closest(".g-prompter-pause")) {
+                prompterSetPause(el, t.checked);
+            } else if (t.classList.contains("g-prompter-theme")) {
+                prompterSetTheme(el, t.value);
+            }
+        });
+        root.addEventListener("keydown", function (ev) {
+            var el = ev.target.closest && ev.target.closest(".g-prompter");
+            if (!el) return;
+            if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+            if (prompterKey(el, ev)) {
+                /* the prompter takes the key: a page shortcut on
+                   space or an arrow must not fire as well, and a
+                   range slider in the bar must not move on its own */
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+        });
+        /* the words moved by hand: the time left follows */
+        root.addEventListener("scroll", function (ev) {
+            var v = ev.target;
+            if (!v.classList || !v.classList.contains("g-prompter-view")) return;
+            var el = v.closest(".g-prompter");
+            if (el && el._gp && !el._gp.playing) prompterStatus(el);
+        }, true);
+    }
+
     function buildTextLike(c, type) {
         var attrs = assign(bindAttrs(c, "input"), {
             type: type,
@@ -1912,6 +2361,8 @@
             return buildLayout(c, "g-layout-col");
         case "feed":
             return buildFeed(c);
+        case "prompter":
+            return buildPrompter(c);
         case "panel":
             var panelStyle = flexStyle(c);
             var capped = c.max_height !== null && c.max_height !== undefined;
@@ -3389,7 +3840,8 @@
         overlay.className = "g-modal-overlay";
 
         var box = document.createElement("div");
-        box.className = "g-modal-box";
+        box.className = "g-modal-box" +
+            (msg.size === "large" ? " g-modal-large" : "");
 
         if (msg.title !== null && msg.title !== undefined) {
             var h = document.createElement("h3");

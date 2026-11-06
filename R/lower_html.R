@@ -96,10 +96,95 @@ component_to_html <- function(x) {
            tabset = html_tabset(x),
            conditional_panel = html_conditional(x),
            feed = html_feed(x),
+           prompter = html_prompter(x),
            shortcut = html_shortcut(x),
            raw_html = x$html,
            html_unsupported(x$component)
     )
+}
+
+#' The prompter, with its words in place and its bar at rest
+#'
+#' The same DOM the client builds (buildPrompter in glinty.js): the
+#' stage holds the scrolling view and the reading-line marker beside
+#' it, so the marker stays put while the words move; the bar below is
+#' the client's own chrome, not vocabulary. Settings ride as data-g-*
+#' so an adopted page starts where the tree says; everything that
+#' moves is state the client creates on first touch.
+#'
+#' @param x the component
+#' @return character HTML
+#' @keywords internal
+html_prompter <- function(x) {
+    blocks <- vapply(x$blocks, function(b) {
+        if (identical(b$kind, "heading")) {
+            return(html_el("div", list(class = "g-prompter-heading"),
+                           html_escape(b$text)))
+        }
+        speaker <- if (is.null(b$speaker)) {
+            ""
+        } else {
+            html_el("div", list(class = "g-prompter-speaker"),
+                    html_escape(b$speaker))
+        }
+        html_el("div", list(class = "g-prompter-speech"),
+                paste0(speaker, html_el("p", list(), html_escape(b$text))))
+    }, "")
+    stage <- paste0(
+                    html_el("div", list(class = "g-prompter-view"),
+                            html_el("div", list(class = "g-prompter-words"),
+                                    paste(blocks, collapse = ""))),
+                    if (length(blocks) == 0L) {
+                        html_el("div", list(class = "g-prompter-empty"),
+                                "Nothing to read yet: write the words first.")
+                    },
+                    html_el("span", list(class = "g-prompter-line")))
+    opt <- function(value, label) {
+        html_el("option", list(value = value,
+                               selected = if (identical(x$theme, value)) "selected"),
+                label)
+    }
+    bar <- paste0(
+                  html_el("button", list(type = "button", class = "g-prompter-btn g-prompter-play",
+                                         title = "Play (space)"), "Play"),
+                  html_el("input", list(type = "range", class = "g-prompter-pace",
+                                        min = "40", max = "400", step = "10",
+                                        value = as.character(x$pace),
+                                        title = "Pace (up and down)"), void = TRUE),
+                  html_el("span", list(class = "g-prompter-status"),
+                          paste(x$pace, "wpm")),
+                  html_el("button", list(type = "button", class = "g-prompter-btn g-prompter-smaller",
+                                         title = "Smaller text (-)"), "A-"),
+                  html_el("button", list(type = "button", class = "g-prompter-btn g-prompter-bigger",
+                                         title = "Bigger text (+)"), "A+"),
+                  html_el("label", list(class = "g-prompter-pause"),
+                          paste0(html_el("input", list(type = "checkbox",
+                                                       checked = if (isTRUE(x$pause_at_headings)) "checked"),
+                                         void = TRUE), " Pause at headings")),
+                  html_el("select", list(class = "g-prompter-theme", title = "Colours"),
+                          paste0(opt("system", "Colours of the desktop"),
+                                 opt("light", "Black on white"),
+                                 opt("dark", "White on black"))),
+                  html_el("button", list(type = "button", class = "g-prompter-btn g-prompter-restart",
+                                         title = "Start over (Home)"), "Start over"),
+                  html_el("button", list(type = "button", class = "g-prompter-btn g-prompter-full",
+                                         title = "Fullscreen"), "Fullscreen"))
+    style <- c(paste0("--g-prompter-scale:", x$scale),
+               if (!is.null(x$height)) paste0("height:", x$height, "px"),
+               html_flex_style(x))
+    html_el("div",
+            list(class = paste(c("g-prompter", paste0("g-prompter-", x$theme),
+                                 if (html_is_sized(x)) "g-sized"), collapse = " "),
+                 id = x$id,
+                 tabindex = "0",
+                 "data-g-prompter" = x$id,
+                 "data-g-pace" = as.character(x$pace),
+                 "data-g-scale" = as.character(x$scale),
+                 "data-g-pause" = if (isTRUE(x$pause_at_headings)) "1" else "0",
+                 "data-g-theme" = x$theme,
+                 style = paste(style, collapse = ";")),
+            paste0(html_el("div", list(class = "g-prompter-stage"), stage),
+                   html_el("div", list(class = "g-prompter-bar"), bar)))
 }
 
 #' The feed shell: an empty scroller the messages fill
